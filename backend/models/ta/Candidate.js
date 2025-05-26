@@ -1,0 +1,60 @@
+const mongoose = require('mongoose');
+
+const candidateSchema = new mongoose.Schema({
+  candidateId: { type: String, required: true, unique: true },
+  fullName: { type: String, required: true },
+  recruiter: { type: String, required: true },
+  applicationSource: { type: String, required: true },
+
+  jobRequisitionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TAJobRequisition',
+    required: true,
+  },
+  jobRequisitionCode: { type: String, required: true }, // BJR16-5
+
+  departmentCode: { type: String, required: true },
+
+  type: {
+    type: String,
+    enum: ['White Collar', 'Blue Collar'],
+    required: true,
+  },
+  subType: {
+    type: String,
+    enum: ['Sewer', 'Non-Sewer', 'General'],
+    default: 'General',
+  },
+
+  progress: {
+    type: String,
+    enum: ['Application', 'ManagerReview', 'Interview', 'JobOffer', 'Hired', 'Onboard'],
+    default: 'Application'
+  },
+
+  progressDates: {
+    type: Map,
+    of: Date,
+    default: {},
+  },
+
+  documents: {
+    type: [String], // list of file URLs or filenames
+    default: [],
+  },
+
+  hireDecision: {
+    type: String,
+    enum: ['Hired', 'Candidate Refusal', 'Not Hired', 'Candidate in Process'],
+    default: 'Candidate in Process',
+  },
+
+  noted: { type: String, default: '' },
+
+  _offerCounted: { type: Boolean, default: false },
+  _onboardCounted: { type: Boolean, default: false }
+}, {
+  timestamps: true
+});
+
+module.exports = mongoose.model('TACandidate', candidateSchema);
