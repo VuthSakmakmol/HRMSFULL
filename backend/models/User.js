@@ -25,18 +25,13 @@ const userSchema = new mongoose.Schema({
   },
 
   company: {
-    type: String,
-    required: function () {
-      return this.role !== 'GeneralManager';
-    },
-    enum: [ // optional enum restriction
-      'Thailand Roi Et',
-      'Thailand Chaiyaphum',
-      'Vietnam A1A Group',
-      'Vietnam Transport Co.',
-      'Cambodia TAC HRMS'
-    ]
-  }
+  type: String,
+  required: function () {
+    return this.role !== 'GeneralManager';
+  },
+  enum: ['CAM-TAC', 'TH-ROI', 'TH-CYP', 'VN-A1A', 'VN-TRANS']
+}
+
 }, {
   timestamps: true
 });

@@ -60,10 +60,11 @@ const login = async () => {
 
     // ✅ Redirect by role
     if (user.role === 'GeneralManager') {
-      router.push('/users')
-    } else {
-      router.push('/dashboard')
-    }
+  router.push('/gm/dashboard')
+} else {
+  router.push('/ta/dashboard')
+}
+
   } catch (err) {
     error.value = err.response?.data?.message || 'Login failed'
   }

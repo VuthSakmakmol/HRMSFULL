@@ -3,17 +3,36 @@ import Login from '@/views/Login.vue'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 
 const routes = [
-  { path: '/login', component: Login },
-
   {
-    path: '/',
-    component: DefaultLayout, // ✅ Your layout with sidebar/topbar
+    path: '/login',
+    component: Login
+  },
+
+  // 🌐 General Manager routes
+  {
+    path: '/gm',
+    component: DefaultLayout,
     children: [
-      { path: '', redirect: '/dashboard' },
-      { path: 'dashboard', component: () => import('@/views/Dashboard.vue') },
+      { path: 'dashboard', component: () => import('@/views/GMDashboard.vue') },
       { path: 'users', component: () => import('@/views/UserManagement.vue') }
     ]
-  }
+  },
+
+  // 🌐 TA routes
+  {
+    path: '/ta',
+    component: DefaultLayout,
+    children: [
+      { path: 'dashboard', component: () => import('@/views/ta/TADashboard.vue') },
+      { path: 'requisitions', component: () => import('@/views/ta/JobRequisition.vue') },
+      { path: 'candidates', component: () => import('@/views/ta/Candidate.vue') },
+      { path: 'departments', component: () => import('@/views/ta/Department.vue') }
+    ]
+  },
+
+  // Default and fallback
+  { path: '/', redirect: '/login' },
+  { path: '/:pathMatch(.*)*', redirect: '/login' }
 ]
 
 const router = createRouter({

@@ -1,32 +1,20 @@
 const mongoose = require('mongoose');
 
 const departmentSchema = new mongoose.Schema({
-  companyId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Company',
-    required: true,
-  },
   name: { type: String, required: true },
-  type: {
-    type: String,
-    enum: ['White Collar', 'Blue Collar'],
-    required: true,
-  },
+  type: { type: String, enum: ['White Collar', 'Blue Collar'], required: true },
   subType: {
     type: String,
-    enum: ['Sewer', 'Non-Sewer', 'General'],
-    default: 'General',
+    enum: ['Sewer', 'Non-Sewer'],
+    required: function () {
+      return this.type === 'Blue Collar';
+    },
+    default: null
   },
-  jobTitles: {
-    type: [String],
-    default: [],
-  },
-  recruiters: {
-    type: [String],
-    default: [],
-  }
-}, {
-  timestamps: true,
-});
+  jobTitles: [{ type: String }],
+  recruiters: { type: [String], default: [] },
+  company: { type: String, required: true }
+}, { timestamps: true });
 
-module.exports = mongoose.model('TADepartment', departmentSchema);
+// ✅ Explicitly link to "tadepartments"
+module.exports = mongoose.model('Department', departmentSchema, 'tadepartments');

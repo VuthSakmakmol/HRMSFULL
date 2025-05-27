@@ -1,17 +1,16 @@
 <template>
   <v-app>
-    <!-- Topbar -->
-    <AppTopbar />
+    <AppTopbar @toggle-sidebar="toggleSidebar" />
+
+    <AppSidebar
+      v-model:drawer="drawer"
+      :role="role"
+      :company="company"
+    />
 
     <v-main>
-      <v-container fluid class="d-flex pa-0">
-        <!-- Sidebar -->
-        <AppSidebar class="sidebar" />
-
-        <!-- Page content -->
-        <div class="flex-grow-1 pa-4">
-          <router-view />
-        </div>
+      <v-container fluid class="pa-4">
+        <router-view />
       </v-container>
     </v-main>
   </v-app>
@@ -20,13 +19,22 @@
 <script setup>
 import AppTopbar from '@/components/AppTopbar.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
+import { ref } from 'vue'
+
+const drawer = ref(false)
+const role = localStorage.getItem('role') || 'Unknown'
+const company = localStorage.getItem('company') || 'No Company'
+
+const toggleSidebar = () => {
+  drawer.value = !drawer.value
+}
 </script>
 
+
 <style scoped>
-.sidebar {
-  width: 220px;
+/* Optional scroll if sidebar fixed */
+.v-main {
+  background-color: #f4f6f9;
   min-height: 100vh;
-  background-color: #f8f9fa;
-  border-right: 1px solid #ddd;
 }
 </style>

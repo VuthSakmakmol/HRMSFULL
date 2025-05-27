@@ -1,0 +1,1 @@
+<template><div>Manager Dashboard</div></template>
