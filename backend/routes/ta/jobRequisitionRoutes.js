@@ -1,11 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const controller = require('../../controllers/ta/jobRequisitionController');
 
-router.get('/', controller.getJobRequisitions);
-router.get('/job-titles', controller.getAllJobTitles);
-router.post('/', controller.createJobRequisition);
-router.put('/:id', controller.updateJobRequisition);
-router.delete('/:id', controller.deleteJobRequisition);
+const {
+  getJobRequisitions,
+  createJobRequisition,
+  deleteJobRequisition,
+  updateJobRequisition,
+  getAllJobTitles
+} = require('../../controllers/ta/jobRequisitionController');
+
+const { authenticate } = require('../../middlewares/authMiddleware'); // ✅ correct path
+
+router.get('/job-requisitions', authenticate, getJobRequisitions);
+router.post('/job-requisitions', authenticate, createJobRequisition);
+router.get('/job-requisitions/job-titles', authenticate, getAllJobTitles);
 
 module.exports = router;

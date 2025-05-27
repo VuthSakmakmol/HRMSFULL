@@ -3,7 +3,7 @@
     <h2 class="text-h6 font-weight-bold mb-4">📋 Department List</h2>
 
     <v-card class="rounded-lg pa-4">
-      <!-- Search + Export -->
+      <!-- Search + Export + Reset -->
       <v-row class="mb-4" align="center" justify="space-between">
         <v-col cols="12" sm="6" md="4">
           <v-text-field
@@ -17,20 +17,18 @@
           />
         </v-col>
 
-        <v-col cols="auto">
+        <v-col cols="auto" class="d-flex gap-2">
+          <v-btn color="info" variant="outlined" @click="resetFilters">Reset Filters</v-btn>
           <v-btn color="success" @click="exportToExcel" prepend-icon="mdi-file-excel">
             Export Excel
           </v-btn>
         </v-col>
       </v-row>
 
-
       <!-- Scrollable Table -->
       <div class="scroll-wrapper">
         <v-table height="550px" fixed-header class="elevation-1 rounded-lg">
-          <!-- Sticky Header and Filters -->
           <thead class="custom-sticky-header">
-            <!-- 1️⃣ Header Row -->
             <tr>
               <th>No</th>
               <th>Department</th>
@@ -38,11 +36,8 @@
               <th>Sub-Type</th>
               <th>Company</th>
               <th>Job Titles</th>
-              <th>Recruiters</th>
               <th>Action</th>
             </tr>
-
-            <!-- 2️⃣ Filter Row -->
             <tr>
               <th></th>
               <th><v-autocomplete v-model="columnFilters.name" :items="getColumnOptions('name')" dense hide-details clearable variant="solo" flat placeholder="Filter" /></th>
@@ -50,7 +45,6 @@
               <th><v-autocomplete v-model="columnFilters.subType" :items="getColumnOptions('subType')" dense hide-details clearable variant="solo" flat placeholder="Filter" /></th>
               <th><v-autocomplete v-model="columnFilters.company" :items="getColumnOptions('company')" dense hide-details clearable variant="solo" flat placeholder="Filter" /></th>
               <th><v-autocomplete v-model="columnFilters.jobTitles" :items="getColumnOptions('jobTitles')" dense hide-details clearable variant="solo" flat placeholder="Filter" /></th>
-              <th><v-autocomplete v-model="columnFilters.recruiters" :items="getColumnOptions('recruiters')" dense hide-details clearable variant="solo" flat placeholder="Filter" /></th>
               <th></th>
             </tr>
           </thead>
@@ -65,7 +59,7 @@
               <td>
                 <div v-if="!expanded[item._id]" class="text-truncate">
                   <v-chip
-                    v-if="item.jobTitles.length"
+                    v-if="item.jobTitles?.length"
                     color="secondary"
                     size="x-small"
                     class="ma-1"
@@ -73,14 +67,14 @@
                   >
                     {{ item.jobTitles[0] }}
                   </v-chip>
-                  <span v-if="item.jobTitles.length > 1" class="text-grey text-caption">
+                  <span v-if="item.jobTitles?.length > 1" class="text-grey text-caption">
                     +{{ item.jobTitles.length - 1 }} more
                   </span>
+                  <v-chip v-if="!item.jobTitles?.length" size="x-small" variant="outlined" color="grey">None</v-chip>
                 </div>
-
                 <div v-else class="d-flex flex-column">
                   <div
-                    v-for="title in item.jobTitles"
+                    v-for="title in item.jobTitles || []"
                     :key="title"
                     class="text-body-2 mb-1"
                   >
@@ -88,35 +82,6 @@
                   </div>
                 </div>
               </td>
-
-              <td>
-                <div v-if="!expanded[item._id]" class="text-truncate">
-                  <v-chip
-                    v-for="r in item.recruiters.slice(0, 2)"
-                    :key="r"
-                    size="x-small"
-                    class="ma-1"
-                    color="primary"
-                    variant="outlined"
-                  >
-                    {{ r }}
-                  </v-chip>
-                  <span v-if="item.recruiters.length > 2" class="text-grey text-caption">
-                    +{{ item.recruiters.length - 2 }} more
-                  </span>
-                </div>
-
-                <div v-else class="d-flex flex-column">
-                  <div
-                    v-for="r in item.recruiters"
-                    :key="r"
-                    class="text-body-2 mb-1"
-                  >
-                    {{ r }}
-                  </div>
-                </div>
-              </td>
-
 
               <td>
                 <v-btn
@@ -142,7 +107,6 @@ import { ref, computed, onMounted } from 'vue'
 import axios from '@/utils/axios'
 import * as XLSX from 'xlsx'
 
-
 const departments = ref([])
 const search = ref('')
 const expanded = ref({})
@@ -155,13 +119,12 @@ const columnFilters = ref({
   subType: '',
   company: '',
   jobTitles: '',
-  recruiters: ''
 })
 
 const fetchDepartments = async () => {
   try {
     const query = role === 'GeneralManager' ? `?company=${selectedCompany.value}` : ''
-    const res = await axios.get(`/ta/departments${query}`)
+    const res = await axios.get(`/departments${query}`)
     departments.value = res.data
   } catch (err) {
     console.error('❌ Failed to fetch departments:', err)
@@ -170,6 +133,17 @@ const fetchDepartments = async () => {
 
 const toggleRow = (id) => {
   expanded.value[id] = !expanded.value[id]
+}
+
+const resetFilters = () => {
+  search.value = ''
+  columnFilters.value = {
+    name: '',
+    type: '',
+    subType: '',
+    company: '',
+    jobtitle: '',
+  }
 }
 
 const getColumnOptions = (column) => {
@@ -194,13 +168,8 @@ const filteredDepartments = computed(() => {
     const matchesColumn = Object.entries(columnFilters.value).every(([key, val]) => {
       if (!val) return true
       if (key === 'jobTitles') {
-        return dept.jobTitles?.some(title =>
+        return (dept.jobTitles || []).some(title =>
           title.toLowerCase().includes(val.toLowerCase())
-        )
-      }
-      if (key === 'recruiters') {
-        return dept.recruiters?.some(r =>
-          r.toLowerCase().includes(val.toLowerCase())
         )
       }
       return dept[key]?.toLowerCase().includes(val.toLowerCase())
@@ -210,26 +179,19 @@ const filteredDepartments = computed(() => {
 })
 
 const exportToExcel = () => {
-  // Format data for export
   const data = filteredDepartments.value.map((dept, index) => ({
     No: index + 1,
     Department: dept.name,
     Type: dept.type,
     SubType: dept.subType,
     Company: dept.company,
-    JobTitles: dept.jobTitles.join(', '),
-    Recruiters: dept.recruiters.join(', ')
+    JobTitles: (dept.jobTitles || []).join(', '),
   }))
-
-  // Create worksheet & workbook
   const worksheet = XLSX.utils.json_to_sheet(data)
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Departments')
-
-  // Export file
   XLSX.writeFile(workbook, 'Department_List.xlsx')
 }
-
 
 onMounted(fetchDepartments)
 </script>
@@ -243,7 +205,6 @@ onMounted(fetchDepartments)
   background-color: white;
   -webkit-overflow-scrolling: touch;
 }
-
 
 .v-table {
   min-width: 1200px;
@@ -271,7 +232,6 @@ thead.custom-sticky-header {
   background-color: #fff;
 }
 
-
 .v-chip {
   font-size: 14px;
 }
@@ -279,18 +239,20 @@ thead.custom-sticky-header {
 td > div.d-flex.flex-column {
   padding-top: 6px;
 }
+
 .v-table tbody tr:hover {
   background-color: #e3f2fd !important;
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
+
 .v-table tbody tr {
   border-bottom: 1px solid #eeeeee;
 }
+
 .v-table {
   display: block;
   width: max-content;
   min-width: 100%;
 }
-
 </style>

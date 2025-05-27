@@ -3,29 +3,41 @@ const Department = require('../../models/ta/Department');
 // ✅ GET all departments with company, type, subType filters
 exports.getAll = async (req, res) => {
   try {
-    const filter = {};
+    console.log('📥 GET /departments');
+    console.log('🧾 req.user:', req.user);
+    console.log('🧾 req.query:', req.query);
 
-    // Determine company based on role
-    const currentCompany = req.user.role === 'GeneralManager'
-      ? req.query.company
-      : req.user.company;
+    const role = req.user?.role;
+    const userCompany = req.user?.company;
+    const queryCompany = req.query.company;
 
-    if (!currentCompany) {
+    let companyFilter;
+
+    if (role === 'GeneralManager') {
+      companyFilter = queryCompany;
+    } else {
+      companyFilter = userCompany;
+    }
+
+    if (!companyFilter) {
+      console.error('⛔ Missing company filter');
       return res.status(400).json({ message: 'Company is required' });
     }
 
-    // Assign company to filter
-    filter.company = currentCompany.trim().toUpperCase(); // <- Correct placement
+    const filter = {
+      company: companyFilter.trim().toUpperCase()
+    };
 
     // Optional filters
     if (req.query.type) filter.type = req.query.type;
     if (req.query.subType) filter.subType = req.query.subType;
 
-    console.log('🔍 Filter used:', filter);
+    console.log('🔍 Department filter:', filter);
 
     const departments = await Department.find(filter);
     res.json(departments);
   } catch (err) {
+    console.error('❌ Failed to fetch departments:', err);
     res.status(500).json({
       message: 'Failed to fetch departments',
       error: err.message
@@ -33,18 +45,22 @@ exports.getAll = async (req, res) => {
   }
 };
 
-// ✅ GET department by ID
+// ✅ GET department by ID with access control
 exports.getById = async (req, res) => {
   try {
     const dept = await Department.findById(req.params.id);
     if (!dept) return res.status(404).json({ message: 'Department not found' });
 
-    if (req.user.role !== 'GeneralManager' && dept.company !== req.user.company) {
+    const role = req.user?.role;
+    const userCompany = req.user?.company;
+
+    if (role !== 'GeneralManager' && dept.company !== userCompany) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
     res.json(dept);
   } catch (err) {
+    console.error('❌ Failed to get department:', err);
     res.status(500).json({
       message: 'Failed to get department',
       error: err.message

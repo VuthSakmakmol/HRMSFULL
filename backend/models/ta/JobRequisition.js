@@ -1,48 +1,16 @@
 const mongoose = require('mongoose');
 
 const jobRequisitionSchema = new mongoose.Schema({
-  jobRequisitionId: {
-    type: String,
-    required: true,
-    unique: true
-  },
+  jobRequisitionId: { type: String, required: true, unique: true },
+  departmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', required: true },
+  departmentName: { type: String, required: true },
+  company: { type: String, required: true }, // ✅ company info
 
-  // Direct link to department
-  departmentId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Department',
-    required: true
-  },
-
-  departmentName: {
-    type: String,
-    required: true
-  },
-
-  jobTitle: {
-    type: String,
-    required: true
-  },
-
-  recruiter: {
-    type: String,
-    required: true
-  },
-
-  targetCandidates: {
-    type: Number,
-    required: true
-  },
-
-  filledCandidates: {
-    type: Number,
-    default: 0
-  },
-
-  hiringCost: {
-    type: Number,
-    default: 0
-  },
+  jobTitle: { type: String, required: true },
+  recruiter: { type: String, required: true },
+  targetCandidates: { type: Number, required: true },
+  filledCandidates: { type: Number, default: 0 },
+  hiringCost: { type: Number, default: 0 },
 
   status: {
     type: String,
@@ -50,14 +18,8 @@ const jobRequisitionSchema = new mongoose.Schema({
     default: 'Vacant'
   },
 
-  openingDate: {
-    type: Date,
-    required: true
-  },
-
-  startDate: {
-    type: Date
-  },
+  openingDate: { type: Date, required: true },
+  startDate: { type: Date },
 
   type: {
     type: String,
@@ -73,10 +35,7 @@ const jobRequisitionSchema = new mongoose.Schema({
     }
   },
 
-  onboardCount: {
-    type: Number,
-    default: 0
-  }
+  onboardCount: { type: Number, default: 0 }
 
 }, { timestamps: true });
 

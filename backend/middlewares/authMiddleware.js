@@ -6,7 +6,7 @@ exports.authenticate = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // includes userId, role, companyId
+    req.user = decoded; // decoded must contain role and company
     next();
   } catch (err) {
     return res.status(401).json({ message: 'Invalid token' });

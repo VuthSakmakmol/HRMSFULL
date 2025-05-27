@@ -1,16 +1,15 @@
-import axios from 'axios'
+import axios from 'axios';
 
 const instance = axios.create({
-  baseURL: 'http://localhost:4700/api'  // ✅ matches backend
-})
+  baseURL: 'http://localhost:4700/api'
+});
 
-// Auto-attach token if exists
 instance.interceptors.request.use(config => {
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('token');
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+    config.headers.Authorization = `Bearer ${token}`;
   }
-  return config
-})
+  return config;
+});
 
-export default instance
+export default instance;

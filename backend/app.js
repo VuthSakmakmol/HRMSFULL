@@ -5,31 +5,36 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 
 dotenv.config();
-
 const app = express();
 
-// Middleware
+// ─── MIDDLEWARE ────────────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
+
+// 🔗 Serve candidate documents
 app.use('/uploads/candidate_docs', express.static(path.join(__dirname, 'uploads/candidate_docs')));
 
-// Routes
+// ─── ROUTES ────────────────────────────────────────────────────────────────────
 
+// General Auth/User Routes
 const userRoutes = require('./routes/userRoutes');
 const authRoutes = require('./routes/authRoutes');
-
-const departmentRoutes = require('./routes/ta/departmentRoutes');
-app.use('/api/ta/departments', departmentRoutes);
-const jobRequisitionRoutes = require('./routes/ta/jobRequisitionRoutes');
-app.use('/api/job-requisitions', jobRequisitionRoutes);
-
-
-
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
 
+// TA Module Routes
+const departmentRoutes = require('./routes/ta/departmentRoutes');
+const jobRequisitionRoutes = require('./routes/ta/jobRequisitionRoutes');
 
-// MongoDB connection
+app.use('/api', departmentRoutes);
+app.use('/api', jobRequisitionRoutes);
+
+// Optional: Health check
+app.get('/', (req, res) => {
+  res.send('✅ HRMS API is running...');
+});
+
+// ─── MONGODB CONNECTION ────────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -37,7 +42,7 @@ mongoose.connect(process.env.MONGO_URI, {
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// Start server
+// ─── START SERVER ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4700;
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);

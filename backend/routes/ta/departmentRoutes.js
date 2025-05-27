@@ -1,16 +1,26 @@
-const express = require('express');
-const router = express.Router();
+const express = require('express')
+const router = express.Router()
 
-const { authenticate } = require('../../middlewares/authMiddleware');
-const departmentController = require('../../controllers/ta/departmentController');
+const {
+  getAll,
+  getById,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
+  addJobTitle,
+  removeJobTitle,
+  addRecruiter,
+  removeRecruiter
+} = require('../../controllers/ta/departmentController')
 
-// ✅ Authenticate all routes
-router.use(authenticate);
+const { authenticate } = require('../../middlewares/authMiddleware') // ✅ Auth
 
-// ✅ GET all departments with filters
-router.get('/', departmentController.getAll);
+// 🟢 Auth-protected routes
+router.get('/departments', authenticate, getAll)
+router.get('/departments/:id', authenticate, getById)
 
-// ✅ GET department by ID
-router.get('/:id', departmentController.getById);
 
-module.exports = router;
+
+
+
+module.exports = router
