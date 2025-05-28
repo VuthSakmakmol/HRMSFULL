@@ -6,7 +6,19 @@ const Counter = require('../../models/ta/Counter');
 // 📦 Fetch all job titles with department info
 exports.getAllJobTitles = async (req, res) => {
   try {
-    const departments = await Department.find({}, 'name jobTitles type subType company');
+    const role = req.user?.role;
+    const userCompany = req.user?.company;
+    const queryCompany = req.query.company;
+
+    const companyFilter = role === 'GeneralManager' ? queryCompany : userCompany;
+    if (!companyFilter) {
+      return res.status(400).json({ message: 'Company is required' });
+    }
+
+    const departments = await Department.find(
+      { company: companyFilter.trim().toUpperCase() },
+      'name jobTitles type subType company'
+    );
 
     const jobTitleList = [];
 
@@ -126,37 +138,41 @@ exports.getJobRequisitions = async (req, res) => {
   }
 };
 
-
-
-// 🗑️ Delete a requisition
+// 🗑️ Delete a requisition with access control
 exports.deleteJobRequisition = async (req, res) => {
   try {
     const { id } = req.params;
-    const deleted = await JobRequisition.findByIdAndDelete(id);
+    const job = await JobRequisition.findById(id);
+    if (!job) return res.status(404).json({ message: 'Requisition not found' });
 
-    if (!deleted) {
-      return res.status(404).json({ message: 'Requisition not found' });
+    const userCompany = req.user?.company;
+    const isGM = req.user?.role === 'GeneralManager';
+    if (!isGM && job.company !== userCompany) {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
+    await JobRequisition.findByIdAndDelete(id);
     res.json({ message: 'Job requisition deleted successfully.' });
   } catch (err) {
     res.status(500).json({ message: 'Failed to delete requisition', error: err.message });
   }
 };
 
-// ✏️ Update a requisition
+// ✏️ Update a requisition with access control
 exports.updateJobRequisition = async (req, res) => {
   try {
     const { id } = req.params;
-    const update = req.body;
+    const existing = await JobRequisition.findById(id);
+    if (!existing) return res.status(404).json({ message: 'Requisition not found' });
 
-    const job = await JobRequisition.findByIdAndUpdate(id, update, { new: true });
-
-    if (!job) {
-      return res.status(404).json({ message: 'Requisition not found' });
+    const userCompany = req.user?.company;
+    const isGM = req.user?.role === 'GeneralManager';
+    if (!isGM && existing.company !== userCompany) {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
-    res.json({ message: 'Job requisition updated.', requisition: job });
+    const updated = await JobRequisition.findByIdAndUpdate(id, req.body, { new: true });
+    res.json({ message: 'Job requisition updated.', requisition: updated });
   } catch (err) {
     res.status(500).json({ message: 'Failed to update requisition', error: err.message });
   }

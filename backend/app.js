@@ -28,6 +28,7 @@ const jobRequisitionRoutes = require('./routes/ta/jobRequisitionRoutes');
 
 app.use('/api', departmentRoutes);
 app.use('/api', jobRequisitionRoutes);
+app.use('/api/recruiters', require('./routes/ta/recruiterRoutes'))
 
 // Optional: Health check
 app.get('/', (req, res) => {

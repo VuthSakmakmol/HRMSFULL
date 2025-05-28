@@ -27,16 +27,27 @@
       <!-- Toggle Buttons -->
       <v-row class="mb-4" dense>
         <v-col cols="auto">
-          <v-btn color="primary" @click="showCreateForm = !showCreateForm">
-            {{ showCreateForm ? '✖ Close Create Form' : '➕ New Job Requisition' }}
+          <v-btn color="primary" class="text-white font-weight-bold" @click="showCreateForm = !showCreateForm">
+            <v-icon start>mdi-plus</v-icon>
+            {{ showCreateForm ? 'Close Create Form' : 'New Job Requisition' }}
           </v-btn>
         </v-col>
+
         <v-col cols="auto">
-          <v-btn color="secondary" @click="showFilterForm = !showFilterForm">
-            {{ showFilterForm ? '✖ Close Filter Form' : '🔍 Filter Requisitions' }}
+          <v-btn color="teal darken-1" class="text-white font-weight-bold" @click="showFilterForm = !showFilterForm">
+            <v-icon start>mdi-magnify</v-icon>
+            {{ showFilterForm ? 'Close Filter Form' : 'Filter Requisitions' }}
+          </v-btn>
+        </v-col>
+
+        <v-col cols="auto">
+          <v-btn color="info" class="text-white font-weight-bold" @click="exportToExcel">
+            <v-icon start>mdi-file-excel</v-icon>
+            Export to Excel
           </v-btn>
         </v-col>
       </v-row>
+
 
       <!-- CREATE FORM -->
         <v-form v-if="showCreateForm" @submit.prevent="isEditing ? updateRequisition() : submitRequisition()">
@@ -55,7 +66,7 @@
             <v-col cols="12" md="3">
               <v-select
                 v-model="form.recruiter"
-                :items="recruiterList"
+                :items="recruiterList"  
                 label="Recruiter"
                 clearable
                 variant="outlined"
@@ -144,6 +155,100 @@
         </v-form>
       <v-divider class="my-4" />
 
+      <!-- FILTER FORM -->
+      <v-row v-if="showFilterForm" class="mb-4" dense>
+        <v-col cols="12" md="2">
+          <v-text-field
+            v-model="filters.jobId"
+            label="Job ID"
+            prepend-inner-icon="mdi-magnify"
+            variant="outlined"
+            clearable
+            dense
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field
+            v-model="filters.department"
+            label="Department"
+            prepend-inner-icon="mdi-office-building"
+            variant="outlined"
+            clearable
+            dense
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field
+            v-model="filters.jobTitle"
+            label="Job Title"
+            prepend-inner-icon="mdi-briefcase"
+            variant="outlined"
+            clearable
+            dense
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field
+            v-model="filters.openingDate"
+            label="Opening Date (YYYY-MM-DD)"
+            prepend-inner-icon="mdi-calendar"
+            variant="outlined"
+            clearable
+            dense
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field
+            v-model="filters.recruiter"
+            label="Recruiter"
+            prepend-inner-icon="mdi-account"
+            variant="outlined"
+            clearable
+            dense
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-select
+            v-model="filters.status"
+            :items="['Vacant', 'Filled', 'Suspended', 'Cancel']"
+            label="Status"
+            variant="outlined"
+            clearable
+            dense
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field
+            v-model="filters.startDate"
+            label="Start Date (YYYY-MM-DD)"
+            prepend-inner-icon="mdi-calendar"
+            variant="outlined"
+            clearable
+            dense
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field
+            v-model="filters.hiringCost"
+            label="Hiring Cost"
+            prepend-inner-icon="mdi-cash"
+            type="number"
+            variant="outlined"
+            clearable
+            dense
+            hide-details
+          />
+        </v-col>
+      </v-row>
+
+
       <!-- Table with Filters -->
       <div class="scroll-wrapper">
         <v-table height="550px" fixed-header class="elevation-1 rounded-lg">
@@ -185,9 +290,32 @@
             </tr>
           </tbody>
         </v-table>
-      </div>
+      </div >
+      <v-row class="mt-4 d-flex align-center" justify="space-between">
+        <v-col cols="12" md="6" class="d-flex align-center">
+          <v-pagination
+            v-model="page"
+            :length="Math.ceil(filteredRequisitions.length / itemsPerPage)"
+            total-visible="7"
+            class="flex"
+          />
+        </v-col>
+
+        <v-col cols="12" md="3" class="d-flex justify-end">
+          <v-select
+            v-model="itemsPerPage"
+            :items="[25, 50, 75, 100]"
+            label="Rows per page"
+            variant="outlined"
+            density="compact"
+            hide-details
+            style="max-width: 180px"
+          />
+        </v-col>
+      </v-row>
     </v-card>
   </v-container>
+  
 </template>
 
 <script setup>
@@ -195,6 +323,23 @@ import { ref, onMounted, computed } from 'vue'
 import dayjs from 'dayjs'
 import api from '@/utils/axios'
 import Swal from 'sweetalert2'
+import * as XLSX from 'xlsx'
+
+const dateMenu = ref(false)
+const jobTitles = ref([])
+const requisitions = ref([])
+const page = ref(1)
+const itemsPerPage = ref(25)
+const recruiterList = ref([])
+
+const fetchRecruiters = async () => {
+  try {
+    const res = await api.get(`/recruiters?company=${company}`)
+    recruiterList.value = res.data.map(r => r.name)
+  } catch (err) {
+    Swal.fire({ icon: 'error', title: 'Recruiter Load Failed', text: err?.response?.data?.message || 'Error fetching recruiters' })
+  }
+}
 
 const showCreateForm = ref(false)
 const showFilterForm = ref(false)
@@ -203,9 +348,14 @@ const role = localStorage.getItem('role') || ''
 const company = localStorage.getItem('company') || ''
 
 const filters = ref({
+  jobId: '',
+  department: '',
   jobTitle: '',
+  openingDate: '',
   recruiter: '',
-  status: ''
+  status: '',
+  startDate: '',
+  hiringCost: ''
 })
 
 const filteredRequisitions = computed(() => {
@@ -219,11 +369,39 @@ const filteredRequisitions = computed(() => {
   }
 
   return base.filter(j =>
-    (!filters.value.jobTitle || j.jobTitle.toLowerCase().includes(filters.value.jobTitle.toLowerCase())) &&
-    (!filters.value.recruiter || j.recruiter.toLowerCase().includes(filters.value.recruiter.toLowerCase())) &&
-    (!filters.value.status || j.status === filters.value.status)
+    (!filters.value.jobId ||
+      j.jobRequisitionId?.toLowerCase().includes(filters.value.jobId.toLowerCase())) &&
+
+    (!filters.value.department ||
+      j.departmentName?.toLowerCase().includes(filters.value.department.toLowerCase())) &&
+
+    (!filters.value.jobTitle ||
+      j.jobTitle?.toLowerCase().includes(filters.value.jobTitle.toLowerCase())) &&
+
+    (!filters.value.openingDate ||
+      dayjs(j.openingDate).format('YYYY-MM-DD').toLowerCase().includes(filters.value.openingDate.toLowerCase()) ||
+      dayjs(j.openingDate).format('DD-MMM-YYYY').toLowerCase().includes(filters.value.openingDate.toLowerCase()) ||
+      dayjs(j.openingDate).format('MMM-YY').toLowerCase().includes(filters.value.openingDate.toLowerCase()) ||
+      dayjs(j.openingDate).format('MMM-YYYY').toLowerCase().includes(filters.value.openingDate.toLowerCase())) &&
+
+    (!filters.value.recruiter ||
+      j.recruiter?.toLowerCase().includes(filters.value.recruiter.toLowerCase())) &&
+
+    (!filters.value.status ||
+      j.status === filters.value.status) &&
+
+    (!filters.value.startDate ||
+      dayjs(j.startDate).format('YYYY-MM-DD').toLowerCase().includes(filters.value.startDate.toLowerCase()) ||
+      dayjs(j.startDate).format('DD-MMM-YYYY').toLowerCase().includes(filters.value.startDate.toLowerCase()) ||
+      dayjs(j.startDate).format('MMM-YY').toLowerCase().includes(filters.value.startDate.toLowerCase()) ||
+      dayjs(j.startDate).format('MMM-YYYY').toLowerCase().includes(filters.value.startDate.toLowerCase())) &&
+
+    (!filters.value.hiringCost ||
+      String(j.hiringCost).includes(filters.value.hiringCost))
   )
+
 })
+
 
 
 const form = ref({
@@ -236,11 +414,7 @@ const form = ref({
   status: 'Vacant'
 })
 
-const dateMenu = ref(false)
-const recruiterList = ['Siraphop Chirathasuwan', 'Leng Puthy', 'Lip Kimleang', 'Lit Sony']
 
-const jobTitles = ref([])
-const requisitions = ref([])
 const alerts = ref({
   'White Collar': false,
   'Blue Collar Sewer': false,
@@ -250,10 +424,15 @@ const activeTab = ref('White Collar')
 
 const fetchJobTitles = async () => {
   try {
-    const res = await api.get('/job-requisitions/job-titles')
-    jobTitles.value = res.data.jobTitles
+    const company = localStorage.getItem('company');
+    const res = await api.get(`/job-requisitions/job-titles?company=${company}`);
+    jobTitles.value = res.data.jobTitles;
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Failed to Load Job Titles', text: err?.response?.data?.message || 'Error loading job titles' })
+    Swal.fire({
+      icon: 'error',
+      title: 'Failed to Load Job Titles',
+      text: err?.response?.data?.message || 'Error loading job titles'
+    });
   }
 }
 
@@ -410,13 +589,36 @@ const deleteJob = async (job) => {
 };
 
 
+const exportToExcel = () => {
+  const exportData = filteredRequisitions.value.map((job, index) => ({
+    No: index + 1,
+    'Job ID': job.jobRequisitionId,
+    Department: job.departmentName,
+    'Job Title': job.jobTitle,
+    'Opening Date': dayjs(job.openingDate).format('DD-MMM-YYYY'),
+    Recruiter: job.recruiter,
+    Status: job.status,
+    'New Hire Start Date': dayjs(job.startDate).format('DD-MMM-YYYY'),
+    'Hiring Cost': job.hiringCost
+  }))
+
+  const worksheet = XLSX.utils.json_to_sheet(exportData)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Job Requisitions')
+  XLSX.writeFile(workbook, `JobRequisitions_${dayjs().format('YYYY-MM-DD')}.xlsx`)
+}
+
+
+
 onMounted(() => {
   fetchJobTitles()
   fetchRequisitions()
+  fetchRecruiters()
   for (const key in alerts.value) {
     alerts.value[key] = localStorage.getItem(`seen_${key}`) !== 'true'
   }
 })
+
 </script>
 
 

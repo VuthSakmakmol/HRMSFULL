@@ -3,24 +3,15 @@ const Department = require('../../models/ta/Department');
 // ✅ GET all departments with company, type, subType filters
 exports.getAll = async (req, res) => {
   try {
-    console.log('📥 GET /departments');
-    console.log('🧾 req.user:', req.user);
-    console.log('🧾 req.query:', req.query);
-
-    const role = req.user?.role;
+    const role = req.user?.role || 'Manager';
     const userCompany = req.user?.company;
     const queryCompany = req.query.company;
 
-    let companyFilter;
-
-    if (role === 'GeneralManager') {
-      companyFilter = queryCompany;
-    } else {
-      companyFilter = userCompany;
-    }
+    const companyFilter = role === 'GeneralManager'
+      ? queryCompany
+      : userCompany;
 
     if (!companyFilter) {
-      console.error('⛔ Missing company filter');
       return res.status(400).json({ message: 'Company is required' });
     }
 
@@ -28,22 +19,17 @@ exports.getAll = async (req, res) => {
       company: companyFilter.trim().toUpperCase()
     };
 
-    // Optional filters
     if (req.query.type) filter.type = req.query.type;
     if (req.query.subType) filter.subType = req.query.subType;
 
-    console.log('🔍 Department filter:', filter);
-
-    const departments = await Department.find(filter);
+    const departments = await Department.find(filter).sort({ departmentName: 1 });
     res.json(departments);
   } catch (err) {
-    console.error('❌ Failed to fetch departments:', err);
-    res.status(500).json({
-      message: 'Failed to fetch departments',
-      error: err.message
-    });
+    console.error('❌ Department Fetch Error:', err);
+    res.status(500).json({ message: 'Failed to fetch departments', error: err.message });
   }
 };
+
 
 // ✅ GET department by ID with access control
 exports.getById = async (req, res) => {
