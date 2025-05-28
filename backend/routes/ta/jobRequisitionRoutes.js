@@ -11,8 +11,13 @@ const {
 
 const { authenticate } = require('../../middlewares/authMiddleware'); // ✅ correct path
 
-router.get('/job-requisitions', authenticate, getJobRequisitions);
-router.post('/job-requisitions', authenticate, createJobRequisition);
-router.get('/job-requisitions/job-titles', authenticate, getAllJobTitles);
+// ─── Job Requisition CRUD ─────────────────────────────────────────────
+router.get('/job-requisitions', authenticate, getJobRequisitions);              // ✅ Read all
+router.post('/job-requisitions', authenticate, createJobRequisition);           // ✅ Create
+router.put('/job-requisitions/:id', authenticate, updateJobRequisition);        // ✅ Update
+router.delete('/job-requisitions/:id', authenticate, deleteJobRequisition);     // ✅ Delete
+
+// ─── Helper Endpoint ──────────────────────────────────────────────────
+router.get('/job-requisitions/job-titles', authenticate, getAllJobTitles);      // ✅ For dropdown
 
 module.exports = router;
