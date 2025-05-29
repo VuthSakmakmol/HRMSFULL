@@ -1,6 +1,7 @@
 <template>
   <v-container fluid>
     <v-card class="pa-4">
+
       <!-- Tabs -->
       <v-row class="mb-4">
         <v-col cols="auto" v-for="tab in ['White Collar', 'Blue Collar Sewer', 'Blue Collar Non-Sewer']" :key="tab">
@@ -49,39 +50,64 @@
       <v-divider class="my-4" />
 
       <!-- Candidate Table -->
-      <v-table>
-        <thead>
-          <tr>
-            <th>No</th>
-            <th>Candidate ID</th>
-            <th>Full Name</th>
-            <th>Job Title</th>
-            <th>Department</th>
-            <th>Recruiter</th>
-            <th>Application Source</th>
-            <th>Progress</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(c, index) in filteredCandidates" :key="c._id">
-            <td>{{ index + 1 }}</td>
-            <td>{{ c.candidateId }}</td>
-            <td>{{ c.fullName }}</td>
-            <td>{{ c.jobTitle }}</td>
-            <td>{{ c.departmentName }}</td>
-            <td>{{ c.recruiter }}</td>
-            <td>{{ c.applicationSource }}</td>
-            <td>{{ c.progress }}</td>
-          </tr>
-        </tbody>
-      </v-table>
+      <div class="table-wrapper">
+        <table class="native-table">
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Candidate ID</th>
+              <th>Job ID</th>
+              <th>Department</th>
+              <th>Job Title</th>
+              <th>Recruiter</th>
+              <th>Candidate Name</th>
+              <th>Source</th>
+              <th>Application</th>
+              <th>Manager Review</th>
+              <th>Interview</th>
+              <th>Job Offer</th>
+              <th>Hired</th>
+              <th>Onboard</th>
+              <th>Final Decision</th>
+              <th>Current Start Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(c, index) in filteredCandidates" :key="c._id">
+              <td>{{ index + 1 }}</td>
+              <td>{{ c.candidateId }}</td>
+              <td>{{ c.jobRequisitionCode }}</td>
+              <td>{{ c.department}}</td>
+              <td>{{ c.jobTitle }}</td>
+              <td>{{ c.recruiter }}</td>
+              <td>{{ c.fullName }}</td>
+              <td>{{ c.applicationSource }}</td>
+              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.Application) }}</v-btn></td>
+              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.ManagerReview) }}</v-btn></td>
+              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.Interview) }}</v-btn></td>
+              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.JobOffer) }}</v-btn></td>
+              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.Hired) }}</v-btn></td>
+              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.Onboard) }}</v-btn></td>
+              <td>{{ c.hireDecision || '-' }}</td>
+              <td>
+                <span v-if="c.progressDates?.Application && c.progressDates?.Onboard">
+                  {{ daysBetween(c.progressDates.Onboard, c.progressDates.Application) }} days
+                </span>
+                <span v-else>-</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </v-card>
   </v-container>
 </template>
+
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
+import dayjs from 'dayjs'
 
 const activeTab = ref('White Collar')
 const showForm = ref(false)
@@ -106,7 +132,6 @@ const setActive = (tab) => {
   activeTab.value = tab
 }
 
-// ✅ Filter job titles (only Vacant when form open)
 const filteredJobTitleOptions = computed(() =>
   jobRequisitions.value.filter(j => {
     if (showForm.value && j.status !== 'Vacant') return false
@@ -130,7 +155,6 @@ const fetchCandidates = async () => {
   try {
     const user = JSON.parse(localStorage.getItem('user'))
     const selectedCompany = localStorage.getItem('company')
-
     const query = user?.role === 'GeneralManager' && selectedCompany
       ? `?company=${selectedCompany}`
       : ''
@@ -143,17 +167,11 @@ const fetchCandidates = async () => {
   }
 }
 
-
-
 const fetchJobRequisitions = async () => {
   try {
-    const token = localStorage.getItem('token')
-    const userRaw = localStorage.getItem('user')
-    if (!token || !userRaw) throw new Error('User not logged in')
-
-    const user = JSON.parse(userRaw)
+    const user = JSON.parse(localStorage.getItem('user'))
     const selectedCompany = localStorage.getItem('company')
-    const company = user.role === 'GeneralManager' ? selectedCompany : user.company
+    const company = user?.role === 'GeneralManager' ? selectedCompany : user?.company
 
     if (!company) throw new Error('Missing company info')
 
@@ -161,39 +179,45 @@ const fetchJobRequisitions = async () => {
     jobRequisitions.value = res.data
   } catch (err) {
     console.error('❌ Error fetching job requisitions:', err)
-    Swal.fire({
-      icon: 'error',
-      title: 'Failed to fetch requisitions',
-      text: err.message
-    })
+    Swal.fire({ icon: 'error', title: 'Failed to fetch requisitions', text: err.message })
   }
 }
-
-
-
 const submitCandidate = async () => {
   if (!selectedRequisition.value) {
     Swal.fire({ icon: 'error', title: 'Please select a job title' })
     return
   }
 
-  const payload = {
-    jobRequisitionId: selectedRequisition.value._id,
-    jobRequisitionCode: selectedRequisition.value.jobRequisitionId,
-    departmentCode: selectedRequisition.value.departmentCode || 'UNKNOWN',
-    jobTitle: selectedRequisition.value.jobTitle,
-    recruiter: selectedRequisition.value.recruiter,
-    departmentId: selectedRequisition.value.departmentId,
-    departmentName: selectedRequisition.value.departmentName,
-    type: selectedRequisition.value.type,
-    subType: selectedRequisition.value.subType,
-    fullName: form.value.fullName,
-    applicationSource: form.value.applicationSource
+  const user = JSON.parse(localStorage.getItem('user'))
+  const company = user?.role === 'GeneralManager'
+    ? localStorage.getItem('company')
+    : user?.company
+
+  if (!company) {
+    Swal.fire({ icon: 'error', title: 'Missing Company', text: 'Company not found in localStorage' })
+    return
   }
+
+  const job = selectedRequisition.value
+  const payload = {
+    jobRequisitionId: job._id,
+    jobRequisitionCode: job.jobRequisitionId,
+    department: job.departmentName,
+    jobTitle: job.jobTitle,
+    recruiter: job.recruiter,
+    type: job.type,
+    subType: job.subType || 'General',
+
+    fullName: form.value.fullName,
+    applicationSource: form.value.applicationSource,
+    company
+
+  }
+
 
   try {
     await axios.post('/candidates', payload)
-    Swal.fire({ icon: 'success', title: 'Candidate Created', allowEnterKey: true })
+    Swal.fire({ icon: 'success', title: 'Candidate Created ✅', allowEnterKey: true })
     fetchCandidates()
     toggleForm()
   } catch (err) {
@@ -205,9 +229,69 @@ const submitCandidate = async () => {
   }
 }
 
+
+
+const formatDate = (val) => {
+  if (!val) return '-'
+  return dayjs(val).format('DD-MMM-YY').toUpperCase()
+}
+
+const daysBetween = (end, start) => {
+  return dayjs(end).diff(dayjs(start), 'day')
+}
+
 onMounted(() => {
   fetchCandidates()
   fetchJobRequisitions()
 })
 </script>
 
+<style scoped>
+.table-wrapper {
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.native-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: auto;
+}
+
+.native-table th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 10;
+  font-weight: 600;
+  padding: 8px 16px;
+  white-space: nowrap;
+  border-bottom: 1px solid #ccc;
+  text-align: left;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.native-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 8px 16px;
+  font-weight: 400;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+}
+
+.stage-btn {
+  font-size: 11px;
+  padding: 0 8px;
+  min-width: 85px;
+  height: 30px;
+  background-color: #999966 !important;
+  color: white !important;
+}
+</style>
