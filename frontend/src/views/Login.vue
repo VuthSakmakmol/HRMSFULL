@@ -54,19 +54,20 @@ const login = async () => {
     const { token, user } = res.data
 
     localStorage.setItem('token', token)
+    localStorage.setItem('user', JSON.stringify(user)) // ✅ This fixes the GM issue
     localStorage.setItem('role', user.role)
     localStorage.setItem('name', user.name)
     localStorage.setItem('company', user.company || '')
 
-    // ✅ Redirect by role
     if (user.role === 'GeneralManager') {
-  router.push('/gm/dashboard')
-} else {
-  router.push('/ta/dashboard')
-}
+      router.push('/gm/dashboard')
+    } else {
+      router.push('/ta/dashboard')
+    }
 
   } catch (err) {
     error.value = err.response?.data?.message || 'Login failed'
   }
 }
+
 </script>

@@ -22,11 +22,12 @@ exports.login = async (req, res) => {
       {
         userId: user._id,
         role: user.role,
-        company: user.company || null
+        company: user.role === 'GeneralManager' ? null : user.company
       },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
+
 
     res.json({
       message: 'Login successful',

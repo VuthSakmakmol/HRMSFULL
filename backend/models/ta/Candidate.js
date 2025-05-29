@@ -5,10 +5,11 @@ const candidateSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   recruiter: { type: String, required: true },
   applicationSource: { type: String, required: true },
-
+  company: { type: String, required: true },
+  
   jobRequisitionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'TAJobRequisition',
+    ref: 'JobRequisition',
     required: true,
   },
   jobRequisitionCode: { type: String, required: true }, // BJR16-5
@@ -57,4 +58,4 @@ const candidateSchema = new mongoose.Schema({
   timestamps: true
 });
 
-module.exports = mongoose.model('TACandidate', candidateSchema);
+module.exports = mongoose.model('Candidate', candidateSchema);

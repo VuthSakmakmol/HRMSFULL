@@ -10,8 +10,6 @@ function generateCandidateId() {
   const year = String(now.getFullYear()).slice(-2);
   return `NS${month}${year}-${candidateCounter++}`;
 }
-
-// CREATE
 exports.create = async (req, res) => {
   try {
     const {
@@ -21,9 +19,18 @@ exports.create = async (req, res) => {
       jobRequisitionId,
       jobRequisitionCode,
       departmentCode,
+      company, // Only used if GM
       type,
       subType
     } = req.body;
+
+    const role = req.user.role;
+    const userCompany = req.user.company;
+    const resolvedCompany = role === 'GeneralManager' ? company : userCompany;
+
+    if (!resolvedCompany) {
+      return res.status(400).json({ message: 'Company is required' });
+    }
 
     const candidate = new Candidate({
       candidateId: generateCandidateId(),
@@ -35,6 +42,7 @@ exports.create = async (req, res) => {
       departmentCode,
       type,
       subType,
+      company: resolvedCompany,
       progress: 'Application',
       progressDates: {
         Application: new Date()
@@ -48,15 +56,27 @@ exports.create = async (req, res) => {
   }
 };
 
-// READ ALL
+
 exports.getAll = async (req, res) => {
   try {
-    const candidates = await Candidate.find().sort({ createdAt: -1 });
+    const role = req.user.role;
+    const userCompany = req.user.company;
+    const queryCompany = req.query.company;
+
+    const resolvedCompany =
+      role === 'GeneralManager' ? queryCompany : userCompany;
+
+    if (!resolvedCompany) {
+      return res.status(400).json({ message: 'Missing company info' });
+    }
+
+    const candidates = await Candidate.find({ company: resolvedCompany }).sort({ createdAt: -1 });
     res.json(candidates);
   } catch (err) {
     res.status(500).json({ message: 'Error fetching candidates', error: err.message });
   }
 };
+
 
 // READ ONE
 exports.getOne = async (req, res) => {
