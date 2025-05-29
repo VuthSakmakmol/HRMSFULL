@@ -16,6 +16,43 @@
 
     <v-list nav dense>
 
+      
+
+      <!-- 🔹 TA Section -->
+      <v-list-group value="TA">
+        <template #activator="{ props }">
+          <v-list-item v-bind="props" prepend-icon="mdi-briefcase-outline" title="TA" />
+        </template>
+
+        <v-list-item :to="{ path: '/ta/dashboard' }">
+          <template #prepend>
+            <!-- <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon> -->
+          </template>
+          <template #title>Dashboard</template>
+        </v-list-item>
+
+        <v-list-item :to="{ path: '/ta/requisitions' }">
+          <template #prepend>
+            <!-- <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon> -->
+          </template>
+          <template #title>Job Requisition</template>
+        </v-list-item>
+
+        <v-list-item :to="{ path: '/ta/candidates' }">
+          <template #prepend>
+            <!-- <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon> -->
+          </template>
+          <template #title>Candidate</template>
+        </v-list-item>
+
+        <v-list-item :to="{ path: '/ta/departments' }">
+          <template #prepend>
+            <!-- <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon> -->
+          </template>
+          <template #title>Data Entry</template>
+        </v-list-item>
+      </v-list-group>
+
       <!-- 🔹 General Manager Section -->
       <template v-if="role === 'GeneralManager'">
         <v-list-group value="Manage">
@@ -35,41 +72,6 @@
           />
         </v-list-group>
       </template>
-
-      <!-- 🔹 TA Section -->
-      <v-list-group value="TA">
-        <template #activator="{ props }">
-          <v-list-item v-bind="props" prepend-icon="mdi-briefcase-outline" title="TA" />
-        </template>
-
-        <v-list-item :to="{ path: '/ta/dashboard' }">
-          <template #prepend>
-            <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon>
-          </template>
-          <template #title>Dashboard</template>
-        </v-list-item>
-
-        <v-list-item :to="{ path: '/ta/requisitions' }">
-          <template #prepend>
-            <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon>
-          </template>
-          <template #title>Job Requisition</template>
-        </v-list-item>
-
-        <v-list-item :to="{ path: '/ta/candidates' }">
-          <template #prepend>
-            <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon>
-          </template>
-          <template #title>Candidate</template>
-        </v-list-item>
-
-        <v-list-item :to="{ path: '/ta/departments' }">
-          <template #prepend>
-            <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon>
-          </template>
-          <template #title>Data Entry</template>
-        </v-list-item>
-      </v-list-group>
 
     </v-list>
   </v-navigation-drawer>
@@ -99,8 +101,8 @@ const isMobile = computed(() => mobile.value)
 
 <style scoped>
 .v-navigation-drawer {
-  background-color: #f9fafa;
-  border-right: 1px solid #ddd;
+  background-color: #e9f8f8;
+  border-right: 1px solid #a6a5a5;
   color: #212121;
   max-width: 260px;
 }

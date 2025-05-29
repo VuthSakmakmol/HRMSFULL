@@ -267,8 +267,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(job, index) in filteredRequisitions" :key="job._id">
-              <td>{{ index + 1 }}</td>
+            <tr v-for="(job, index) in paginatedRequisitions" :key="job._id">
+              <td>{{ (page - 1) * itemsPerPage + index + 1 }}</td>
               <td>{{ job.jobRequisitionId }}</td>
               <td>{{ job.departmentName }}</td>
               <td>{{ job.jobTitle }}</td>
@@ -312,6 +312,19 @@
             style="max-width: 180px"
           />
         </v-col>
+        <v-overlay :model-value="showLoader" class="align-center justify-center" persistent>
+          <div class="text-center">
+            <v-progress-circular
+              :model-value="loadValue"
+              :rotate="360"
+              :size="100"
+              :width="15"
+              color="teal"
+            >
+              <template v-slot:default>{{ loadValue }}%</template>
+            </v-progress-circular>
+          </div>
+        </v-overlay>
       </v-row>
     </v-card>
   </v-container>
@@ -331,6 +344,15 @@ const requisitions = ref([])
 const page = ref(1)
 const itemsPerPage = ref(25)
 const recruiterList = ref([])
+const showLoader = ref(true)
+const loadValue = ref(0)
+
+const paginatedRequisitions = computed(() => {
+  const start = (page.value - 1) * itemsPerPage.value
+  const end = start + itemsPerPage.value
+  return filteredRequisitions.value.slice(start, end)
+})
+
 
 const fetchRecruiters = async () => {
   try {
@@ -611,6 +633,15 @@ const exportToExcel = () => {
 
 
 onMounted(() => {
+  let interval = setInterval(() => {
+    if (loadValue.value >= 100) {
+      showLoader.value = false
+      clearInterval(interval)
+    } else {
+      loadValue.value += 20
+    }
+  }, 10)
+
   fetchJobTitles()
   fetchRequisitions()
   fetchRecruiters()
@@ -618,6 +649,7 @@ onMounted(() => {
     alerts.value[key] = localStorage.getItem(`seen_${key}`) !== 'true'
   }
 })
+
 
 </script>
 
@@ -633,6 +665,5 @@ onMounted(() => {
 .v-table tbody td {
   transition: background-color 0.2s ease;
 }
-
 
 </style>
