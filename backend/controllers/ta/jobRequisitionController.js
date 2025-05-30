@@ -107,36 +107,29 @@ exports.createJobRequisition = async (req, res) => {
 
 exports.getJobRequisitions = async (req, res) => {
   try {
-    console.log('🔍 Incoming GET /job-requisitions');
-    console.log('🧾 req.user:', req.user); // ✅ should show decoded token
-
     const role = req.user?.role;
     const userCompany = req.user?.company;
     const queryCompany = req.query.company;
 
-    let companyFilter;
-
-    if (role === 'GeneralManager') {
-      companyFilter = queryCompany;
-    } else {
-      companyFilter = userCompany;
-    }
+    const companyFilter = role === 'GeneralManager' ? queryCompany : userCompany;
 
     if (!companyFilter) {
-      console.error('⛔ Missing company filter');
       return res.status(400).json({ message: 'Company is required' });
     }
 
-    const requisitions = await JobRequisition.find({ company: companyFilter.trim().toUpperCase() })
+    const requisitions = await JobRequisition.find({
+      company: companyFilter.trim().toUpperCase()
+    })
       .sort({ createdAt: -1 })
       .populate('departmentId');
 
     res.json(requisitions);
   } catch (err) {
-    console.error('❌ Error fetching job requisitions:', err);
+    console.error('❌ Error fetching requisitions:', err);
     res.status(500).json({ message: 'Error fetching job requisitions', error: err.message });
   }
 };
+
 
 // 🗑️ Delete a requisition with access control
 exports.deleteJobRequisition = async (req, res) => {
@@ -177,3 +170,27 @@ exports.updateJobRequisition = async (req, res) => {
     res.status(500).json({ message: 'Failed to update requisition', error: err.message });
   }
 };
+
+
+// GET /ta/job-requisitions/vacant
+exports.getVacantRequisitions = async (req, res) => {
+  try {
+    const role = req.user?.role;
+    const userCompany = req.user?.company;
+    const queryCompany = req.query.company;
+
+    const company = role === 'GeneralManager' ? queryCompany : userCompany;
+    if (!company) return res.status(400).json({ message: 'Company is required' });
+
+    const vacant = await JobRequisition.find({
+      company: company.trim().toUpperCase(),
+      status: 'Vacant'
+    }).sort({ createdAt: -1 });
+
+    res.json(vacant);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch vacant requisitions', error: err.message });
+  }
+};
+
+

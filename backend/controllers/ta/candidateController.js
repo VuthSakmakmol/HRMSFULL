@@ -1,16 +1,25 @@
 const Candidate = require('../../models/ta/Candidate');
 const JobRequisition = require('../../models/ta/JobRequisition');
+const Counter = require('../../models/ta/Counter');
 
-let candidateCounter = 1;
-
-// Generate candidate ID like: NS0525-1
-function generateCandidateId() {
+async function generateCandidateId() {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const year = String(now.getFullYear()).slice(-2);
-  return `NS${month}${year}-${candidateCounter++}`;
+  const prefix = `NS${month}${year}`;
+
+  const counter = await Counter.findOneAndUpdate(
+    { name: `candidate-${prefix}` },
+    { $inc: { value: 1 } },
+    { new: true, upsert: true }
+  );
+
+  return `${prefix}-${counter.value}`;
 }
+
 exports.create = async (req, res) => {
+  console.log('📥 Incoming payload:', req.body);
+
   try {
     const {
       fullName,
@@ -18,8 +27,9 @@ exports.create = async (req, res) => {
       applicationSource,
       jobRequisitionId,
       jobRequisitionCode,
-      departmentCode,
-      company, // Only used if GM
+      department,
+      jobTitle,
+      company,
       type,
       subType
     } = req.body;
@@ -32,14 +42,25 @@ exports.create = async (req, res) => {
       return res.status(400).json({ message: 'Company is required' });
     }
 
+    // ✅ Field validation
+    if (!jobRequisitionId) return res.status(400).json({ message: 'Missing jobRequisitionId' });
+    if (!jobRequisitionCode) return res.status(400).json({ message: 'Missing jobRequisitionCode' });
+    if (!department) return res.status(400).json({ message: 'Missing department name' });
+    if (!jobTitle) return res.status(400).json({ message: 'Missing jobTitle' });
+    if (!recruiter) return res.status(400).json({ message: 'Missing recruiter' });
+
+    // ✅ Properly await ID generation
+    const candidateId = await generateCandidateId();
+
     const candidate = new Candidate({
-      candidateId: generateCandidateId(),
+      candidateId,
       fullName,
       recruiter,
       applicationSource,
       jobRequisitionId,
       jobRequisitionCode,
-      departmentCode,
+      department,
+      jobTitle,
       type,
       subType,
       company: resolvedCompany,
@@ -50,12 +71,17 @@ exports.create = async (req, res) => {
     });
 
     await candidate.save();
-    res.status(201).json({ message: 'Candidate created', candidate });
+
+    res.status(201).json({
+      message: 'Candidate created',
+      candidate
+    });
+
   } catch (err) {
+    console.error('❌ Error creating candidate:', err);
     res.status(500).json({ message: 'Error creating candidate', error: err.message });
   }
 };
-
 
 exports.getAll = async (req, res) => {
   try {
@@ -107,18 +133,25 @@ exports.update = async (req, res) => {
   }
 };
 
-// DELETE
+// DELET
 exports.remove = async (req, res) => {
   try {
-    const candidate = await Candidate.findById(req.params.id);
-    if (!candidate) return res.status(404).json({ message: 'Not found' });
+    const { id } = req.params;
 
-    await candidate.remove();
-    res.json({ message: 'Candidate deleted' });
+    const candidate = await Candidate.findById(id);
+    if (!candidate) {
+      return res.status(404).json({ message: 'Candidate not found' });
+    }
+
+    await candidate.deleteOne();
+
+    res.json({ message: `Candidate ${candidate.candidateId} deleted successfully.` });
   } catch (err) {
+    console.error('❌ Error deleting candidate:', err);
     res.status(500).json({ message: 'Error deleting candidate', error: err.message });
   }
 };
+
 
 // UPDATE STAGE
 exports.updateStage = async (req, res) => {

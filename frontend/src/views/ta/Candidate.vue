@@ -17,6 +17,7 @@
       <!-- Candidate Form -->
       <v-form v-if="showForm" @submit.prevent="submitCandidate">
         <v-row dense>
+          <!-- Always show these three -->
           <v-col cols="12" md="3">
             <v-select
               v-model="selectedRequisition"
@@ -26,12 +27,15 @@
               label="Job Title"
               variant="outlined"
               return-object
+              :disabled="isEditMode"
               required
             />
           </v-col>
+
           <v-col cols="12" md="3">
             <v-text-field v-model="form.fullName" label="Candidate Name" required variant="outlined" />
           </v-col>
+
           <v-col cols="12" md="3">
             <v-select
               v-model="form.applicationSource"
@@ -41,11 +45,34 @@
               variant="outlined"
             />
           </v-col>
+
           <v-col cols="12" md="3">
-            <v-btn color="success" type="submit" class="mt-2" block>Submit</v-btn>
+            <v-btn color="success" type="submit" class="mt-2" block>
+              {{ isEditMode ? 'Update Candidate' : 'Submit' }}
+            </v-btn>
           </v-col>
+
+          <!-- Extra fields only in Edit Mode -->
+          <template v-if="isEditMode">
+            <v-col cols="12" md="3">
+              <v-text-field v-model="form.department" label="Department" variant="outlined" disabled />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-text-field v-model="form.recruiter" label="Recruiter" variant="outlined" disabled />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-text-field v-model="form.jobRequisitionCode" label="Job Req Code" variant="outlined" disabled />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-text-field v-model="form.type" label="Type" variant="outlined" disabled />
+            </v-col>
+            <v-col cols="12" md="3">
+              <v-text-field v-model="form.subType" label="Sub Type" variant="outlined" disabled />
+            </v-col>
+          </template>
         </v-row>
       </v-form>
+
 
       <v-divider class="my-4" />
 
@@ -70,6 +97,7 @@
               <th>Onboard</th>
               <th>Final Decision</th>
               <th>Current Start Date</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -82,12 +110,59 @@
               <td>{{ c.recruiter }}</td>
               <td>{{ c.fullName }}</td>
               <td>{{ c.applicationSource }}</td>
-              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.Application) }}</v-btn></td>
-              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.ManagerReview) }}</v-btn></td>
-              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.Interview) }}</v-btn></td>
-              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.JobOffer) }}</v-btn></td>
-              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.Hired) }}</v-btn></td>
-              <td><v-btn class="stage-btn">{{ formatDate(c.progressDates?.Onboard) }}</v-btn></td>
+              <td>
+                <v-btn
+                  :class="getStageClass(c.progressDates?.Application)"
+                  @click="openStagePopup('Application', c)"
+                >
+                  {{ formatDate(c.progressDates?.Application) }}
+                </v-btn>
+              </td>
+              <td>
+              <v-btn
+                :class="getStageClass(c.progressDates?.ManagerReview)"
+                @click="openStagePopup('ManagerReview', c)"
+              >    
+              {{ formatDate(c.progressDates?.ManagerReview) }}
+                </v-btn>
+              </td>
+
+              <td>
+                <v-btn
+                  :class="getStageClass(c.progressDates?.Interview)"
+                  @click="openStagePopup('Interview', c)"
+                >
+                  {{ formatDate(c.progressDates?.Interview) }}
+                </v-btn>
+              </td>
+
+              <td>
+                <v-btn
+                  :class="getStageClass(c.progressDates?.JobOffer)"
+                  @click="openStagePopup('JobOffer', c)"
+                >
+                  {{ formatDate(c.progressDates?.JobOffer) }}
+                </v-btn>
+              </td>
+
+              <td>
+                <v-btn
+                  :class="getStageClass(c.progressDates?.Hired)"
+                  @click="openStagePopup('Hired', c)"
+                >
+                  {{ formatDate(c.progressDates?.Hired) }}
+                </v-btn>
+              </td>
+
+              <td>
+                <v-btn
+                  :class="getStageClass(c.progressDates?.Onboard)"
+                  @click="openStagePopup('Onboard', c)"
+                >
+                  {{ formatDate(c.progressDates?.Onboard) }}
+                </v-btn>
+              </td>
+
               <td>{{ c.hireDecision || '-' }}</td>
               <td>
                 <span v-if="c.progressDates?.Application && c.progressDates?.Onboard">
@@ -95,12 +170,39 @@
                 </span>
                 <span v-else>-</span>
               </td>
+              <td>
+                <v-btn color="warning" size="small" @click="startEdit(c)">Edit</v-btn>
+                <v-btn color="error" size="small" @click="confirmDelete(c)">Delete</v-btn>
+              </td>
             </tr>
           </tbody>
         </table>
+        <v-dialog v-model="dateMenu" persistent max-width="360">
+          <v-card>
+            <v-card-title class="text-h6">
+              Select {{ selectedStage }} Date
+            </v-card-title>
+            <v-card-text>
+              <v-date-picker
+                v-model="dateModel"
+                color="primary"
+                show-adjacent-months
+              />
+            </v-card-text>
+            <v-card-actions>
+              <v-btn color="primary" @click="updateProgressStage">Save</v-btn>
+              <v-spacer></v-spacer>
+              <v-btn color="grey" @click="dateMenu = false">Cancel</v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
       </div>
     </v-card>
+    
   </v-container>
+  
+
 </template>
 
 <script setup>
@@ -114,6 +216,45 @@ const showForm = ref(false)
 const candidates = ref([])
 const jobRequisitions = ref([])
 const selectedRequisition = ref(null)
+const isEditMode = ref(false)
+const editId = ref(null)
+
+//======= Start progress ==========
+const dateMenu = ref(null)
+const selectedStage = ref('')
+const selectedCandidate = ref(null)
+const dateModel = ref('')
+
+const getStageClass = (date) => {
+  return date ? 'stage-btn green-btn' : 'stage-btn red-btn'
+}
+
+
+const openStagePopup = (stage, candidate) => {
+  selectedStage.value = stage
+  selectedCandidate.value = candidate
+  dateModel.value = dayjs(candidate.progressDates?.[stage]).format('YYYY-MM-DD') || dayjs().format('YYYY-MM-DD')
+  dateMenu.value = true 
+}
+
+const updateProgressStage = async () => {
+  try {
+    const res = await axios.put(`/candidates/${selectedCandidate.value._id}/stage`, {
+      stage: selectedStage.value,
+      date: dateModel.value
+    })
+    Swal.fire({ icon: 'success', title: `${selectedStage.value} Updated ✅` })
+    fetchCandidates()
+  } catch (err) {
+    Swal.fire({ icon: 'error', title: 'Failed to update stage', text: err.response?.data?.message || 'Unknown error' })
+  } finally {
+    dateMenu.value = false
+  }
+}
+
+// ========== end progress =================
+
+
 
 const form = ref({
   fullName: '',
@@ -123,10 +264,43 @@ const form = ref({
 const toggleForm = () => {
   showForm.value = !showForm.value
   if (!showForm.value) {
-    selectedRequisition.value = null
-    form.value = { fullName: '', applicationSource: '' }
+    resetForm()
   }
 }
+
+const resetForm = () => {
+  isEditMode.value = false
+  editId.value = null
+  selectedRequisition.value = null
+  form.value = {
+    fullName: '',
+    applicationSource: '',
+    department: '',
+    recruiter: '',
+    jobRequisitionCode: '',
+    type: '',
+    subType: ''
+  }
+}
+
+
+const startEdit = (candidate) => {
+  showForm.value = true
+  isEditMode.value = true
+  editId.value = candidate._id
+
+  selectedRequisition.value = jobRequisitions.value.find(j => j.jobRequisitionId === candidate.jobRequisitionCode)
+
+  form.value.fullName = candidate.fullName
+  form.value.applicationSource = candidate.applicationSource
+  form.value.department = candidate.department
+  form.value.recruiter = candidate.recruiter
+  form.value.jobRequisitionCode = candidate.jobRequisitionCode
+  form.value.type = candidate.type
+  form.value.subType = candidate.subType
+}
+
+
 
 const setActive = (tab) => {
   activeTab.value = tab
@@ -182,6 +356,8 @@ const fetchJobRequisitions = async () => {
     Swal.fire({ icon: 'error', title: 'Failed to fetch requisitions', text: err.message })
   }
 }
+
+
 const submitCandidate = async () => {
   if (!selectedRequisition.value) {
     Swal.fire({ icon: 'error', title: 'Please select a job title' })
@@ -207,27 +383,55 @@ const submitCandidate = async () => {
     recruiter: job.recruiter,
     type: job.type,
     subType: job.subType || 'General',
-
     fullName: form.value.fullName,
     applicationSource: form.value.applicationSource,
     company
-
   }
 
-
   try {
-    await axios.post('/candidates', payload)
-    Swal.fire({ icon: 'success', title: 'Candidate Created ✅', allowEnterKey: true })
+    if (isEditMode.value && editId.value) {
+      await axios.put(`/candidates/${editId.value}`, payload)
+      Swal.fire({ icon: 'success', title: 'Candidate Updated ✅', allowEnterKey: true })
+    } else {
+      await axios.post('/candidates', payload)
+      Swal.fire({ icon: 'success', title: 'Candidate Created ✅', allowEnterKey: true })
+    }
+
     fetchCandidates()
     toggleForm()
   } catch (err) {
     Swal.fire({
       icon: 'error',
       title: 'Error',
-      text: err.response?.data?.message || 'Failed to create candidate'
+      text: err.response?.data?.message || 'Failed to save candidate'
     })
   }
 }
+
+
+
+const confirmDelete = async (candidate) => {
+  const result = await Swal.fire({
+    icon: 'warning',
+    title: `Delete ${candidate.fullName}?`,
+    text: `Are you sure you want to delete candidate ${candidate.candidateId}?`,
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    cancelButtonColor: '#aaa',
+    confirmButtonText: 'Yes, delete it!',
+    allowEnterKey: true
+  });
+
+  if (result.isConfirmed) {
+    try {
+      await axios.delete(`/candidates/${candidate._id}`);
+      Swal.fire({ icon: 'success', title: 'Deleted ✅', text: 'Candidate deleted successfully' });
+      fetchCandidates();
+    } catch (err) {
+      Swal.fire({ icon: 'error', title: 'Delete failed', text: err.response?.data?.message || 'Unknown error' });
+    }
+  }
+};
 
 
 
@@ -286,12 +490,23 @@ onMounted(() => {
   vertical-align: middle;
 }
 
+/* Start Progress */
 .stage-btn {
   font-size: 11px;
   padding: 0 8px;
   min-width: 85px;
   height: 30px;
-  background-color: #999966 !important;
   color: white !important;
+  text-transform: none;
+  font-weight: 500;
 }
+
+.green-btn {
+  background-color: #4CAF50 !important; /* Green */
+}
+
+.red-btn {
+  background-color: #d9534f !important; /* Red */
+}
+/* End Progress */
 </style>
