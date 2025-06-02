@@ -1,7 +1,8 @@
+
 const JobRequisition = require('../../models/ta/JobRequisition');
 const Department = require('../../models/ta/Department');
 const Counter = require('../../models/ta/Counter');
-
+const Candidate = require('../../models/ta/Candidate'); // Needed for onboard/offer count
 
 // 📦 Fetch all job titles with department info
 exports.getAllJobTitles = async (req, res) => {
@@ -82,14 +83,15 @@ exports.createJobRequisition = async (req, res) => {
       departmentName,
       jobTitle,
       recruiter,
-      targetCandidates: 1, // Default
+      targetCandidates: req.body.targetCandidates || 1,
       hiringCost,
       status,
       type,
       subType: resolvedSubType,
       openingDate,
       startDate,
-      company // ✅ Set company from department
+      company,
+
     });
 
     await newRequisition.save();
@@ -110,20 +112,67 @@ exports.getJobRequisitions = async (req, res) => {
     const role = req.user?.role;
     const userCompany = req.user?.company;
     const queryCompany = req.query.company;
-
     const companyFilter = role === 'GeneralManager' ? queryCompany : userCompany;
 
     if (!companyFilter) {
       return res.status(400).json({ message: 'Company is required' });
     }
 
-    const requisitions = await JobRequisition.find({
+    const jobList = await JobRequisition.find({
       company: companyFilter.trim().toUpperCase()
     })
       .sort({ createdAt: -1 })
-      .populate('departmentId');
+      .lean(); // lean() returns plain objects, faster
 
-    res.json(requisitions);
+    const jobIds = jobList.map(j => j._id);
+
+    const counts = await Candidate.aggregate([
+      {
+        $match: {
+          jobRequisitionId: { $in: jobIds },
+          hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            jobRequisitionId: '$jobRequisitionId',
+            progress: '$progress'
+          },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const countMap = {};
+    counts.forEach(({ _id, count }) => {
+      const jobId = _id.jobRequisitionId.toString();
+      const progress = _id.progress;
+
+      if (!countMap[jobId]) {
+        countMap[jobId] = { offerCount: 0, onboardCount: 0 };
+      }
+
+      if (progress === 'Onboard') {
+        countMap[jobId].onboardCount += count;
+        countMap[jobId].offerCount += count; // onboard implies already offered
+      } else if (progress === 'Hired' || progress === 'JobOffer') {
+        countMap[jobId].offerCount += count;
+      }
+    });
+
+    const jobsWithCounts = jobList.map(job => {
+      const jobId = job._id.toString();
+      const onboardCount = countMap[jobId]?.onboardCount || 0;
+      const offerCount = countMap[jobId]?.offerCount || 0;
+      return {
+        ...job,
+        onboardCount,
+        offerCount
+      };
+    });
+
+    res.json(jobsWithCounts);
   } catch (err) {
     console.error('❌ Error fetching requisitions:', err);
     res.status(500).json({ message: 'Error fetching job requisitions', error: err.message });

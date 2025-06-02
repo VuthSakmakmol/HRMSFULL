@@ -8,7 +8,7 @@ const jobRequisitionSchema = new mongoose.Schema({
 
   jobTitle: { type: String, required: true },
   recruiter: { type: String, required: true },
-  targetCandidates: { type: Number, required: true },
+  targetCandidates: { type: Number, default: 1 },
   filledCandidates: { type: Number, default: 0 },
   hiringCost: { type: Number, default: 0 },
 

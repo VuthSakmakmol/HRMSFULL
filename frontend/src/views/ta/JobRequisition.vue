@@ -99,10 +99,6 @@
               </v-menu>
             </v-col>
 
-            
-
-            
-
             <!-- Status field only when editing -->
             <v-col cols="12" md="2" v-if="isEditing">
               <v-select
@@ -263,6 +259,7 @@
               <th>Status</th>
               <th>New Hire Start Date</th>
               <th>Hiring Cost</th>
+              <th>Vacancy / Target</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -279,6 +276,33 @@
               </td>
               <td>{{ formatDate(job.startDate) }}</td>
               <td>{{ formatCost(job.hiringCost) }}</td>
+              <td>
+                <div class="d-flex align-center gap-4">
+                  <!-- Suspended Circle -->
+                  <v-progress-circular
+                    :model-value="getSuspendedPercent(job)"
+                    color="orange"
+                    size="38"
+                    width="4"
+                  >
+                    <strong style="font-size: 12px">
+                      {{ job.offerCount || 0 }}/{{ job.targetCandidates }}
+                    </strong>
+                  </v-progress-circular>
+
+                  <!-- Vacant Circle -->
+                  <v-progress-circular
+                    :model-value="getVacantPercent(job)"
+                    color="blue"
+                    size="38"
+                    width="4"
+                  >
+                    <strong style="font-size: 12px">
+                      {{ job.onboardCount || 0 }}/{{ job.targetCandidates }}
+                    </strong>
+                  </v-progress-circular>
+                </div>
+              </td>
               <td>
                 <v-btn icon size="small" color="primary" @click="editJob(job)">
                   <v-icon>mdi-pencil</v-icon>
@@ -352,6 +376,17 @@ const paginatedRequisitions = computed(() => {
   const end = start + itemsPerPage.value
   return filteredRequisitions.value.slice(start, end)
 })
+
+
+const getVacantPercent = (job) => {
+  if (!job?.targetCandidates) return 0;
+  return Math.round((job.onboardCount || 0) / job.targetCandidates * 100);
+};
+
+const getSuspendedPercent = (job) => {
+  if (!job?.targetCandidates) return 0;
+  return Math.round((job.offerCount || 0) / job.targetCandidates * 100);
+};
 
 
 const fetchRecruiters = async () => {
@@ -665,5 +700,11 @@ onMounted(() => {
 .v-table tbody td {
   transition: background-color 0.2s ease;
 }
+
+/* Target */
+.gap-2 {
+  gap: 8px;
+}
+
 
 </style>

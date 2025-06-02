@@ -187,6 +187,7 @@ const updateProgressStage = async () => {
       stage: selectedStage.value,
       date: dateModel.value
     })
+
     Swal.fire({ icon: 'success', title: `${selectedStage.value} Updated ✅` })
     await fetchCandidates()
     updateJobLockedMap()
