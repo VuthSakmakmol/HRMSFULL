@@ -122,16 +122,32 @@ exports.update = async (req, res) => {
     if (!candidate) return res.status(404).json({ message: 'Not found' });
 
     const updatable = ['fullName', 'recruiter', 'applicationSource', 'hireDecision', 'noted'];
+    const oldHireDecision = candidate.hireDecision;
+
     updatable.forEach(key => {
-      if (req.body[key] !== undefined) candidate[key] = req.body[key];
+      if (req.body[key] !== undefined) {
+        candidate[key] = req.body[key];
+      }
     });
 
     await candidate.save();
+
+    // 🧠 If hireDecision changed, recalculate job requisition status
+    if (
+      req.body.hireDecision &&
+      ['Candidate Refusal', 'Not Hired', 'Candidate in Process'].includes(req.body.hireDecision) &&
+      candidate.jobRequisitionId
+    ) {
+      const job = await JobRequisition.findById(candidate.jobRequisitionId);
+      if (job) await reevaluateJobStatus(job);
+    }
+
     res.json({ message: 'Candidate updated', candidate });
   } catch (err) {
     res.status(500).json({ message: 'Error updating candidate', error: err.message });
   }
 };
+
 
 // DELET
 exports.remove = async (req, res) => {
@@ -153,70 +169,144 @@ exports.remove = async (req, res) => {
 };
 
 
-// UPDATE STAGE
+// ============================ Stage ============================
+
+// Helper: Recalculate job status
+async function reevaluateJobStatus(job) {
+  const activeOffers = await Candidate.countDocuments({
+    jobRequisitionId: job._id,
+    progress: 'JobOffer', // ✅ only exact match
+    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] },
+    _offerCounted: true
+  });
+
+
+  const activeOnboard = await Candidate.countDocuments({
+    jobRequisitionId: job._id,
+    progress: 'Onboard',
+    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] },
+    _onboardCounted: true
+  });
+
+  if (activeOnboard >= job.targetCandidates) {
+    job.status = 'Filled';
+  } else if (activeOffers >= job.targetCandidates) {
+    job.status = 'Suspended';
+  } else {
+    job.status = 'Vacant';
+  }
+
+  job.offerCount = activeOffers;
+  job.onboardCount = activeOnboard;
+
+  await job.save();
+}
+
 exports.updateStage = async (req, res) => {
   try {
     const { stage, date } = req.body;
     const candidate = await Candidate.findById(req.params.id);
-    if (!candidate) return res.status(404).json({ message: 'Not found' });
+    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
 
     const order = ['Application', 'ManagerReview', 'Interview', 'JobOffer', 'Hired', 'Onboard'];
     const currentIndex = order.indexOf(candidate.progress);
     const newIndex = order.indexOf(stage);
-
     if (newIndex === -1) return res.status(400).json({ message: 'Invalid stage' });
     if (newIndex < currentIndex) return res.status(400).json({ message: 'Cannot move to earlier stage' });
+
     if (['Candidate Refusal', 'Not Hired'].includes(candidate.hireDecision)) {
-      return res.status(403).json({ message: 'Candidate already rejected/refused' });
+      return res.status(403).json({ message: 'Candidate already refused or rejected' });
     }
 
     const job = await JobRequisition.findById(candidate.jobRequisitionId);
     if (!job) return res.status(404).json({ message: 'Job Requisition not found' });
 
-    // JobOffer check
+    // If job is cancelled, reject all stage changes
+    if (job.status === 'Cancel') {
+      return res.status(403).json({ message: 'Job requisition is cancelled' });
+    }
+
+    // --- STAGE: Job Offer ---
     if (stage === 'JobOffer' && !candidate._offerCounted) {
-      const totalOffers = await Candidate.countDocuments({
+      const offerCount = await Candidate.countDocuments({
         jobRequisitionId: job._id,
         progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
-        _offerCounted: true
+        _offerCounted: true,
+        hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
       });
 
-      if (totalOffers >= job.targetCandidates) {
+      if (offerCount >= job.targetCandidates) {
         return res.status(400).json({ message: 'Job offer is full' });
       }
 
       candidate._offerCounted = true;
     }
 
-    // Onboard check
+    // --- STAGE: Onboard ---
     if (stage === 'Onboard' && !candidate._onboardCounted) {
-      const totalOnboarded = await Candidate.countDocuments({
+      const onboardCount = await Candidate.countDocuments({
         jobRequisitionId: job._id,
         progress: 'Onboard',
-        _onboardCounted: true
+        _onboardCounted: true,
+        hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
       });
 
-      if (totalOnboarded < job.targetCandidates) {
+      if (onboardCount < job.targetCandidates) {
         candidate._onboardCounted = true;
         job.onboardCount += 1;
+
         if (job.onboardCount >= job.targetCandidates) {
           job.status = 'Filled';
         }
-        await job.save();
       }
     }
 
+    // --- Progress & Date Update ---
     candidate.progress = stage;
     candidate.progressDates.set(stage, date || new Date());
+
+    // Auto-assign final decision if Onboarded
+    if (stage === 'Onboard') {
+      candidate.hireDecision = 'Hired';
+    }
+
     await candidate.save();
 
-    res.json({ message: 'Stage updated', candidate });
+    // --- Auto-update job status ---
+    const activeOffers = await Candidate.countDocuments({
+      jobRequisitionId: job._id,
+      progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
+      hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] },
+      _offerCounted: true
+    });
+
+    const activeOnboards = await Candidate.countDocuments({
+      jobRequisitionId: job._id,
+      progress: 'Onboard',
+      hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] },
+      _onboardCounted: true
+    });
+
+    if (activeOnboards >= job.targetCandidates) {
+      job.status = 'Filled';
+    } else if (activeOffers >= job.targetCandidates) {
+      job.status = 'Suspended';
+    } else {
+      job.status = 'Vacant';
+    }
+
+    await job.save();
+
+    res.json({ message: 'Stage updated successfully', candidate });
+
   } catch (err) {
-    res.status(500).json({ message: 'Error updating stage', error: err.message });
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error', error: err.message });
   }
 };
 
 
+// =================================== End Stage ==================================
 
 // UPLOAD DOCUMENT
 exports.uploadDocument = async (req, res) => {
@@ -254,3 +344,33 @@ exports.deleteDocument = async (req, res) => {
     res.status(500).json({ message: 'Delete error', error: err.message });
   }
 };
+
+
+// GET /job-requisitions/:id/availability
+exports.getAvailability = async (req, res) => {
+  try {
+    const job = await JobRequisition.findById(req.params.id)
+    if (!job) return res.status(404).json({ message: 'Job not found' })
+
+    const totalOffers = await Candidate.countDocuments({
+      jobRequisitionId: job._id,
+      progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
+      _offerCounted: true,
+      hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] } // 💥 exclude refused
+    });
+
+
+    const totalOnboard = await Candidate.countDocuments({
+      jobRequisitionId: job._id,
+      progress: 'Onboard',
+      _onboardCounted: true
+    })
+
+    res.json({
+      offerFull: totalOffers >= job.targetCandidates,
+      onboardFull: totalOnboard >= job.targetCandidates
+    })
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to get availability', error: err.message })
+  }
+}
