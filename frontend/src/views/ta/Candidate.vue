@@ -17,28 +17,33 @@
       <v-form v-if="showForm" @submit.prevent="submitCandidate">
         <v-row dense>
           <v-col cols="12" md="3">
-            <v-select
+            <v-autocomplete
               v-model="selectedRequisition"
               :items="filteredJobTitleOptions"
               :item-title="item => `${item.jobRequisitionId} - ${item.jobTitle}`"
               item-value="_id"
               label="Job Title"
               variant="outlined"
+              density="compact"
               return-object
-              :disabled="isEditMode"
+              auto-select-first
               required
+              :disabled="isEditMode"
             />
           </v-col>
           <v-col cols="12" md="3">
             <v-text-field v-model="form.fullName" label="Candidate Name" required variant="outlined" />
           </v-col>
           <v-col cols="12" md="3">
-            <v-select
+            <v-autocomplete
               v-model="form.applicationSource"
               :items="['LinkedIn', 'Facebook', 'Website', 'Referral', 'Agency']"
               label="Application Source"
-              required
+              clearable
               variant="outlined"
+              density="compact"
+              hide-details
+              auto-select-first
             />
           </v-col>
           <v-col cols="12" md="3">
@@ -53,11 +58,15 @@
               <v-text-field :label="field" :value="form[field]" variant="outlined" disabled />
             </v-col>
             <v-col cols="12" md="3">
-              <v-select
+              <v-autocomplete
                 v-model="form.hireDecision"
                 :items="['Candidate in Process', 'Candidate Refusal', 'Not Hired']"
                 label="Final Decision"
+                clearable
                 variant="outlined"
+                density="compact"
+                hide-details
+                auto-select-first
                 required
               />
             </v-col>

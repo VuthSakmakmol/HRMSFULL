@@ -53,37 +53,45 @@
         <v-form v-if="showCreateForm" @submit.prevent="isEditing ? updateRequisition() : submitRequisition()">
           <v-row dense>
             <v-col cols="12" md="3">
-              <v-select
+              <v-autocomplete
                 v-model="form.jobTitle"
                 :items="jobTitles.map(j => j.jobTitle)"
                 label="Job Title"
                 clearable
                 variant="outlined"
+                density="compact"
+                hide-details
+                auto-select-first
                 @update:modelValue="onJobTitleSelected"
               />
             </v-col>
 
             <v-col cols="12" md="3">
-              <v-select
+              <v-autocomplete
                 v-model="form.recruiter"
-                :items="recruiterList"  
+                :items="recruiterList"
                 label="Recruiter"
                 clearable
                 variant="outlined"
+                density="compact"
+                hide-details
+                auto-select-first
               />
             </v-col>
 
-            <v-col cols="6" md="2">
+            <v-col cols="12" md="3">
               <v-text-field
                 v-model.number="form.targetCandidates"
                 label="Target Candidates"
                 type="number"
                 min="1"
                 variant="outlined"
+                density="compact"
+                hide-details
               />
             </v-col>
 
-            <v-col cols="6" md="2">
+            <v-col cols="12" md="3">
               <v-menu v-model="dateMenu" :close-on-content-click="false">
                 <template #activator="{ props }">
                   <v-text-field
@@ -93,6 +101,8 @@
                     readonly
                     prepend-inner-icon="mdi-calendar"
                     variant="outlined"
+                    density="compact"
+                    hide-details
                   />
                 </template>
                 <v-date-picker @update:modelValue="date => form.openingDate = dayjs(date).format('YYYY-MM-DD')" />
@@ -100,31 +110,32 @@
             </v-col>
 
             <!-- Status field only when editing -->
-            <v-col cols="12" md="2" v-if="isEditing">
+            <v-col cols="12" md="3" v-if="isEditing">
               <v-select
                 v-model="form.status"
                 :items="['Vacant', 'Filled', 'Suspended', 'Cancel']"
                 label="Status"
                 variant="outlined"
                 clearable
+                density="compact"
+                hide-details
               />
             </v-col>
-            
 
             <!-- Only when editing -->
-            <template v-if="isEditing">
-              <v-col cols="6" md="2">
-                <v-text-field
-                  v-model.number="form.hiringCost"
-                  type="number"
-                  label="Hiring Cost"
-                  variant="outlined"
-                  density="comfortable"
-                  hide-details
-                />
-              </v-col>
+            <v-col cols="12" md="3" v-if="isEditing">
+              <v-text-field
+                v-model.number="form.hiringCost"
+                type="number"
+                label="Hiring Cost"
+                variant="outlined"
+                density="compact"
+                hide-details
+              />
+            </v-col>
 
-              <v-col cols="6" md="2">
+
+              <v-col cols="12" md="3" v-if="isEditing">
                 <v-menu v-model="editDateMenu" :close-on-content-click="false">
                   <template #activator="{ props }">
                     <v-text-field
@@ -134,19 +145,20 @@
                       readonly
                       prepend-inner-icon="mdi-calendar"
                       variant="outlined"
-                      density="comfortable"
+                      density="compact"
                       hide-details
                     />
                   </template>
                   <v-date-picker @update:modelValue="date => form.startDate = dayjs(date).format('YYYY-MM-DD')" />
                 </v-menu>
               </v-col>
-            </template>
-            <v-col cols="12" md="2">
-              <v-btn type="submit" color="success" class="mt-2" block>
+
+            <v-col cols="12" md="3" class="d-flex align-end">
+              <v-btn type="submit" color="success" block>
                 {{ isEditing ? 'UPDATE' : 'CREATE' }}
               </v-btn>
             </v-col>
+
           </v-row>
         </v-form>
       <v-divider class="my-4" />
@@ -246,7 +258,7 @@
 
 
       <!-- Table with Filters -->
-      <div class="scroll-wrapper">
+      <div class="scroll-wrapper-x">
         <v-table height="550px" fixed-header class="elevation-1 rounded-lg">
           <thead class="custom-sticky-header">
             <tr>
@@ -277,7 +289,7 @@
               <td>{{ formatDate(job.startDate) }}</td>
               <td>{{ formatCost(job.hiringCost) }}</td>
               <td>
-                <div class="d-flex align-center gap-4">
+                <div class="d-flex align-center" style="gap: 6px;">
                   <!-- Suspended Circle -->
                   <v-progress-circular
                     :model-value="getSuspendedPercent(job)"
@@ -691,18 +703,43 @@ onMounted(() => {
 
 
 <style scoped>
+/* Enable horizontal scroll for the table container */
+.scroll-wrapper-x {
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+  display: block;
+}
 
+/* Table row hover effect */
 .v-table tbody tr:hover {
   background-color: #e3f2fd;  /* Light blue hover */
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
 
-.v-table tbody td {
-  transition: background-color 0.2s ease;
+/* Prevent line wrap in all table cells and headers */
+.v-table td,
+.v-table th {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 220px; /* Adjust column width as needed */
+  padding: 10px 16px !important;
+  vertical-align: middle !important;
+  font-size: 13px;
 }
 
-/* Target */
+/* Optional: sticky header style */
+.v-table thead th {
+  background-color: #fafafa;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Visual spacing helper */
 .gap-2 {
   gap: 8px;
 }
