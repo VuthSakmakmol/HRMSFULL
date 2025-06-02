@@ -507,6 +507,7 @@ const submitRequisition = async () => {
   try {
     const payload = { ...form.value }
     await api.post('/job-requisitions', payload)
+    await fetchJobTitles(); // refresh dropdown
 
     alerts.value[getAlertKey(payload)] = true
     localStorage.setItem(`seen_${getAlertKey(payload)}`, 'false')

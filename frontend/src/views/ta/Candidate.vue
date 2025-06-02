@@ -87,12 +87,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr
-                v-for="(c, index) in filteredCandidates"
-                :key="c._id"
-                :class="{ 'cancel-row': c.jobRequisitionStatus === 'Cancel' || c.jobRequisitionId?.status === 'Cancel' }"
-              >
-              <td>{{ index + 1 }}</td>
+            <tr v-for="(c, index) in paginatedCandidates" :key="c._id">
+              <td>{{ (candidatePage - 1) * candidatePerPage + index + 1 }}</td>
               <td>{{ c.candidateId }}</td>
               <td>{{ c.jobRequisitionCode }}</td>
               <td>{{ c.department }}</td>
@@ -125,6 +121,29 @@
         </table>
       </div>
 
+      <v-row class="mt-4 d-flex align-center" justify="space-between">
+        <v-col cols="12" md="6" class="d-flex align-center">
+          <v-pagination
+            v-model="candidatePage"
+            :length="Math.ceil(filteredCandidates.length / candidatePerPage)"
+            total-visible="7"
+            class="flex"
+          />
+        </v-col>
+
+        <v-col cols="12" md="3" class="d-flex justify-end">
+          <v-select
+            v-model="candidatePerPage"
+            :items="[25, 50, 100]"
+            label="Rows per page"
+            variant="outlined"
+            density="compact"
+            hide-details
+            style="max-width: 180px"
+          />
+        </v-col>
+      </v-row>
+
       <!-- Stage Popup -->
       <v-dialog v-model="dateMenu" persistent max-width="360">
         <v-card>
@@ -155,6 +174,20 @@ const jobRequisitions = ref([])
 const selectedRequisition = ref(null)
 const isEditMode = ref(false)
 const editId = ref(null)
+
+// ================= Paginationc========================
+const candidatePage = ref(1)
+const candidatePerPage = ref(25)
+
+const paginatedCandidates = computed(() => {
+  const start = (candidatePage.value - 1) * candidatePerPage.value
+  const end = start + candidatePerPage.value
+  return filteredCandidates.value.slice(start, end)
+})
+
+
+
+
 
 const form = ref({
   fullName: '',
@@ -385,7 +418,7 @@ const fetchJobRequisitions = async () => {
 }
 
 // === UI & Filters ===
-const setActive = (tab) => activeTab.value = tab
+const setActive = (tab) => activeTab.value = 1
 
 const filteredJobTitleOptions = computed(() =>
   jobRequisitions.value.filter(j => {
