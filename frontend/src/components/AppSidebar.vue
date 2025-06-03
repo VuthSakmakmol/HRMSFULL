@@ -6,7 +6,7 @@
     app
     class="pa-3"
   >
-    <!-- Header with Company & Close -->
+    <!-- Header -->
     <div class="d-flex justify-space-between align-center mb-2">
       <span class="text-subtitle-1 font-weight-bold">{{ company }}</span>
       <v-btn icon size="small" @click="drawerInternal = false" v-if="isMobile">
@@ -16,60 +16,83 @@
 
     <v-list nav dense>
 
-      
-
       <!-- 🔹 TA Section -->
-      <v-list-group value="TA">
+      <v-list-group>
         <template #activator="{ props }">
-          <v-list-item v-bind="props" prepend-icon="mdi-briefcase-outline" title="TA" />
+          <v-list-item v-bind="props">
+            <template #prepend>
+              <font-awesome-icon :icon="['fas', 'user-group']" class="sidebar-icon me-2" />
+            </template>
+            <template #title>TA</template>
+          </v-list-item>
         </template>
 
         <v-list-item :to="{ path: '/ta/dashboard' }">
-          <template #prepend>
-            <!-- <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon> -->
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'database']" class="sidebar-icon" />
+              Dashboard
+            </div>
           </template>
-          <template #title>Dashboard</template>
         </v-list-item>
 
         <v-list-item :to="{ path: '/ta/requisitions' }">
-          <template #prepend>
-            <!-- <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon> -->
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'business-time']" class="sidebar-icon" />
+              Job Requisitions
+            </div>
           </template>
-          <template #title>Job Requisition</template>
         </v-list-item>
 
         <v-list-item :to="{ path: '/ta/candidates' }">
-          <template #prepend>
-            <!-- <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon> -->
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'user-tie']" class="sidebar-icon" />
+              Candidate
+            </div>
           </template>
-          <template #title>Candidate</template>
         </v-list-item>
 
         <v-list-item :to="{ path: '/ta/departments' }">
-          <template #prepend>
-            <!-- <v-icon size="14" class="text-grey-darken-1">mdi-circle-small</v-icon> -->
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'building']" class="sidebar-icon" />
+              Department
+            </div>
           </template>
-          <template #title>Data Entry</template>
         </v-list-item>
       </v-list-group>
 
       <!-- 🔹 General Manager Section -->
       <template v-if="role === 'GeneralManager'">
-        <v-list-group value="Manage">
+        <v-list-group>
           <template #activator="{ props }">
-            <v-list-item v-bind="props" title="Manage" prepend-icon="mdi-cog" />
+            <v-list-item v-bind="props">
+              <template #prepend>
+                <font-awesome-icon :icon="['fas', 'gear']" class="sidebar-icon me-2" />
+              </template>
+              <template #title>Manage</template>
+            </v-list-item>
           </template>
 
-          <v-list-item
-            :to="{ path: '/gm/users' }"
-            title="User Management"
-            prepend-icon="mdi-account-group-outline"
-          />
-          <v-list-item
-            title="Permissions"
-            prepend-icon="mdi-shield-key-outline"
-            disabled
-          />
+          <v-list-item :to="{ path: '/gm/users' }">
+            <template #title>
+              <div class="sidebar-link">
+                <font-awesome-icon :icon="['fas', 'users-cog']" class="sidebar-icon" />
+                User Management
+              </div>
+            </template>
+          </v-list-item>
+
+          <v-list-item disabled>
+            <template #title>
+              <div class="sidebar-link">
+                <font-awesome-icon :icon="['fas', 'lock']" class="sidebar-icon" />
+                Permissions
+              </div>
+            </template>
+          </v-list-item>
         </v-list-group>
       </template>
 
@@ -81,18 +104,18 @@
 import { computed } from 'vue'
 import { useDisplay } from 'vuetify'
 
-// Props from layout
+// Props
 const props = defineProps({
   drawer: Boolean,
   role: String,
-  company: String
+  company: String,
 })
 
 const emit = defineEmits(['update:drawer'])
 
 const drawerInternal = computed({
   get: () => props.drawer,
-  set: (val) => emit('update:drawer', val)
+  set: (val) => emit('update:drawer', val),
 })
 
 const { mobile } = useDisplay()
@@ -107,9 +130,19 @@ const isMobile = computed(() => mobile.value)
   max-width: 260px;
 }
 
-.v-list-subheader,
-.v-list-item-title,
-.v-icon {
-  color: #555 !important;
+.v-list-item {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.sidebar-icon {
+  font-size: 17px;
+  width: 20px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

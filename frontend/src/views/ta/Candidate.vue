@@ -35,7 +35,22 @@
             {{ showFilterForm ? 'Close Filter Form' : 'Filter Candidates' }}
           </v-btn>
         </v-col>
+        
+        <v-col cols="auto">
+        <v-btn
+          color="green"
+          variant="outlined"
+          class="text-white font-weight-bold hover-filled"
+          elevation="0"
+          @click="exportToExcel"
+        >
+          <v-icon start>mdi-file-excel</v-icon>
+          Export Excel
+        </v-btn>
+      </v-col>
       </v-row>
+      
+
 
 
       <!-- Candidate Form -->
@@ -256,6 +271,9 @@ import { useRoute } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
+import * as XLSX from 'xlsx'
+import { saveAs } from 'file-saver'
+
 
 const activeTab = ref('White Collar')
 const showForm = ref(false)
@@ -588,6 +606,38 @@ const filteredCandidates = computed(() => {
 
   return base
 })
+
+const exportToExcel = () => {
+  const data = filteredCandidates.value.map((c, index) => ({
+    No: index + 1,
+    CandidateID: c.candidateId,
+    JobID: c.jobRequisitionCode,
+    Department: c.department,
+    JobTitle: c.jobTitle,
+    Recruiter: c.recruiter,
+    FullName: c.fullName,
+    Source: c.applicationSource,
+    Application: formatDate(c.progressDates?.Application),
+    ManagerReview: formatDate(c.progressDates?.ManagerReview),
+    Interview: formatDate(c.progressDates?.Interview),
+    JobOffer: formatDate(c.progressDates?.JobOffer),
+    Hired: formatDate(c.progressDates?.Hired),
+    Onboard: formatDate(c.progressDates?.Onboard),
+    FinalDecision: c.hireDecision || '-',
+    StartDuration: (c.progressDates?.Application && c.progressDates?.Onboard)
+      ? `${daysBetween(c.progressDates.Onboard, c.progressDates.Application)} days`
+      : '-'
+  }))
+
+  const worksheet = XLSX.utils.json_to_sheet(data)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Candidates')
+
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+  const blob = new Blob([excelBuffer], { type: 'application/octet-stream' })
+  saveAs(blob, 'Candidates.xlsx')
+}
+
 
 
 
