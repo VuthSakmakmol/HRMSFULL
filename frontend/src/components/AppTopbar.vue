@@ -22,7 +22,7 @@
     <v-spacer />
 
     <!-- Company Selector (GM only) -->
-    <template v-if="role === 'GeneralManager'">
+    <template v-if="role === 'GeneralManager' || role === 'Manager'">
       <v-select
         v-model="selectedCompany"
         :items="companies"
@@ -48,6 +48,8 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import Swal from 'sweetalert2'
+
 
 const router = useRouter()
 const role = localStorage.getItem('role') || 'Unknown'
@@ -59,10 +61,25 @@ const handleCompanyChange = () => {
   window.location.reload()
 }
 
-const logout = () => {
-  localStorage.clear()
-  router.push('/login')
+const logout = async () => {
+  const result = await Swal.fire({
+    title: 'Are you sure?',
+    text: 'You will be logged out from the system.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    cancelButtonColor: '#3085d6',
+    confirmButtonText: 'Yes, logout',
+    cancelButtonText: 'Cancel',
+    allowEnterKey: true
+  })
+
+  if (result.isConfirmed) {
+    localStorage.clear()
+    router.push('/login')
+  }
 }
+
 </script>
 
 <style scoped>

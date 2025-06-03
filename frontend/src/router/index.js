@@ -26,7 +26,8 @@ const routes = [
       { path: 'dashboard', component: () => import('@/views/ta/TADashboard.vue') },
       { path: 'requisitions', component: () => import('@/views/ta/JobRequisition.vue') },
       { path: 'candidates', component: () => import('@/views/ta/Candidate.vue') },
-      { path: 'departments', component: () => import('@/views/ta/Department.vue') }
+      { path: 'departments', component: () => import('@/views/ta/Department.vue') },
+      { path: 'roadmap', component: () => import('@/views/ta/Roadmap.vue')},
     ]
   },
 

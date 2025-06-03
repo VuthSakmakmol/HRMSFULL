@@ -62,6 +62,16 @@
             </div>
           </template>
         </v-list-item>
+
+        <v-list-item :to="{ path: '/ta/roadmap' }">
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'building']" class="sidebar-icon" />
+              Roadmap
+            </div>
+          </template>
+        </v-list-item>
+
       </v-list-group>
 
       <!-- 🔹 General Manager Section -->

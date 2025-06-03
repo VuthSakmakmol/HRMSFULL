@@ -35,12 +35,12 @@
             {{ showFilterForm ? 'Close Filter Form' : 'Filter Candidates' }}
           </v-btn>
         </v-col>
-        
+
         <v-col cols="auto">
         <v-btn
           color="green"
           variant="outlined"
-          class="text-white font-weight-bold hover-filled"
+          class="text-white font-weight-bold hover-filled hover-excel "
           elevation="0"
           @click="exportToExcel"
         >
@@ -763,6 +763,10 @@ onMounted(async () => {
 }
 .hover-teal:hover {
   background-color: #00897b !important;
+  color: white !important;
+}
+.hover-excel:hover {
+  background-color: #43a047 !important; /* Green */
   color: white !important;
 }
 

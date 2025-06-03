@@ -1,9 +1,3 @@
-/**
- * main.js
- *
- * Bootstraps Vuetify and other plugins then mounts the App
- */
-
 // Plugins
 import { registerPlugins } from '@/plugins'
 
@@ -17,6 +11,7 @@ import { createApp } from 'vue'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { fas } from '@fortawesome/free-solid-svg-icons'
+import VueApexCharts from 'vue3-apexcharts'
 
 // Styles
 import 'unfonts.css'
@@ -26,9 +21,14 @@ library.add(fas)
 
 const app = createApp(App)
 
-// Register global font-awesome-icon component
+// ✅ Register apexchart ONCE
+app.component('apexchart', VueApexCharts)
+
+// ✅ Register font-awesome globally
 app.component('font-awesome-icon', FontAwesomeIcon)
 
+// ✅ Register Vuetify and other plugins
 registerPlugins(app)
 
+// ✅ Mount app
 app.mount('#app')

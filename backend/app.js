@@ -25,11 +25,19 @@ app.use('/api/auth', authRoutes);
 // TA Module Routes
 const departmentRoutes = require('./routes/ta/departmentRoutes');
 const jobRequisitionRoutes = require('./routes/ta/jobRequisitionRoutes');
+const roadmapRoutes = require('./routes/ta/roadmapRoutes');
+const dashboardRoutes = require('./routes/ta/dashboardRoutes');
+
 
 app.use('/api', departmentRoutes);
 app.use('/api', jobRequisitionRoutes);
+app.use('/api/roadmap', roadmapRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+
+app.use('/api/report', require('./routes/ta/reportRoutes'))
 app.use('/api/recruiters', require('./routes/ta/recruiterRoutes'))
 app.use('/api/candidates', require('./routes/ta/candidateRoutes'));
+
 
 // Optional: Health check
 app.get('/', (req, res) => {
