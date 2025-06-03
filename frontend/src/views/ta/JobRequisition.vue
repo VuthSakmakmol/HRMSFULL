@@ -27,26 +27,45 @@
       <!-- Toggle Buttons -->
       <v-row class="mb-4" dense>
         <v-col cols="auto">
-          <v-btn color="primary" class="text-white font-weight-bold" @click="showCreateForm = !showCreateForm">
+          <v-btn
+            color="primary"
+            variant="outlined"
+            class="text-white font-weight-bold hover-filled hover-primary"
+            elevation="0"
+            @click="showCreateForm = !showCreateForm"
+          >
             <v-icon start>mdi-plus</v-icon>
             {{ showCreateForm ? 'Close Create Form' : 'New Job Requisition' }}
           </v-btn>
         </v-col>
 
         <v-col cols="auto">
-          <v-btn color="teal darken-1" class="text-white font-weight-bold" @click="showFilterForm = !showFilterForm">
+          <v-btn
+            color="teal"
+            variant="outlined"
+            class="text-white font-weight-bold hover-filled hover-teal"
+            elevation="0"
+            @click="showFilterForm = !showFilterForm"
+          >
             <v-icon start>mdi-magnify</v-icon>
             {{ showFilterForm ? 'Close Filter Form' : 'Filter Requisitions' }}
           </v-btn>
         </v-col>
 
         <v-col cols="auto">
-          <v-btn color="info" class="text-white font-weight-bold" @click="exportToExcel">
+          <v-btn
+            color="info"
+            variant="outlined"
+            class="text-white font-weight-bold hover-filled hover-info"
+            elevation="0"
+            @click="exportToExcel"
+          >
             <v-icon start>mdi-file-excel</v-icon>
             Export to Excel
           </v-btn>
         </v-col>
       </v-row>
+
 
 
       <!-- CREATE FORM -->
@@ -154,7 +173,7 @@
               </v-col>
 
             <v-col cols="12" md="3" class="d-flex align-end">
-              <v-btn type="submit" color="success" block>
+              <v-btn type="submit" color="success" variant="outlined" block>
                 {{ isEditing ? 'UPDATE' : 'CREATE' }}
               </v-btn>
             </v-col>
@@ -284,7 +303,15 @@
               <td>{{ formatDate(job.openingDate) }}</td>
               <td>{{ job.recruiter }}</td>
               <td>
-                <v-chip :color="getStatusColor(job.status)" size="small" variant="outlined">{{ job.status }}</v-chip>
+                <v-chip
+                  :color="getStatusColor(job.status)"
+                  size="small"
+                  variant="outlined"
+                  class="cursor-pointer"
+                  @click="goToCandidates(job)"
+                >
+                  {{ job.status }}
+                </v-chip>
               </td>
               <td>{{ formatDate(job.startDate) }}</td>
               <td>{{ formatCost(job.hiringCost) }}</td>
@@ -369,6 +396,7 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import api from '@/utils/axios'
 import Swal from 'sweetalert2'
@@ -382,6 +410,18 @@ const itemsPerPage = ref(25)
 const recruiterList = ref([])
 const showLoader = ref(true)
 const loadValue = ref(0)
+const router = useRouter()
+
+
+const goToCandidates = (job) => {
+  router.push({
+    path: '/ta/candidates', // or /whitecollar/candidates if separate
+    query: {
+      jobRequisitionId: job._id,
+      jobTitle: job.jobTitle
+    }
+  })
+}
 
 const paginatedRequisitions = computed(() => {
   const start = (page.value - 1) * itemsPerPage.value
@@ -744,5 +784,23 @@ onMounted(() => {
   gap: 8px;
 }
 
+/* button hover */
+.hover-filled {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
 
+.hover-primary:hover {
+  background-color: #1976d2 !important;
+  color: white !important;
+}
+
+.hover-teal:hover {
+  background-color: #00897b !important;
+  color: white !important;
+}
+
+.hover-info:hover {
+  background-color: #0288d1 !important;
+  color: white !important;
+}
 </style>

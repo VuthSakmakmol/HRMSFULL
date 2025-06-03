@@ -8,10 +8,35 @@
         </v-col>
       </v-row>
 
-      <!-- Toggle Form -->
-      <v-btn class="mb-4" color="primary" @click="toggleForm">
-        {{ showForm ? 'Close Form' : 'Add Candidate' }}
-      </v-btn>
+      <!-- Toggle Buttons -->
+      <v-row class="mb-4" dense>
+        <v-col cols="auto">
+          <v-btn
+            color="primary"
+            variant="outlined"
+            class="text-white font-weight-bold hover-filled hover-primary"
+            elevation="0"
+            @click="toggleForm"
+          >
+            <!-- <v-icon start>mdi-plus</v-icon> -->
+            {{ showForm ? 'Close Form' : 'Add Candidate' }}
+          </v-btn>
+        </v-col>
+
+        <v-col cols="auto">
+          <v-btn
+            color="teal"
+            variant="outlined"
+            class="text-white font-weight-bold hover-filled hover-teal"
+            elevation="0"
+            @click="showFilterForm = !showFilterForm"
+          >
+            <v-icon start>mdi-magnify</v-icon>
+            {{ showFilterForm ? 'Close Filter Form' : 'Filter Candidates' }}
+          </v-btn>
+        </v-col>
+      </v-row>
+
 
       <!-- Candidate Form -->
       <v-form v-if="showForm" @submit.prevent="submitCandidate">
@@ -31,13 +56,20 @@
               :disabled="isEditMode"
             />
           </v-col>
-          <v-col cols="12" md="3">
-            <v-text-field v-model="form.fullName" label="Candidate Name" required variant="outlined" />
+          <v-col cols="8" md="2">
+            <v-text-field
+              v-model="form.fullName"
+              label="Candidate Name"
+              required
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
           </v-col>
-          <v-col cols="12" md="3">
+          <v-col cols="8" md="2">
             <v-autocomplete
               v-model="form.applicationSource"
-              :items="['LinkedIn', 'Facebook', 'Website', 'Referral', 'Agency']"
+              :items="['Agency', 'Banner / Job Announcement Board', 'Brochure', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'LinkedIn','Telegram', 'Other', ]"
               label="Application Source"
               clearable
               variant="outlined"
@@ -46,18 +78,7 @@
               auto-select-first
             />
           </v-col>
-          <v-col cols="12" md="3">
-            <v-btn color="success" type="submit" class="mt-2" block>
-              {{ isEditMode ? 'Update Candidate' : 'Submit' }}
-            </v-btn>
-          </v-col>
-
-          <!-- Only in Edit Mode -->
-          <template v-if="isEditMode">
-            <v-col cols="12" md="3" v-for="field in ['department', 'recruiter', 'jobRequisitionCode', 'type', 'subType']" :key="field">
-              <v-text-field :label="field" :value="form[field]" variant="outlined" disabled />
-            </v-col>
-            <v-col cols="12" md="3">
+          <v-col cols="8" md="3" v-if="isEditMode">
               <v-autocomplete
                 v-model="form.hireDecision"
                 :items="['Candidate in Process', 'Candidate Refusal', 'Not Hired']"
@@ -69,10 +90,69 @@
                 auto-select-first
                 required
               />
-            </v-col>
-          </template>
+          </v-col>
+          <v-col cols="8" md="2">
+            <v-btn
+              color="success"
+              type="submit"
+              variant="outlined"
+              density="compact"
+              style="height: 40px"
+              block
+            >
+              {{ isEditMode ? 'Update Candidate' : 'Submit' }}
+            </v-btn>
+          </v-col>
         </v-row>
       </v-form>
+      <!-- Candidate Form -->
+
+      <!-- ✅ Filter Form should be OUTSIDE -->
+      <v-row v-if="showFilterForm" class="mb-4" dense>
+        <v-col cols="12" md="2">
+          <v-text-field v-model="filters.candidateId" label="Candidate Id" variant="outlined" clearable density="compact" hide-details/>
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field v-model="filters.jobId" label="Job Id" variant="outlined" clearable dense density="compact" hide-details />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field v-model="filters.department" label="Department" variant="outlined" clearable dense density="compact" hide-details/>
+        </v-col>
+        <v-col cols="12" md="3">
+          <v-text-field v-model="filters.jobTitle" label="Job Title" variant="outlined" clearable dense density="compact" hide-details/>
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field v-model="filters.recruiter" label="Recruiter" variant="outlined" clearable dense density="compact" hide-details/>
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field v-model="filters.fullName" label="Candidate Name" variant="outlined" clearable dense density="compact" hide-details/>
+        </v-col>
+        <v-col cols="12" md="3">
+          <v-select
+            v-model="filters.applicationSource"
+            :items="['Agency', 'Banner / Job Announcement Board', 'Brochure', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'LinkedIn','Telegram', 'Other', ]"
+            label="Application Source"
+            variant="outlined"
+            clearable
+            dense
+            density="compact"
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" md="3">
+          <v-select
+            v-model="filters.hireDecision"
+            :items="['Candidate in Process', 'Candidate Refusal', 'Not Hired']"
+            label="Final Decision"
+            variant="outlined"
+            clearable
+            density="compact"
+            dense
+            hide-details
+          />
+        </v-col>
+      </v-row>
+
 
       <v-divider class="my-4" />
 
@@ -172,6 +252,7 @@
 </template>
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
@@ -183,6 +264,8 @@ const jobRequisitions = ref([])
 const selectedRequisition = ref(null)
 const isEditMode = ref(false)
 const editId = ref(null)
+const route = useRoute()
+
 
 // ================= Paginationc========================
 const candidatePage = ref(1)
@@ -194,8 +277,7 @@ const paginatedCandidates = computed(() => {
   return filteredCandidates.value.slice(start, end)
 })
 
-
-
+// =================== End Pagination ======================
 
 
 const form = ref({
@@ -208,6 +290,19 @@ const form = ref({
   subType: '',
   hireDecision: 'Candidate in Process'
 })
+
+const showFilterForm = ref(false)
+const filters = ref({
+  candidateId: '',
+  jobId: '',
+  jobTitle: '',
+  department: '',
+  recruiter: '',
+  fullName: '',
+  applicationSource: '',
+  hireDecision: ''
+})
+
 
 const dateMenu = ref(false)
 const selectedStage = ref('')
@@ -427,7 +522,10 @@ const fetchJobRequisitions = async () => {
 }
 
 // === UI & Filters ===
-const setActive = (tab) => activeTab.value = 1
+const setActive = (tab) => {
+  activeTab.value = tab
+}
+
 
 const filteredJobTitleOptions = computed(() =>
   jobRequisitions.value.filter(j => {
@@ -438,23 +536,87 @@ const filteredJobTitleOptions = computed(() =>
     return false
   })
 )
+const filteredCandidates = computed(() => {
+  let base = candidates.value
+  candidatePage.value = 1
 
-const filteredCandidates = computed(() =>
-  candidates.value.filter(c => {
-    if (activeTab.value === 'White Collar') return c.type === 'White Collar'
-    if (activeTab.value === 'Blue Collar Sewer') return c.type === 'Blue Collar' && c.subType === 'Sewer'
-    if (activeTab.value === 'Blue Collar Non-Sewer') return c.type === 'Blue Collar' && c.subType === 'Non-Sewer'
-    return false
-  })
-)
+  // Route filter
+  const jobRequisitionId = route.query.jobRequisitionId
+  if (jobRequisitionId) {
+    base = base.filter(c => {
+      if (typeof c.jobRequisitionId === 'string') return c.jobRequisitionId === jobRequisitionId
+      return c.jobRequisitionId?._id === jobRequisitionId
+    })
+  }
+
+
+  // Tab filter
+  if (activeTab.value === 'White Collar') {
+    base = base.filter(c => c.type === 'White Collar')
+  } else if (activeTab.value === 'Blue Collar Sewer') {
+    base = base.filter(c => c.type === 'Blue Collar' && c.subType === 'Sewer')
+  } else if (activeTab.value === 'Blue Collar Non-Sewer') {
+    base = base.filter(c => c.type === 'Blue Collar' && c.subType === 'Non-Sewer')
+  }
+
+  // Text filters
+  
+  if (filters.value.candidateId) {
+    base = base.filter(c => c.candidateId?.toLowerCase().includes(filters.value.candidateId.toLowerCase()))
+  }
+  if (filters.value.jobId) {
+    base = base.filter(c => c.jobRequisitionCode?.toLowerCase().includes(filters.value.jobId.toLowerCase()))
+  }
+  if (filters.value.department) {
+    base = base.filter(c => c.department?.toLowerCase().includes(filters.value.department.toLowerCase()))
+  }
+  if (filters.value.jobTitle) {
+    base = base.filter(c => c.jobTitle?.toLowerCase().includes(filters.value.jobTitle.toLowerCase()))
+  }
+  if (filters.value.fullName) {
+    base = base.filter(c => c.fullName?.toLowerCase().includes(filters.value.fullName.toLowerCase()))
+  }
+  if (filters.value.recruiter) {
+    base = base.filter(c => c.recruiter?.toLowerCase().includes(filters.value.recruiter.toLowerCase()))
+  }
+  if (filters.value.applicationSource) {
+    base = base.filter(c => c.applicationSource?.toLowerCase().includes(filters.value.applicationSource.toLowerCase()))
+  }
+  if (filters.value.hireDecision) {
+    base = base.filter(c => c.hireDecision === filters.value.hireDecision)
+  }
+
+  return base
+})
+
+
+
 
 const formatDate = (val) => (!val ? '-' : dayjs(val).format('DD-MMM-YY').toUpperCase())
 const daysBetween = (end, start) => dayjs(end).diff(dayjs(start), 'day')
 
+// onMounted(async () => {
+//   await fetchJobRequisitions()
+//   await fetchCandidates()
+// })
+
 onMounted(async () => {
   await fetchJobRequisitions()
   await fetchCandidates()
+
+  const jobRequisitionId = route.query.jobRequisitionId
+  if (jobRequisitionId) {
+    const job = jobRequisitions.value.find(j => j._id === jobRequisitionId)
+    if (job) {
+      if (job.type === 'White Collar') activeTab.value = 'White Collar'
+      else if (job.subType === 'Sewer') activeTab.value = 'Blue Collar Sewer'
+      else activeTab.value = 'Blue Collar Non-Sewer'
+    }
+  }
 })
+
+
+
 </script>
 
 
@@ -541,6 +703,18 @@ onMounted(async () => {
 }
 
 
+/* Filter */
+.hover-filled {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+.hover-primary:hover {
+  background-color: #1976d2 !important;
+  color: white !important;
+}
+.hover-teal:hover {
+  background-color: #00897b !important;
+  color: white !important;
+}
 
 
 

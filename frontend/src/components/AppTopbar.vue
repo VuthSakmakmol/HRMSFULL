@@ -1,14 +1,23 @@
 <template>
-  <v-app-bar flat color="white" elevation="2" class="app-bar-shadow">
+  <v-app-bar
+    flat
+    elevation="2"
+    position="sticky"
+    class="app-bar-shadow"
+    style="top: 0"
+  >
     <!-- ☰ Menu Button -->
     <v-btn icon @click="$emit('toggle-sidebar')">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <!-- App Title -->
-    <v-toolbar-title class="font-weight-bold text-primary">
-      System
-    </v-toolbar-title>
+    <!-- Logo -->
+    <img
+      :src="`/logos/${selectedCompany}.jpg`"
+      alt="Company Logo"
+      height="36"
+      class="ml-2"
+    />
 
     <v-spacer />
 
@@ -58,8 +67,10 @@ const logout = () => {
 
 <style scoped>
 .app-bar-shadow {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 1000;
   background-color: #ffffff;
-  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 </style>
