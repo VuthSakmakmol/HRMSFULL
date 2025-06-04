@@ -18,20 +18,16 @@ exports.getReport = async (req, res) => {
       subType = null,
       view = 'month',
       quarter = null,
-      month = null,
-      company = null
+      month = null
     } = req.method === 'POST' ? req.body : req.query;
 
     const months = Array.from({ length: 12 }, (_, i) => getMonthName(i));
-    let columns = months;
-    if (view === 'quarter') columns = ['Q1', 'Q2', 'Q3', 'Q4'];
-    if (view === 'year') columns = [String(year)];
+    const columns = view === 'quarter' ? ['Q1', 'Q2', 'Q3', 'Q4'] : view === 'year' ? [String(year)] : months;
 
     const roadmapQuery = { year, type };
     if (type === 'Blue Collar' && subType) roadmapQuery.subType = subType;
-    if (company) roadmapQuery.company = company;
-
     const roadmapData = await Roadmap.find(roadmapQuery);
+
     const roadmapMap = {};
     months.forEach(month => {
       const r = roadmapData.find(x => x.month === month);
@@ -42,55 +38,63 @@ exports.getReport = async (req, res) => {
       };
     });
 
-    const candidateQuery = {};
-    if (company) candidateQuery.company = company;
-    const allCandidates = await Candidate.find(candidateQuery).populate('jobRequisitionId');
+    const allCandidates = await Candidate.find({});
+
+    console.log("🧩 Total candidates in DB:", allCandidates.length);
 
     const filtered = allCandidates.filter(c => {
-      if (!c.progressDates?.Application) return false;
-      const applicationDate = dayjs(c.progressDates.Application);
-      const applicationYear = applicationDate.year();
-      const applicationMonth = applicationDate.month();
-      const applicationQuarter = Math.floor(applicationMonth / 3) + 1;
+      const appDate = c.progressDates?.get?.('Application');
+      if (!appDate) return false;
 
-      const matchesYear = applicationYear === +year;
+      const appYear = dayjs(appDate).year();
+      const appMonth = dayjs(appDate).month();
+      const appQuarter = Math.floor(appMonth / 3) + 1;
+
+      const matchesYear = appYear === +year;
       const matchesType =
         type === 'All' ||
-        (c.jobRequisitionId &&
-         c.jobRequisitionId.type === type &&
-         (type !== 'Blue Collar' || c.jobRequisitionId.subType === subType));
+        (c.type === type &&
+         (type !== 'Blue Collar' || c.subType === subType));
 
       if (!matchesYear || !matchesType) return false;
-      if (view === 'quarter' && quarter) return applicationQuarter === +quarter;
-      if (view === 'month' && month !== null) return applicationMonth === +month;
+      if (view === 'quarter' && quarter) return appQuarter === +quarter;
+      if (view === 'month' && month !== null) return appMonth === +month;
 
       return true;
     });
 
-    const initialArray = () =>
-      view === 'year' ? [0] : view === 'quarter' ? Array(4).fill(0) : Array(12).fill(0);
+    console.log("✅ Filtered candidates:", filtered.length);
+    if (filtered.length > 0) {
+      console.log("🔍 Example candidate:", {
+        fullName: filtered[0].fullName,
+        type: filtered[0].type,
+        subType: filtered[0].subType,
+        applicationDate: filtered[0].progressDates?.get?.('Application'),
+        source: filtered[0].applicationSource
+      });
+    }
+
+    const initialArray = () => view === 'year' ? [0] : view === 'quarter' ? Array(4).fill(0) : Array(12).fill(0);
 
     const pipelineStages = ['Application', 'ManagerReview', 'Interview', 'JobOffer', 'Hired', 'Onboard'];
-    const pipeline = {};
-    for (const stage of pipelineStages) pipeline[stage] = initialArray();
+    const pipeline = Object.fromEntries(pipelineStages.map(stage => [stage, initialArray()]));
 
-    for (const c of filtered) {
-      for (const stage of pipelineStages) {
-        const d = c.progressDates?.[stage];
+    filtered.forEach(c => {
+      pipelineStages.forEach(stage => {
+        const d = c.progressDates?.get?.(stage);
         if (d) {
           const m = dayjs(d).month();
           const idx = getIndex(view, m);
           pipeline[stage][idx]++;
         }
-      }
-    }
+      });
+    });
 
-    const sourceCounts = {};
+    const sourceCounts = Object.fromEntries(sources.map(s => [s, initialArray()]));
     const sourceApplications = initialArray();
-    for (const s of sources) sourceCounts[s] = initialArray();
 
-    for (const c of filtered) {
-      const m = dayjs(c.progressDates?.Application).month();
+    filtered.forEach(c => {
+      const m = dayjs(c.progressDates.get('Application')).month();
       const idx = getIndex(view, m);
       const rawSource = c.applicationSource?.trim();
       if (rawSource) {
@@ -102,7 +106,7 @@ exports.getReport = async (req, res) => {
           }
         }
       }
-    }
+    });
 
     const sourcePercent = {};
     for (const s of sources) {
@@ -119,19 +123,18 @@ exports.getReport = async (req, res) => {
     };
 
     const hireDates = {};
-    for (const c of filtered) {
-      const applied = c.progressDates?.Application;
-      const onboard = c.progressDates?.Onboard;
+    filtered.forEach(c => {
+      const applied = c.progressDates?.get?.('Application');
+      const onboard = c.progressDates?.get?.('Onboard');
       if (applied && onboard) {
         const m = dayjs(onboard).month();
         const idx = getIndex(view, m);
         hireDates[idx] = hireDates[idx] || [];
-        const days = dayjs(onboard).diff(dayjs(applied), 'day');
-        hireDates[idx].push(days);
+        hireDates[idx].push(dayjs(onboard).diff(dayjs(applied), 'day'));
       }
-    }
+    });
 
-    for (let i = 0; i < stats.averageDaysToHire.length; i++) {
+    stats.averageDaysToHire.forEach((_, i) => {
       const daysArr = hireDates[i] || [];
       if (daysArr.length) {
         stats.averageDaysToHire[i] = (daysArr.reduce((a, b) => a + b, 0) / daysArr.length).toFixed(2);
@@ -156,22 +159,18 @@ exports.getReport = async (req, res) => {
         const target = roadmapMap[monthName]?.hiringTargetHC;
         stats.fillRate[i] = target > 0 ? `${Math.round((pipeline.Hired[i] / target) * 100)}%` : '0%';
       }
-    }
+    });
 
     const rows = [
       { label: '0. Job Requisition', values: [], isHeader: true },
       { label: 'Roadmap HC from planning', values: getCombinedRoadmap('roadmapHC', view, months, roadmapMap) },
       { label: 'Actual HC (end of month)', values: getCombinedRoadmap('actualHC', view, months, roadmapMap) },
       { label: 'Hiring Target HC', values: getCombinedRoadmap('hiringTargetHC', view, months, roadmapMap) },
-
       { label: '1. Recruitment Pipeline', values: [], isHeader: true },
-      { label: '1.1 Received Application', values: pipeline.Application },
-      { label: '1.2 Sent to Manager', values: pipeline.ManagerReview },
-      { label: '1.3 Interviews', values: pipeline.Interview },
-      { label: '1.4 Job Offer', values: pipeline.JobOffer },
-      { label: '1.5 Hired', values: pipeline.Hired },
-      { label: '1.6 Onboard', values: pipeline.Onboard },
-
+      ...pipelineStages.map((stage, i) => ({
+        label: `1.${i + 1} ${stage}`,
+        values: pipeline[stage]
+      })),
       { label: '2. Source of Application', values: [], isHeader: true },
       ...sources.map(source => ({
         label: source,
@@ -179,7 +178,6 @@ exports.getReport = async (req, res) => {
         percents: sourcePercent[source],
         isSource: true
       })),
-
       { label: '3. Vacancies Statistic', values: [], isHeader: true },
       { label: '3.1 Average Day to Hire (Days)', values: stats.averageDaysToHire },
       { label: '3.2 Active Vacant (Position)', values: stats.activeVacant },
@@ -193,7 +191,7 @@ exports.getReport = async (req, res) => {
   }
 };
 
-// 🔧 Helpers
+// Helpers
 function getIndex(view, month) {
   if (view === 'year') return 0;
   if (view === 'quarter') return Math.floor(month / 3);

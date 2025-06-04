@@ -37,10 +37,11 @@ exports.getDashboardStats = async (req, res) => {
     for (const stage of pipelineStages) {
       pipeline[stage] = await Candidate.countDocuments({
         ...baseFilter,
-        progress: stage,
-        createdAt: { $gte: new Date(from), $lte: new Date(to) },
+        [`progressDates.${stage}`]: { $exists: true },
+        createdAt: { $gte: new Date(from), $lte: new Date(to) }
       });
     }
+
 
     // 🔹 Get application sources
     const sourceAgg = await Candidate.aggregate([

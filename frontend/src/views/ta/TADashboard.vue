@@ -76,9 +76,55 @@
           </v-menu>
         </v-col>
       </v-row>
+
+      <v-row dense class="mb-2">
+        <v-col cols="12" md="2">
+          <v-select
+            v-model="viewMode"
+            :items="['month', 'quarter', 'year']"
+            label="Report View"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+        </v-col>
+
+        <!-- <v-col cols="12" md="2" v-if="viewMode === 'month'">
+          <v-select
+            v-model="selectedMonth"
+            :items="monthOptions"
+            label="Select Month"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+        </v-col> -->
+
+        <!-- <v-col cols="12" md="2" v-if="viewMode === 'quarter'">
+          <v-select
+            v-model="selectedQuarter"
+            :items="[1, 2, 3, 4]"
+            label="Select Quarter"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+        </v-col> -->
+
+        <v-col cols="12" md="2">
+          <v-select
+            v-model="selectedYear"
+            :items="yearOptions"
+            label="Select Year"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+        </v-col>
+      </v-row>
     </v-sheet>
 
-    <!-- 🔹 Charts -->
+    <!-- 🔹 Charts and Tables -->
     <v-row>
       <v-col cols="12" md="4">
         <RecruitmentPipelineChart :pipeline="pipelineData" />
@@ -96,6 +142,19 @@
       <v-col cols="12" md="6">
         <VacancyKPI :typeLabel="filterType" :data="kpiData" :loading="loadingKpi" />
       </v-col>
+
+      <!-- 📊 Report Table -->
+      <v-col cols="12">
+        <RecruitmentReportTable
+          :type="getType().type"
+          :subType="getType().subType"
+          :view="viewMode"
+          :year="selectedYear"
+          :quarter="selectedQuarter"
+          :month="getSelectedMonthIndex()" 
+          :company="selectedCompany"
+        />
+      </v-col>
     </v-row>
   </v-container>
 </template>
@@ -105,16 +164,22 @@ import { ref, onMounted, watch } from 'vue'
 import axios from '@/utils/axios'
 import dayjs from 'dayjs'
 
+// Components
 import RecruitmentPipelineChart from '@/tacomponents/RecruitmentPipelineChart.vue'
 import SourcePie from '@/tacomponents/SourcePie.vue'
 import FinalDecisionPie from '@/tacomponents/FinalDecisionPie.vue'
 import MonthlyApplicationLine from '@/tacomponents/MonthlyApplicationLine.vue'
 import VacancyKPI from '@/tacomponents/VacancyKPI.vue'
+import RecruitmentReportTable from '@/tacomponents/RecruitmentReportTable.vue'
 
-// state
+// Filters
 const filterType = ref('White Collar')
 const filterRecruiter = ref(null)
 const filterDepartment = ref(null)
+const filterOptions = ['White Collar', 'Blue Collar - Sewer', 'Blue Collar - Non-Sewer']
+
+const recruiterOptions = ref([])
+const departmentOptions = ref([])
 
 const from = ref(dayjs().startOf('year').format('YYYY-MM-DD'))
 const to = ref(dayjs().endOf('year').format('YYYY-MM-DD'))
@@ -123,18 +188,27 @@ const toDisplay = ref(dayjs(to.value).format('DD/MM/YYYY'))
 const fromMenu = ref(false)
 const toMenu = ref(false)
 
-const filterOptions = ['White Collar', 'Blue Collar - Sewer', 'Blue Collar - Non-Sewer']
-const recruiterOptions = ref([])
-const departmentOptions = ref([])
+// Chart data
 const sourceData = ref({ labels: [], counts: [] })
 const decisionData = ref({ labels: [], counts: [] })
 const pipelineData = ref({})
 const kpiData = ref({})
 const loadingKpi = ref(false)
 
-// company from localStorage
 const userCompany = ref(localStorage.getItem('company'))
+const selectedCompany = ref(userCompany.value)
 
+const viewMode = ref('month')
+const selectedYear = ref(dayjs().year())
+const selectedQuarter = ref(null)
+const selectedMonth = ref(null)
+const monthOptions = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+]
+const yearOptions = Array.from({ length: 6 }, (_, i) => dayjs().year() - i)
+
+// Update Display
 const updateFromDisplay = () => {
   fromDisplay.value = dayjs(from.value).format('DD/MM/YYYY')
   fromMenu.value = false
@@ -144,15 +218,24 @@ const updateToDisplay = () => {
   toMenu.value = false
 }
 
+
+
+// Type resolver
 const getType = () => {
   if (filterType.value === 'Blue Collar - Sewer') return { type: 'Blue Collar', subType: 'Sewer' }
   if (filterType.value === 'Blue Collar - Non-Sewer') return { type: 'Blue Collar', subType: 'Non-Sewer' }
   return { type: 'White Collar', subType: null }
 }
 
+// Month index resolver
+const getSelectedMonthIndex = () => {
+  if (viewMode.value !== 'month' || !selectedMonth.value) return null
+  return monthOptions.indexOf(selectedMonth.value) + 1
+}
+
+// Fetch dashboard summary
 const fetchDashboardStats = async () => {
   const { type, subType } = getType()
-
   try {
     const res = await axios.post('/dashboard/stats', {
       type,
@@ -161,7 +244,7 @@ const fetchDashboardStats = async () => {
       departmentId: filterDepartment.value || null,
       from: from.value,
       to: to.value,
-      year: dayjs().year(),
+      year: selectedYear.value,
       company: userCompany.value
     })
 
@@ -174,36 +257,30 @@ const fetchDashboardStats = async () => {
   }
 }
 
+// Fetch recruiters and departments
 const fetchDepartments = async () => {
   try {
-    const res = await axios.get('/departments', {
-      params: { company: userCompany.value }
-    })
+    const res = await axios.get('/departments', { params: { company: userCompany.value } })
     departmentOptions.value = Array.isArray(res.data)
       ? res.data.filter(dep => dep.company === userCompany.value)
       : []
   } catch (err) {
-    departmentOptions.value = []
     console.error('❌ Department fetch error:', err)
   }
 }
 
 const fetchRecruiters = async () => {
   try {
-    const res = await axios.get('/recruiters', {
-      params: { company: userCompany.value }
-    })
+    const res = await axios.get('/recruiters', { params: { company: userCompany.value } })
     recruiterOptions.value = Array.isArray(res.data)
-      ? res.data
-          .filter(r => r.company === userCompany.value)
-          .map(r => r.name)
+      ? res.data.filter(r => r.company === userCompany.value).map(r => r.name)
       : []
   } catch (err) {
-    recruiterOptions.value = []
     console.error('❌ Recruiter fetch error:', err)
   }
 }
 
+// Init
 onMounted(() => {
   fetchDashboardStats()
   fetchDepartments()

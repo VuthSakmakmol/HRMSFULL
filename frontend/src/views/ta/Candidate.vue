@@ -658,12 +658,25 @@ onMounted(async () => {
   if (jobRequisitionId) {
     const job = jobRequisitions.value.find(j => j._id === jobRequisitionId)
     if (job) {
+      // Set the active tab
       if (job.type === 'White Collar') activeTab.value = 'White Collar'
       else if (job.subType === 'Sewer') activeTab.value = 'Blue Collar Sewer'
       else activeTab.value = 'Blue Collar Non-Sewer'
+
+      // ✅ Auto-fill the form with this job
+      selectedRequisition.value = job
+      showForm.value = true
+
+      form.value.department = job.departmentName
+      form.value.recruiter = job.recruiter
+      form.value.jobRequisitionCode = job.jobRequisitionId
+      form.value.type = job.type
+      form.value.subType = job.subType
     }
   }
 })
+
+
 
 
 

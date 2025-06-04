@@ -1,57 +1,69 @@
 const Candidate = require('../../models/ta/Candidate');
 const JobRequisition = require('../../models/ta/JobRequisition');
 const Counter = require('../../models/ta/Counter');
-const fs = require('fs');
 
-// Auto-ID generator
+// 🎯 Generate candidateId like NS0625-01
 async function generateCandidateId() {
   const now = new Date();
-  const prefix = `NS${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = String(now.getFullYear()).slice(-2);
+  const prefix = `NS${month}${year}`;
+
   const counter = await Counter.findOneAndUpdate(
     { name: `candidate-${prefix}` },
     { $inc: { value: 1 } },
     { new: true, upsert: true }
   );
+
   return `${prefix}-${counter.value}`;
 }
 
-// CREATE
 exports.create = async (req, res) => {
   try {
     const {
-      fullName, recruiter, applicationSource, jobRequisitionId,
-      jobRequisitionCode, department, jobTitle, company,
-      type, subType
+      fullName,
+      recruiter,
+      applicationSource,
+      jobRequisitionId,
+      jobRequisitionCode,
+      department,
+      jobTitle,
+      company,
+      type,
+      subType
     } = req.body;
-
-    const role = req.user.role;
-    const userCompany = req.user.company;
-    const resolvedCompany = role === 'GeneralManager' ? company : userCompany;
-
-    if (!resolvedCompany) return res.status(400).json({ message: 'Company is required' });
-
-    if (!jobRequisitionId || !jobRequisitionCode || !department || !jobTitle || !recruiter) {
-      return res.status(400).json({ message: 'Missing required fields' });
-    }
 
     const candidateId = await generateCandidateId();
 
-    const candidate = new Candidate({
-      candidateId, fullName, recruiter, applicationSource,
-      jobRequisitionId, jobRequisitionCode, department, jobTitle,
-      type, subType, company: resolvedCompany,
-      progress: 'Application',
-      progressDates: { Application: new Date() }
+    const progressDates = req.body.progressDates || {};
+    if (!progressDates.Application) {
+      progressDates.Application = new Date();
+    }
+
+    const newCandidate = new Candidate({
+      candidateId,
+      fullName,
+      recruiter,
+      applicationSource,
+      jobRequisitionId,
+      jobRequisitionCode,
+      department,
+      jobTitle,
+      company,
+      type,
+      subType: type === 'Blue Collar' ? subType : null,
+      progressDates
     });
 
-    await candidate.save();
+    await newCandidate.save();
 
-    res.status(201).json({ message: 'Candidate created', candidate });
+    res.status(201).json({ message: 'Candidate created successfully', candidate: newCandidate });
   } catch (err) {
-    console.error('❌ Create Error:', err);
-    res.status(500).json({ message: 'Error creating candidate', error: err.message });
+    console.error('❌ Candidate creation failed:', err);
+    res.status(500).json({ message: 'Failed to create candidate', error: err.message });
   }
 };
+
 
 // GET ALL
 exports.getAll = async (req, res) => {
@@ -149,8 +161,8 @@ exports.updateStage = async (req, res) => {
     const currentIndex = stageOrder.indexOf(candidate.progress);
     const targetIndex = stageOrder.indexOf(stage);
 
-    if (targetIndex < currentIndex) {
-      return res.status(400).json({ message: 'Cannot move back to a previous stage' });
+    if (targetIndex > currentIndex) {
+      candidate.progress = stage;
     }
 
     // ✅ Always allow date update
@@ -184,7 +196,11 @@ exports.updateStage = async (req, res) => {
       }
       candidate._onboardCounted = true;
       candidate._offerCounted = false; // remove offer count
+
+      // ✅ Auto-set final decision
+      candidate.hireDecision = 'Hired';
     }
+
 
     await candidate.save();
     await reevaluateJobStatus(job);

@@ -17,7 +17,14 @@ const candidateSchema = new mongoose.Schema({
   jobTitle: { type: String, required: true },
 
   type: { type: String, enum: ['White Collar', 'Blue Collar'], required: true },
-  subType: { type: String, enum: ['Sewer', 'Non-Sewer', 'General'], default: 'General' },
+  subType: {
+    type: String,
+    enum: ['Sewer', 'Non-Sewer'],
+    required: function () {
+      return this.type === 'Blue Collar';
+    },
+    default: null
+  },
 
   progress: { type: String, enum: ['Application', 'ManagerReview', 'Interview', 'JobOffer', 'Hired', 'Onboard'], default: 'Application' },
   progressDates: { type: Map, of: Date, default: {} },

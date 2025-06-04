@@ -332,7 +332,7 @@
                   <!-- Vacant Circle -->
                   <v-progress-circular
                     :model-value="getVacantPercent(job)"
-                    color="blue"
+                    color="green"
                     size="38"
                     width="4"
                   >

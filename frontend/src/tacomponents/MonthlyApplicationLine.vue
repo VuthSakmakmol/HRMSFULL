@@ -1,6 +1,6 @@
 <template>
   <v-card class="pa-4" elevation="2">
-    <v-row align="center" justify="space-between">
+    <v-row align-center="center" justify="space-between">
       <v-col cols="auto">
         <h3 class="text-h6">Number of Applications by Month</h3>
       </v-col>

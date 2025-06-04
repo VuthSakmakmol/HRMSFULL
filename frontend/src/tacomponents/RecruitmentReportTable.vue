@@ -43,16 +43,18 @@ import api from '@/utils/axios'
 const props = defineProps({
   type: String,
   subType: String,
-  view: String,        // 'month' | 'quarter' | 'year'
+  view: String,
   year: Number,
   quarter: Number,
-  month: Number
+  month: Number,
+  company: String
 })
 
 const reportData = ref([])
 const dynamicColumns = ref([])
 
 const fetchReport = async () => {
+  if (!props.type || !props.year || !props.company) return
   try {
     const res = await api.get('/report', {
       params: {
@@ -61,7 +63,8 @@ const fetchReport = async () => {
         view: props.view,
         year: props.year,
         quarter: props.quarter,
-        month: props.month
+        month: props.month,
+        company: props.company
       }
     })
     reportData.value = res.data.rows
@@ -72,7 +75,7 @@ const fetchReport = async () => {
 }
 
 watch(
-  () => [props.type, props.subType, props.view, props.year, props.quarter, props.month],
+  () => [props.type, props.subType, props.view, props.year, props.quarter, props.month, props.company],
   fetchReport,
   { immediate: true }
 )
@@ -172,7 +175,6 @@ const getBarClass = (percent) => {
   padding: 0 6px;
 }
 
-/* 🔟 10 Customizable Bar Color Classes */
 .bar-color-1  { background-color: #d32f2f; }
 .bar-color-2  { background-color: #cd6261; }
 .bar-color-3  { background-color: #e7a46d; }
