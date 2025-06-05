@@ -7,7 +7,8 @@ const roadmapSchema = new mongoose.Schema({
   subType: { type: String, enum: ['Sewer', 'Non-Sewer'], default: null },
   roadmapHC: { type: Number, required: true },       // Forecast
   actualHC: { type: Number, required: true },        // Actual hired
-  hiringTargetHC: { type: Number, required: true }   // Target to be filled
+  hiringTargetHC: { type: Number, required: true },   // Target to be filled
+  company: {type: String, required: true}
 });
 
 module.exports = mongoose.model('Roadmap', roadmapSchema);

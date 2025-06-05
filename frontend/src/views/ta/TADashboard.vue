@@ -89,27 +89,6 @@
           />
         </v-col>
 
-        <!-- <v-col cols="12" md="2" v-if="viewMode === 'month'">
-          <v-select
-            v-model="selectedMonth"
-            :items="monthOptions"
-            label="Select Month"
-            variant="outlined"
-            density="compact"
-            hide-details
-          />
-        </v-col> -->
-
-        <!-- <v-col cols="12" md="2" v-if="viewMode === 'quarter'">
-          <v-select
-            v-model="selectedQuarter"
-            :items="[1, 2, 3, 4]"
-            label="Select Quarter"
-            variant="outlined"
-            density="compact"
-            hide-details
-          />
-        </v-col> -->
 
         <v-col cols="12" md="2">
           <v-select
@@ -151,9 +130,9 @@
           :view="viewMode"
           :year="selectedYear"
           :quarter="selectedQuarter"
-          :month="getSelectedMonthIndex()" 
+          :month="getSelectedMonthIndex()"
           :company="selectedCompany"
-        />
+          :roadmap="roadmapData" />
       </v-col>
     </v-row>
   </v-container>
@@ -188,11 +167,15 @@ const toDisplay = ref(dayjs(to.value).format('DD/MM/YYYY'))
 const fromMenu = ref(false)
 const toMenu = ref(false)
 
-// Chart data
 const sourceData = ref({ labels: [], counts: [] })
 const decisionData = ref({ labels: [], counts: [] })
 const pipelineData = ref({})
 const kpiData = ref({})
+const roadmapData = ref({
+  roadmapHC: Array(12).fill(0),
+  actualHC: Array(12).fill(0),
+  hiringTargetHC: Array(12).fill(0)
+})
 const loadingKpi = ref(false)
 
 const userCompany = ref(localStorage.getItem('company'))
@@ -208,7 +191,6 @@ const monthOptions = [
 ]
 const yearOptions = Array.from({ length: 6 }, (_, i) => dayjs().year() - i)
 
-// Update Display
 const updateFromDisplay = () => {
   fromDisplay.value = dayjs(from.value).format('DD/MM/YYYY')
   fromMenu.value = false
@@ -218,22 +200,17 @@ const updateToDisplay = () => {
   toMenu.value = false
 }
 
-
-
-// Type resolver
 const getType = () => {
   if (filterType.value === 'Blue Collar - Sewer') return { type: 'Blue Collar', subType: 'Sewer' }
   if (filterType.value === 'Blue Collar - Non-Sewer') return { type: 'Blue Collar', subType: 'Non-Sewer' }
   return { type: 'White Collar', subType: null }
 }
 
-// Month index resolver
 const getSelectedMonthIndex = () => {
   if (viewMode.value !== 'month' || !selectedMonth.value) return null
   return monthOptions.indexOf(selectedMonth.value) + 1
 }
 
-// Fetch dashboard summary
 const fetchDashboardStats = async () => {
   const { type, subType } = getType()
   try {
@@ -252,12 +229,16 @@ const fetchDashboardStats = async () => {
     decisionData.value = res.data.decisions || { labels: [], counts: [] }
     pipelineData.value = res.data.pipeline || {}
     kpiData.value = res.data.kpi || {}
+    roadmapData.value = res.data.roadmap || {
+      roadmapHC: Array(12).fill(0),
+      actualHC: Array(12).fill(0),
+      hiringTargetHC: Array(12).fill(0)
+    }
   } catch (err) {
     console.error('❌ Dashboard stats fetch failed:', err)
   }
 }
 
-// Fetch recruiters and departments
 const fetchDepartments = async () => {
   try {
     const res = await axios.get('/departments', { params: { company: userCompany.value } })
@@ -280,7 +261,6 @@ const fetchRecruiters = async () => {
   }
 }
 
-// Init
 onMounted(() => {
   fetchDashboardStats()
   fetchDepartments()
@@ -289,6 +269,7 @@ onMounted(() => {
 
 watch([filterType, filterRecruiter, filterDepartment, from, to], fetchDashboardStats)
 </script>
+
 
 <style scoped>
 .sticky-filter {

@@ -31,7 +31,7 @@ const dashboardRoutes = require('./routes/ta/dashboardRoutes');
 
 app.use('/api', departmentRoutes);
 app.use('/api', jobRequisitionRoutes);
-app.use('/api/roadmap', roadmapRoutes);
+app.use('/api/roadmaps', roadmapRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 app.use('/api/report', require('./routes/ta/reportRoutes'))

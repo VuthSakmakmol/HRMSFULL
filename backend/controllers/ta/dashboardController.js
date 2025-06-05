@@ -1,5 +1,7 @@
 const Candidate = require('../../models/ta/Candidate');
 const JobRequisition = require('../../models/ta/JobRequisition');
+const Roadmap = require('../../models/ta/Roadmap');
+
 
 exports.getDashboardStats = async (req, res) => {
   try {
@@ -30,6 +32,40 @@ exports.getDashboardStats = async (req, res) => {
 
     if (recruiter) baseFilter.recruiter = recruiter;
     if (departmentId) baseFilter.departmentId = departmentId;
+
+    // 🔹 Roadmap Summary
+    const roadmapAgg = await Roadmap.aggregate([
+      {
+        $match: {
+          company: company.trim().toUpperCase(),
+          type,
+          ...(subType ? { subType } : { $or: [{ subType: null }, { subType: '' }] }),
+          year: parseInt(year)
+        }
+      },
+      {
+        $group: {
+          _id: "$month",
+          roadmapHC: { $sum: "$roadmapHC" },
+          actualHC: { $sum: "$actualHC" },
+          hiringTargetHC: { $sum: "$hiringTargetHC" }
+        }
+      }
+    ]);
+
+    const roadmap = {
+      roadmapHC: Array(12).fill(0),
+      actualHC: Array(12).fill(0),
+      hiringTargetHC: Array(12).fill(0)
+    };
+
+    roadmapAgg.forEach(entry => {
+      const index = parseInt(entry._id) - 1;
+      roadmap.roadmapHC[index] = entry.roadmapHC || 0;
+      roadmap.actualHC[index] = entry.actualHC || 0;
+      roadmap.hiringTargetHC[index] = entry.hiringTargetHC || 0;
+    });
+
 
     // 🔹 Get pipeline stages
     const pipelineStages = ['Application', 'ManagerReview', 'Interview', 'JobOffer', 'Hired', 'Onboard'];
@@ -142,7 +178,8 @@ exports.getDashboardStats = async (req, res) => {
       sources,
       decisions,
       kpi,
-      monthly
+      monthly,
+      roadmap
     });
 
   } catch (err) {

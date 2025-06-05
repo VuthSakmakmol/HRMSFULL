@@ -1,18 +1,17 @@
 const Roadmap = require('../../models/ta/Roadmap');
 
-// 🟢 GET all roadmaps (with optional filters: year, month, type, subtype)
+// 🔧 GET all roadmaps (with optional filters)
 exports.getRoadmaps = async (req, res) => {
   try {
-    const query = {};
+    const company = req.query.company?.trim().toUpperCase();
+    if (!company) return res.status(400).json({ message: 'Missing company in query' });
+
+    const query = { company };
 
     if (req.query.year) query.year = parseInt(req.query.year);
     if (req.query.month) query.month = req.query.month;
-
-    if (req.query.type) {
-      const { type, subType } = parseType(req.query.type);
-      query.type = type;
-      if (subType) query.subType = subType;
-    }
+    if (req.query.type) query.type = req.query.type;
+    if (req.query.subType) query.subType = req.query.subType;
 
     const data = await Roadmap.find(query).sort({ year: 1, month: 1 });
     res.json(data);
@@ -21,36 +20,45 @@ exports.getRoadmaps = async (req, res) => {
   }
 };
 
-// 🟡 POST - Create a roadmap entry
+// 🟡 POST - Create roadmap
 exports.createRoadmap = async (req, res) => {
   try {
-    const { type, subType } = parseType(req.body.type);
+    const company = req.body.company?.trim().toUpperCase();
+    if (!company) return res.status(400).json({ message: 'Missing company in request' });
 
-    const newEntry = new Roadmap({
+    const type = req.body.type;
+    const subType = type === 'Blue Collar' ? req.body.subType || null : null;
+
+    const newRoadmap = new Roadmap({
       ...req.body,
       type,
-      subType
+      subType,
+      company
     });
 
-    await newEntry.save();
-    res.status(201).json(newEntry);
+    await newRoadmap.save();
+    res.status(201).json(newRoadmap);
   } catch (err) {
     res.status(400).json({ message: 'Creation failed', error: err.message });
   }
 };
 
-// 🟠 PUT - Update a roadmap entry
+// 🟠 PUT - Update roadmap
 exports.updateRoadmap = async (req, res) => {
   try {
-    const { type, subType } = parseType(req.body.type);
+    const company = req.body.company?.trim().toUpperCase();
+    if (!company) return res.status(400).json({ message: 'Missing company in request' });
 
-    const updated = await Roadmap.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, type, subType },
+    const type = req.body.type;
+    const subType = type === 'Blue Collar' ? req.body.subType || null : null;
+
+    const updated = await Roadmap.findOneAndUpdate(
+      { _id: req.params.id, company },
+      { ...req.body, type, subType, company },
       { new: true }
     );
 
-    if (!updated) return res.status(404).json({ message: 'Roadmap not found' });
+    if (!updated) return res.status(404).json({ message: 'Roadmap not found for this company' });
 
     res.json(updated);
   } catch (err) {
@@ -58,12 +66,15 @@ exports.updateRoadmap = async (req, res) => {
   }
 };
 
-// 🔴 DELETE - Remove a roadmap entry
+// 🔴 DELETE - Delete roadmap
 exports.deleteRoadmap = async (req, res) => {
   try {
-    const deleted = await Roadmap.findByIdAndDelete(req.params.id);
+    const company = req.query.company?.trim().toUpperCase();
+    if (!company) return res.status(400).json({ message: 'Missing company in query' });
 
-    if (!deleted) return res.status(404).json({ message: 'Roadmap not found' });
+    const deleted = await Roadmap.findOneAndDelete({ _id: req.params.id, company });
+
+    if (!deleted) return res.status(404).json({ message: 'Roadmap not found for this company' });
 
     res.json({ message: 'Deleted successfully' });
   } catch (err) {
@@ -71,10 +82,14 @@ exports.deleteRoadmap = async (req, res) => {
   }
 };
 
-// 📊 GET summary for dashboard charts (optional)
+// 📊 GET summary for dashboard
 exports.getSummary = async (req, res) => {
   try {
+    const company = req.query.company?.trim().toUpperCase();
+    if (!company) return res.status(400).json({ message: 'Missing company in query' });
+
     const summary = await Roadmap.aggregate([
+      { $match: { company } },
       {
         $group: {
           _id: {
@@ -96,11 +111,3 @@ exports.getSummary = async (req, res) => {
     res.status(500).json({ message: 'Summary generation failed', error: err.message });
   }
 };
-
-// 🧠 Helper - Convert string type into type + subType
-function parseType(typeString) {
-  if (typeString === 'White Collar') return { type: 'White Collar', subType: null };
-  if (typeString === 'Blue Collar - Sewer') return { type: 'Blue Collar', subType: 'Sewer' };
-  if (typeString === 'Blue Collar - Non-Sewer') return { type: 'Blue Collar', subType: 'Non-Sewer' };
-  return { type: typeString, subType: null };
-}

@@ -12,21 +12,24 @@
 
     <!-- Filters -->
     <v-row dense class="mb-4">
-      <v-col cols="12" md="4">
+      <v-col cols="12" md="3">
         <v-select v-model="filterYear" :items="yearOptions" label="Filter by Year" clearable />
       </v-col>
-      <v-col cols="12" md="4">
-        <v-select v-model="filterType" :items="typeOptions" label="Filter by Type" clearable />
+      <v-col cols="12" md="3">
+        <v-select v-model="filterType" :items="['White Collar', 'Blue Collar']" label="Filter by Type" clearable />
       </v-col>
-      <v-col cols="12" md="4">
+      <v-col cols="12" md="3" v-if="filterType === 'Blue Collar'">
+        <v-select v-model="filterSubType" :items="['Sewer', 'Non-Sewer']" label="Filter by SubType" clearable />
+      </v-col>
+      <v-col cols="12" md="3">
         <v-select v-model="filterMonth" :items="monthOptions" label="Filter by Month" clearable />
       </v-col>
-      <v-col cols="12" md="4">
+      <v-col cols="12" md="3">
         <v-btn color="primary" @click="fetchRoadmaps">Apply Filter</v-btn>
       </v-col>
     </v-row>
 
-    <!-- Roadmap Table -->
+    <!-- Table -->
     <div class="roadmap-table-wrapper">
       <v-table density="compact" class="rounded">
         <thead>
@@ -34,9 +37,9 @@
             <th>Year</th>
             <th>Month</th>
             <th>Type</th>
-            <th>Roadmap HC from planning</th>
-            <th>Actual HC (end of month)</th>
-            <th>Hiring Target (HC)</th>
+            <th>Roadmap HC</th>
+            <th>Actual HC</th>
+            <th>Hiring Target HC</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -49,10 +52,8 @@
             <td>{{ item.actualHC }}</td>
             <td>{{ item.hiringTargetHC }}</td>
             <td>
-              <div class="action-btn-group">
-                <v-btn size="small" variant="tonal" color="primary" @click="editRoadmap(item)">Edit</v-btn>
-                <v-btn size="small" variant="tonal" color="error" @click="deleteRoadmap(item._id)">Delete</v-btn>
-              </div>
+              <v-btn size="small" variant="tonal" color="primary" @click="editRoadmap(item)">Edit</v-btn>
+              <v-btn size="small" variant="tonal" color="error" @click="deleteRoadmap(item._id)">Delete</v-btn>
             </td>
           </tr>
         </tbody>
@@ -62,12 +63,8 @@
     <!-- Create/Edit Dialog -->
     <v-dialog v-model="dialog" max-width="600">
       <v-card>
-        <v-card-title class="text-h6 font-weight-bold">
-          {{ editMode ? 'Edit Roadmap' : 'Create Roadmap' }}
-        </v-card-title>
-
+        <v-card-title class="text-h6 font-weight-bold">{{ editMode ? 'Edit Roadmap' : 'Create Roadmap' }}</v-card-title>
         <v-divider />
-
         <v-card-text>
           <v-form @submit.prevent="saveRoadmap">
             <v-row dense>
@@ -85,7 +82,11 @@
               </v-col>
 
               <v-col cols="12" sm="6">
-                <v-select v-model="form.type" :items="typeOptions" label="Type" required />
+                <v-select v-model="form.type" :items="['White Collar', 'Blue Collar']" label="Type" required />
+              </v-col>
+
+              <v-col cols="12" sm="6" v-if="form.type === 'Blue Collar'">
+                <v-select v-model="form.subType" :items="['Sewer', 'Non-Sewer']" label="SubType" required />
               </v-col>
 
               <v-col cols="12" sm="6">
@@ -100,9 +101,7 @@
             </v-row>
           </v-form>
         </v-card-text>
-
         <v-divider />
-
         <v-card-actions class="justify-end">
           <v-btn variant="tonal" @click="dialog = false">Cancel</v-btn>
           <v-btn color="primary" @click="saveRoadmap">{{ editMode ? 'Update' : 'Create' }}</v-btn>
@@ -120,6 +119,7 @@ import api from '@/utils/axios'
 const roadmaps = ref([])
 const filterYear = ref('')
 const filterType = ref('')
+const filterSubType = ref('')
 const filterMonth = ref('')
 const dialog = ref(false)
 const editMode = ref(false)
@@ -128,49 +128,70 @@ const selectedId = ref(null)
 const form = ref({
   year: '',
   months: [],
+  type: '',
+  subType: '',
   roadmapHC: '',
   actualHC: '',
-  hiringTargetHC: '',
-  type: ''
+  hiringTargetHC: ''
 })
 
-const typeOptions = ['White Collar', 'Blue Collar - Sewer', 'Blue Collar - Non-Sewer']
 const yearOptions = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 2 + i)
 const monthOptions = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 const formatType = (type, subType) => {
   if (type === 'White Collar') return 'White Collar'
-  if (type === 'Blue Collar' && subType) return `Blue Collar - ${subType}`
+  if (type === 'Blue Collar') return `Blue Collar - ${subType}`
   return type
 }
-
 const fetchRoadmaps = async () => {
   try {
-    let url = '/roadmap'
+    const user = JSON.parse(localStorage.getItem('user'))
+    const company = user?.role === 'GeneralManager'
+      ? localStorage.getItem('company')
+      : user?.company
+
+    if (!company) {
+      console.warn('⚠️ No company found in localStorage')
+      return
+    }
+
+    let url = '/roadmaps'
     const params = []
+
+    params.push(`company=${company.trim().toUpperCase()}`) // ✅ required
+
     if (filterYear.value) params.push(`year=${filterYear.value}`)
     if (filterType.value) params.push(`type=${filterType.value}`)
+    if (filterSubType.value && filterType.value === 'Blue Collar') {
+      params.push(`subType=${filterSubType.value}`)
+    }
     if (filterMonth.value) params.push(`month=${filterMonth.value}`)
+
     if (params.length) url += '?' + params.join('&')
 
     const res = await api.get(url)
     roadmaps.value = res.data
   } catch (err) {
-    console.error(err)
+    console.error('❌ Failed to fetch roadmaps:', err)
   }
 }
 
+
 const openCreateDialog = () => {
   resetForm()
-  editMode.value = false
   dialog.value = true
+  editMode.value = false
 }
 
 const editRoadmap = (item) => {
   form.value = {
-    ...item,
+    year: item.year,
     months: [item.month],
-    type: formatType(item.type, item.subType)
+    type: item.type,
+    subType: item.subType || '',
+    roadmapHC: item.roadmapHC,
+    actualHC: item.actualHC,
+    hiringTargetHC: item.hiringTargetHC
   }
   selectedId.value = item._id
   editMode.value = true
@@ -185,34 +206,32 @@ const saveRoadmap = async () => {
       : user?.company
 
     if (!company) {
-      Swal.fire({ icon: 'error', title: 'Missing Company', text: 'Company not found in localStorage' })
+      Swal.fire({ icon: 'error', title: 'Missing Company', text: 'Company not found' })
       return
     }
 
-    const { type, subType } = parseType(form.value.type)
-
-    if (editMode.value) {
-      await api.put(`/roadmap/${selectedId.value}`, {
-        ...form.value,
-        month: form.value.months[0],
-        type,
-        subType,
-        company
-      })
-      Swal.fire('Success', 'Roadmap updated successfully', 'success')
-    } else {
-      for (const month of form.value.months) {
-        await api.post('/roadmap', {
-          ...form.value,
-          month,
-          type,
-          subType,
-          company
-        })
-      }
-      Swal.fire('Success', 'Roadmap created successfully', 'success')
+    const payload = {
+      year: form.value.year,
+      roadmapHC: form.value.roadmapHC,
+      actualHC: form.value.actualHC,
+      hiringTargetHC: form.value.hiringTargetHC,
+      type: form.value.type,
+      subType: form.value.type === 'Blue Collar' ? form.value.subType : null,
+      company
     }
 
+    if (editMode.value) {
+      await api.put(`/roadmaps/${selectedId.value}`, {
+        ...payload,
+        month: form.value.months[0]
+      })
+    } else {
+      for (const month of form.value.months) {
+        await api.post('/roadmaps', { ...payload, month })
+      }
+    }
+
+    Swal.fire('Success', `Roadmap ${editMode.value ? 'updated' : 'created'} successfully`, 'success')
     dialog.value = false
     fetchRoadmaps()
   } catch (err) {
@@ -220,7 +239,6 @@ const saveRoadmap = async () => {
     Swal.fire('Error', 'Failed to save roadmap', 'error')
   }
 }
-
 
 const deleteRoadmap = async (id) => {
   const result = await Swal.fire({
@@ -233,7 +251,7 @@ const deleteRoadmap = async (id) => {
 
   if (result.isConfirmed) {
     try {
-      await api.delete(`/roadmap/${id}`)
+      await api.delete(`/roadmaps/${id}`)
       Swal.fire('Deleted!', 'Roadmap entry has been deleted.', 'success')
       fetchRoadmaps()
     } catch (err) {
@@ -247,20 +265,13 @@ const resetForm = () => {
   form.value = {
     year: '',
     months: [],
+    type: '',
+    subType: '',
     roadmapHC: '',
     actualHC: '',
-    hiringTargetHC: '',
-    type: ''
+    hiringTargetHC: ''
   }
 }
-
-const parseType = (typeString) => {
-  if (typeString === 'White Collar') return { type: 'White Collar', subType: null }
-  if (typeString === 'Blue Collar - Sewer') return { type: 'Blue Collar', subType: 'Sewer' }
-  if (typeString === 'Blue Collar - Non-Sewer') return { type: 'Blue Collar', subType: 'Non-Sewer' }
-  return { type: typeString, subType: null }
-}
-
 
 onMounted(fetchRoadmaps)
 </script>

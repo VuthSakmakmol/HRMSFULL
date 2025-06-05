@@ -18,13 +18,20 @@ exports.getReport = async (req, res) => {
       subType = null,
       view = 'month',
       quarter = null,
-      month = null
+      month = null,
+      company
     } = req.method === 'POST' ? req.body : req.query;
+
+    if (!company) {
+      return res.status(400).json({ message: 'Company is required' });
+    }
+
+    const normalizedCompany = company.trim().toUpperCase();
 
     const months = Array.from({ length: 12 }, (_, i) => getMonthName(i));
     const columns = view === 'quarter' ? ['Q1', 'Q2', 'Q3', 'Q4'] : view === 'year' ? [String(year)] : months;
 
-    const roadmapQuery = { year, type };
+    const roadmapQuery = { year, type, company: normalizedCompany };
     if (type === 'Blue Collar' && subType) roadmapQuery.subType = subType;
     const roadmapData = await Roadmap.find(roadmapQuery);
 
@@ -38,9 +45,7 @@ exports.getReport = async (req, res) => {
       };
     });
 
-    const allCandidates = await Candidate.find({});
-
-    console.log("🧩 Total candidates in DB:", allCandidates.length);
+    const allCandidates = await Candidate.find({ company: normalizedCompany });
 
     const filtered = allCandidates.filter(c => {
       const appDate = c.progressDates?.get?.('Application');
@@ -53,8 +58,7 @@ exports.getReport = async (req, res) => {
       const matchesYear = appYear === +year;
       const matchesType =
         type === 'All' ||
-        (c.type === type &&
-         (type !== 'Blue Collar' || c.subType === subType));
+        (c.type === type && (type !== 'Blue Collar' || c.subType === subType));
 
       if (!matchesYear || !matchesType) return false;
       if (view === 'quarter' && quarter) return appQuarter === +quarter;
@@ -62,17 +66,6 @@ exports.getReport = async (req, res) => {
 
       return true;
     });
-
-    console.log("✅ Filtered candidates:", filtered.length);
-    if (filtered.length > 0) {
-      console.log("🔍 Example candidate:", {
-        fullName: filtered[0].fullName,
-        type: filtered[0].type,
-        subType: filtered[0].subType,
-        applicationDate: filtered[0].progressDates?.get?.('Application'),
-        source: filtered[0].applicationSource
-      });
-    }
 
     const initialArray = () => view === 'year' ? [0] : view === 'quarter' ? Array(4).fill(0) : Array(12).fill(0);
 

@@ -47,8 +47,10 @@ const props = defineProps({
   year: Number,
   quarter: Number,
   month: Number,
-  company: String
+  company: String,
+  roadmap: Object
 })
+
 
 const reportData = ref([])
 const dynamicColumns = ref([])
