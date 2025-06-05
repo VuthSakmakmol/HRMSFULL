@@ -216,9 +216,13 @@
                 </span>
                 <span v-else>-</span>
               </td>
-              <td>
-                <v-btn color="warning" size="small" @click="startEdit(c)">Edit</v-btn>
-                <v-btn color="error" size="small" @click="confirmDelete(c)">Delete</v-btn>
+              <td style="gap: 3px; display: flex;">
+                <v-btn icon size="small" color="primary" @click="startEdit(c)">
+                  <v-icon>mdi-pencil</v-icon>
+                </v-btn>
+                  <v-btn icon size="small" color="error" @click="confirmDelete(c)">
+                  <v-icon>mdi-delete</v-icon>
+                </v-btn>
               </td>
             </tr>
           </tbody>

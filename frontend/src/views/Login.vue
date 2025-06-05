@@ -1,7 +1,7 @@
 <template>
   <v-container class="d-flex justify-center align-center fill-height">
     <v-card width="400" class="pa-6">
-      <v-card-title class="text-center text-h6 font-weight-bold">🔐 HRMS Login</v-card-title>
+      <v-card-title class="text-center text-h6 font-weight-bold">Login</v-card-title>
 
       <v-form @submit.prevent="login">
         <v-text-field

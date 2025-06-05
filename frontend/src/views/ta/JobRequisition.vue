@@ -342,7 +342,7 @@
                   </v-progress-circular>
                 </div>
               </td>
-              <td>
+              <td style="display: flex; gap: 3px;">
                 <v-btn icon size="small" color="primary" @click="editJob(job)">
                   <v-icon>mdi-pencil</v-icon>
                 </v-btn>
