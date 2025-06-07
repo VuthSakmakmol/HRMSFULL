@@ -90,6 +90,17 @@
           {{ formatDate(item.performedAt) }}
         </template>
 
+        <template #item.actionType="{ item }">
+          <v-chip
+            :color="getActionColor(item.actionType)"
+            variant="outlined"
+            size="small"
+            class="text-uppercase font-weight-bold"
+          >
+            {{ item.actionType }}
+          </v-chip>
+        </template>
+
         <template #item.details="{ item }">
           <v-btn size="small" variant="text" color="primary" @click="viewDetails(item)">
             View
@@ -98,7 +109,7 @@
 
         <template #item.restore="{ item }">
           <v-btn
-            v-if="item.actionType === 'DELETE' && !restoredIds.includes(item._id)"
+            v-if="['DELETE', 'UPDATE'].includes(item.actionType) && !restoredIds.includes(item._id)"
             size="small"
             color="green"
             variant="text"
@@ -107,7 +118,7 @@
             Restore
           </v-btn>
           <span
-            v-else-if="item.actionType === 'DELETE'"
+            v-else-if="['DELETE', 'UPDATE'].includes(item.actionType)"
             class="text-grey text-caption font-italic"
           >
             Restored
@@ -147,7 +158,7 @@ const headers = [
   { title: 'Restore', value: 'restore', sortable: false }
 ]
 
-// API calls
+// Fetch logs
 const fetchLogs = async () => {
   try {
     const token = localStorage.getItem('token')
@@ -176,7 +187,6 @@ const fetchUserEmails = async () => {
   }
 }
 
-// Computed filter
 const filteredLogs = computed(() => {
   return logs.value.filter(log => {
     const inModel = !selectedCollection.value || log.collectionName === selectedCollection.value
@@ -190,16 +200,56 @@ const filteredLogs = computed(() => {
   })
 })
 
-// Utils
 const formatDate = (dateStr) => dayjs(dateStr).format('YYYY-MM-DD HH:mm')
 
 const viewDetails = (log) => {
+  const isUpdate = log.actionType === 'UPDATE';
+  const previous = log.previousData || {};
+  const current = log.newData || {};
+
+  // Combine all keys from both sides
+  const allKeys = Array.from(new Set([...Object.keys(previous), ...Object.keys(current)]));
+
+  const rows = allKeys.map(key => {
+    const oldVal = previous[key] ?? '';
+    const newVal = current[key] ?? '';
+    const isDiff = oldVal !== newVal;
+
+    return `
+      <tr>
+        <td style="padding: 8px 12px; background:#f8f8f8; font-weight: 500;">${key}</td>
+        <td style="padding: 8px 12px; border-left: 1px solid #eee; ${isDiff ? 'color: red; font-weight: 600;' : ''}">${oldVal}</td>
+        <td style="padding: 8px 12px; border-left: 1px solid #eee; ${isDiff ? 'color: red; font-weight: 600;' : ''}">${newVal}</td>
+      </tr>
+    `;
+  }).join('');
+
   Swal.fire({
-    title: 'Activity Details',
-    html: `<pre style="text-align:left">${JSON.stringify(log, null, 2)}</pre>`,
-    width: 800
-  })
-}
+    title: '📝 Activity Details',
+    html: `
+      <div style="text-align:left; border:1px solid #eee; border-radius:8px; padding:0;">
+        <table style="width:100%; border-collapse:collapse; font-size:14px;">
+          <thead>
+            <tr style="background:#f0f0f0;">
+              <th style="padding: 10px 12px; text-align: left;">Field</th>
+              <th style="padding: 10px 12px; text-align: left;">Before</th>
+              <th style="padding: 10px 12px; text-align: left;">After</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+    `,
+    width: 800,
+    confirmButtonText: 'Close',
+    customClass: {
+      popup: 'rounded-md'
+    }
+  });
+};
+
 
 const restoreItem = async (log) => {
   try {
@@ -241,7 +291,16 @@ const getRowClass = (item) => {
   }
 }
 
-// Init
+const getActionColor = (action) => {
+  switch (action) {
+    case 'CREATE': return 'blue'
+    case 'UPDATE': return 'orange'
+    case 'DELETE': return 'red'
+    case 'RESTORE': return 'green'
+    default: return 'grey'
+  }
+}
+
 onMounted(() => {
   fetchLogs()
   fetchUserEmails()
@@ -257,5 +316,10 @@ pre {
   padding: 12px;
   border-radius: 4px;
   border: 1px solid #ccc;
+}
+
+.v-data-table .v-chip {
+  border-width: 1.5px;
+  letter-spacing: 0.5px;
 }
 </style>
