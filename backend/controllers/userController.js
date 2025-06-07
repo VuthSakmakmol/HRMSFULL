@@ -10,6 +10,18 @@ exports.getAll = async (req, res) => {
   }
 };
 
+// ✅ Get all user emails + names for dropdown
+exports.getUserEmails = async (req, res) => {
+  try {
+    const users = await User.find({ role: { $ne: 'GeneralManager' } }, 'name email').sort({ email: 1 });
+    res.json(users); // return full objects with name and email
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch user emails', error: err.message });
+  }
+};
+
+
+
 // ✅ Create Manager or HR Officer
 exports.create = async (req, res) => {
   try {

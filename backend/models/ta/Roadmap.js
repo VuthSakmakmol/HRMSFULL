@@ -8,7 +8,8 @@ const roadmapSchema = new mongoose.Schema({
   roadmapHC: { type: Number, required: true },       // Forecast
   actualHC: { type: Number, required: true },        // Actual hired
   hiringTargetHC: { type: Number, required: true },   // Target to be filled
-  company: {type: String, required: true}
-});
+  company: {type: String, required: true},
+  
+},{ timestamps: true });
 
 module.exports = mongoose.model('Roadmap', roadmapSchema);

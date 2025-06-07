@@ -21,12 +21,14 @@ exports.login = async (req, res) => {
     const token = jwt.sign(
       {
         userId: user._id,
+        email: user.email, // ✅ Add this line
         role: user.role,
         company: user.role === 'GeneralManager' ? null : user.company
       },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
+
 
 
     res.json({

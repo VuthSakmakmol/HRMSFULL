@@ -14,7 +14,8 @@ const routes = [
     component: DefaultLayout,
     children: [
       { path: 'dashboard', component: () => import('@/views/GMDashboard.vue') },
-      { path: 'users', component: () => import('@/views/UserManagement.vue') }
+      { path: 'users', component: () => import('@/views/UserManagement.vue') },
+      { path: 'activity-log', component: () => import('@/views/ta/gm/ActivityLog.vue') }
     ]
   },
 

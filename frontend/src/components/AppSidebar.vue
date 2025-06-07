@@ -102,6 +102,15 @@
               </div>
             </template>
           </v-list-item>
+
+          <v-list-item :to="{ path: '/gm/activity-log' }">
+            <template #title>
+              <div class="sidebar-link">
+                <font-awesome-icon :icon="['fas', 'lock']" class="sidebar-icon" />
+                Activity Log
+              </div>
+            </template>
+          </v-list-item>
         </v-list-group>
       </template>
     </v-list>

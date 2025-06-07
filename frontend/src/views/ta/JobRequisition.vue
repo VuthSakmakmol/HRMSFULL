@@ -7,7 +7,6 @@
         <v-col cols="auto">
           <v-btn @click="setActive('White Collar')" :color="activeTab === 'White Collar' ? 'primary' : ''">
             White Collar
-            
             <v-badge v-if="alerts['White Collar']" dot color="red" class="ml-2" />
           </v-btn>
         </v-col>

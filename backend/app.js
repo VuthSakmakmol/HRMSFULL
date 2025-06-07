@@ -37,6 +37,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/report', require('./routes/ta/reportRoutes'))
 app.use('/api/recruiters', require('./routes/ta/recruiterRoutes'))
 app.use('/api/candidates', require('./routes/ta/candidateRoutes'));
+app.use('/api/activity-logs', require('./routes/ta/activityLogRoutes'));
+
 
 
 // Optional: Health check
@@ -46,8 +48,7 @@ app.get('/', (req, res) => {
 
 // ─── MONGODB CONNECTION ────────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
+
 })
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
