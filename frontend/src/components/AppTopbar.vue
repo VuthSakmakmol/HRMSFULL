@@ -1,11 +1,11 @@
 <template>
   <v-app-bar
-    flat
-    elevation="2"
-    position="sticky"
-    class="app-bar-shadow"
-    style="top: 0"
-  >
+  app
+  flat
+  elevation="2"
+  class="app-bar-shadow"
+>
+
     <!-- ☰ Menu Button -->
     <v-btn icon @click="$emit('toggle-sidebar')">
       <v-icon>mdi-menu</v-icon>
@@ -90,4 +90,12 @@ const logout = async () => {
   background-color: #ffffff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
+
+.v-main {
+  background-color: #f4f6f9;
+  flex-grow: 1;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
 </style>

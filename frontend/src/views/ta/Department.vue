@@ -3,8 +3,8 @@
     <h2 class="text-h6 font-weight-bold mb-4">📋 Department List</h2>
 
     <v-card class="rounded-lg pa-4">
-      <!-- Search + Export + Reset -->
-      <v-row class="mb-4" align="center" justify="space-between">
+      <!-- Search + Buttons -->
+      <v-row class="mb-4" align-center justify="space-between">
         <v-col cols="12" sm="6" md="4">
           <v-text-field
             v-model="search"
@@ -16,12 +16,36 @@
             style="max-width: 250px"
           />
         </v-col>
-
-        <v-col cols="auto" class="d-flex gap-2">
-          <v-btn color="info" variant="outlined" @click="resetFilters">Reset Filters</v-btn>
-          <v-btn color="success" @click="exportToExcel" prepend-icon="mdi-file-excel">
+        <v-col cols="auto" class="d-flex" style="gap: 12px">
+          <v-btn color="primary" variant="outlined" @click="showFilterForm = !showFilterForm">
+            <v-icon start>mdi-filter</v-icon>
+            {{ showFilterForm ? 'Close Filter' : 'Filter Departments' }}
+          </v-btn>
+          <v-btn color="info" variant="outlined" @click="resetFilters">
+            Reset Filters
+          </v-btn>
+          <v-btn color="success" variant="outlined" @click="exportToExcel" prepend-icon="mdi-file-excel">
             Export Excel
           </v-btn>
+        </v-col>
+      </v-row>
+
+      <!-- Filter Form -->
+      <v-row v-if="showFilterForm" class="mb-4" dense>
+        <v-col cols="12" md="2">
+          <v-text-field v-model="columnFilters.name" label="Department" variant="outlined" clearable density="compact" hide-details />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field v-model="columnFilters.type" label="Type" variant="outlined" clearable density="compact" hide-details />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field v-model="columnFilters.subType" label="Sub-Type" variant="outlined" clearable density="compact" hide-details />
+        </v-col>
+        <!-- <v-col cols="12" md="2">
+          <v-text-field v-model="columnFilters.company" label="Company" variant="outlined" clearable density="compact" hide-details />
+        </v-col> -->
+        <v-col cols="12" md="3">
+          <v-text-field v-model="columnFilters.jobTitles" label="Job Title" variant="outlined" clearable density="compact" hide-details />
         </v-col>
       </v-row>
 
@@ -34,28 +58,18 @@
               <th>Department</th>
               <th>Type</th>
               <th>Sub-Type</th>
-              <th>Company</th>
+              <!-- <th>Company</th> -->
               <th>Job Titles</th>
               <th>Action</th>
             </tr>
-            <tr>
-              <th></th>
-              <th><v-autocomplete v-model="columnFilters.name" :items="getColumnOptions('name')" dense hide-details clearable variant="solo" flat placeholder="Filter" /></th>
-              <th><v-autocomplete v-model="columnFilters.type" :items="getColumnOptions('type')" dense hide-details clearable variant="solo" flat placeholder="Filter" /></th>
-              <th><v-autocomplete v-model="columnFilters.subType" :items="getColumnOptions('subType')" dense hide-details clearable variant="solo" flat placeholder="Filter" /></th>
-              <th><v-autocomplete v-model="columnFilters.company" :items="getColumnOptions('company')" dense hide-details clearable variant="solo" flat placeholder="Filter" /></th>
-              <th><v-autocomplete v-model="columnFilters.jobTitles" :items="getColumnOptions('jobTitles')" dense hide-details clearable variant="solo" flat placeholder="Filter" /></th>
-              <th></th>
-            </tr>
           </thead>
-
           <tbody>
             <tr v-for="(item, index) in filteredDepartments" :key="item._id">
               <td>{{ index + 1 }}</td>
               <td>{{ item.name }}</td>
               <td>{{ item.type }}</td>
               <td>{{ item.subType }}</td>
-              <td>{{ item.company }}</td>
+              <!-- <td>{{ item.company }}</td> -->
               <td>
                 <div v-if="!expanded[item._id]" class="text-truncate">
                   <v-chip
@@ -73,24 +87,13 @@
                   <v-chip v-if="!item.jobTitles?.length" size="x-small" variant="outlined" color="grey">None</v-chip>
                 </div>
                 <div v-else class="d-flex flex-column">
-                  <div
-                    v-for="title in item.jobTitles || []"
-                    :key="title"
-                    class="text-body-2 mb-1"
-                  >
+                  <div v-for="title in item.jobTitles || []" :key="title" class="text-body-2 mb-1">
                     {{ title }}
                   </div>
                 </div>
               </td>
-
               <td>
-                <v-btn
-                  size="x-small"
-                  variant="text"
-                  color="primary"
-                  icon
-                  @click="toggleRow(item._id)"
-                >
+                <v-btn size="x-small" variant="text" color="primary" icon @click="toggleRow(item._id)">
                   <v-icon>{{ expanded[item._id] ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
                 </v-btn>
               </td>
@@ -112,12 +115,13 @@ const search = ref('')
 const expanded = ref({})
 const role = localStorage.getItem('role')
 const selectedCompany = ref(localStorage.getItem('company'))
+const showFilterForm = ref(false)
 
 const columnFilters = ref({
   name: '',
   type: '',
   subType: '',
-  company: '',
+  // company: '',
   jobTitles: '',
 })
 
@@ -141,23 +145,9 @@ const resetFilters = () => {
     name: '',
     type: '',
     subType: '',
-    company: '',
-    jobtitle: '',
+    // company: '',
+    jobTitles: '',
   }
-}
-
-const getColumnOptions = (column) => {
-  const values = new Set()
-  departments.value.forEach(dept => {
-    if (column === 'jobTitles' && Array.isArray(dept.jobTitles)) {
-      dept.jobTitles.forEach(title => values.add(title))
-    } else if (column === 'recruiters' && Array.isArray(dept.recruiters)) {
-      dept.recruiters.forEach(r => values.add(r))
-    } else if (dept[column]) {
-      values.add(dept[column])
-    }
-  })
-  return Array.from(values).sort()
 }
 
 const filteredDepartments = computed(() => {

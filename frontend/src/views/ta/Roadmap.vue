@@ -1,31 +1,33 @@
 <template>
-  <v-container>
+  <v-container class="pa-4" fluid>
     <!-- Title + Add Button -->
-    <v-row class="mb-4" align="center" justify="space-between">
+    <v-row class="mb-4" align-center="center" justify="space-between">
       <v-col cols="auto">
         <h2 class="text-h6 font-weight-bold">Roadmap HC Management</h2>
       </v-col>
+    </v-row>
+    <v-row>
       <v-col cols="auto">
-        <v-btn color="primary" @click="openCreateDialog">Add New</v-btn>
-      </v-col>
+        <v-btn color="primary" @click="openCreateDialog" variant="outlined" class="hover-filled addnew-hover">Add New Roadmap</v-btn>
+    </v-col>
     </v-row>
 
     <!-- Filters -->
     <v-row dense class="mb-4">
-      <v-col cols="12" md="3">
-        <v-select v-model="filterYear" :items="yearOptions" label="Filter by Year" clearable />
+      <v-col cols="12" md="2">
+        <v-select v-model="filterYear" :items="yearOptions" label="Filter by Year" clearable variant="outlined" density="compact" hide-details dense />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-select v-model="filterType" :items="['White Collar', 'Blue Collar']" label="Filter by Type" clearable variant="outlined" density="compact" hide-details dense />
+      </v-col>
+      <v-col cols="12" md="2" v-if="filterType === 'Blue Collar'">
+        <v-select v-model="filterSubType" :items="['Sewer', 'Non-Sewer']" label="Filter by SubType" clearable variant="outlined" density="compact" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-select v-model="filterMonth" :items="monthOptions" label="Filter by Month" clearable variant="outlined" density="compact"/>
       </v-col>
       <v-col cols="12" md="3">
-        <v-select v-model="filterType" :items="['White Collar', 'Blue Collar']" label="Filter by Type" clearable />
-      </v-col>
-      <v-col cols="12" md="3" v-if="filterType === 'Blue Collar'">
-        <v-select v-model="filterSubType" :items="['Sewer', 'Non-Sewer']" label="Filter by SubType" clearable />
-      </v-col>
-      <v-col cols="12" md="3">
-        <v-select v-model="filterMonth" :items="monthOptions" label="Filter by Month" clearable />
-      </v-col>
-      <v-col cols="12" md="3">
-        <v-btn color="primary" @click="fetchRoadmaps">Apply Filter</v-btn>
+        <v-btn color="green" class="filled-hover filter-hover" variant="outlined" @click="fetchRoadmaps">Apply Filter</v-btn>
       </v-col>
     </v-row>
 
@@ -297,4 +299,18 @@ onMounted(fetchRoadmaps)
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Filter */
+.hover-filled {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+.addnew-hover:hover {
+  background-color: #1976d2 !important;
+  color: white !important;
+}
+.filter-hover:hover {
+  background-color: #43a047 !important;
+  color: white !important;
+ }
+
 </style>

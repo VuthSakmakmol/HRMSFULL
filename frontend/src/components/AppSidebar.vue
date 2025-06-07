@@ -3,6 +3,7 @@
     v-model="drawerInternal"
     :temporary="isMobile"
     :permanent="!isMobile"
+    :mini-variant="!isMobile && !drawerInternal"
     app
     class="pa-3"
   >
@@ -14,9 +15,8 @@
       </v-btn>
     </div>
 
+    <!-- Navigation -->
     <v-list nav dense>
-
-      <!-- 🔹 TA Section -->
       <v-list-group>
         <template #activator="{ props }">
           <v-list-item v-bind="props">
@@ -66,15 +66,14 @@
         <v-list-item :to="{ path: '/ta/roadmap' }">
           <template #title>
             <div class="sidebar-link">
-              <font-awesome-icon :icon="['fas', 'building']" class="sidebar-icon" />
+              <font-awesome-icon :icon="['fas', 'route']" class="sidebar-icon" />
               Roadmap
             </div>
           </template>
         </v-list-item>
-
       </v-list-group>
 
-      <!-- 🔹 General Manager Section -->
+      <!-- GM Section -->
       <template v-if="role === 'GeneralManager'">
         <v-list-group>
           <template #activator="{ props }">
@@ -105,22 +104,20 @@
           </v-list-item>
         </v-list-group>
       </template>
-
     </v-list>
   </v-navigation-drawer>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useDisplay } from 'vuetify'
+import { useRoute } from 'vue-router'
 
-// Props
 const props = defineProps({
   drawer: Boolean,
   role: String,
   company: String,
 })
-
 const emit = defineEmits(['update:drawer'])
 
 const drawerInternal = computed({
@@ -130,6 +127,11 @@ const drawerInternal = computed({
 
 const { mobile } = useDisplay()
 const isMobile = computed(() => mobile.value)
+
+const route = useRoute()
+watch(route, () => {
+  if (isMobile.value) drawerInternal.value = false
+})
 </script>
 
 <style scoped>
@@ -138,6 +140,7 @@ const isMobile = computed(() => mobile.value)
   border-right: 1px solid #a6a5a5;
   color: #212121;
   max-width: 260px;
+  overflow-y: auto;
 }
 
 .v-list-item {

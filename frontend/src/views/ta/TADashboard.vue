@@ -1,9 +1,9 @@
 <template>
-  <v-container fluid>
+<v-container fluid class="pa-2 pt-0">
     <!-- 🔹 Filters -->
-    <v-sheet elevation="2" class="pa-2 mb-4 sticky-filter" color="white">
+    <v-sheet elevation="2" class=" sticky-filter" color="white">
       <v-row dense>
-        <v-col cols="12" sm="4" md="2.4">
+        <v-col cols="6" sm="4" md="2.4">
           <v-select
             v-model="filterType"
             :items="filterOptions"
@@ -14,7 +14,7 @@
           />
         </v-col>
 
-        <v-col cols="12" sm="4" md="2.4">
+        <v-col cols="6" sm="4" md="2.4">
           <v-select
             v-model="filterRecruiter"
             :items="recruiterOptions"
@@ -26,7 +26,7 @@
           />
         </v-col>
 
-        <v-col cols="12" sm="4" md="2.4">
+        <v-col cols="6" sm="4" md="2.4">
           <v-autocomplete
             v-model="filterDepartment"
             :items="departmentOptions"
@@ -48,7 +48,6 @@
                 label="From"
                 readonly
                 v-bind="props"
-                prepend-icon="mdi-calendar"
                 variant="outlined"
                 density="compact"
                 hide-details
@@ -66,7 +65,6 @@
                 label="To"
                 readonly
                 v-bind="props"
-                prepend-icon="mdi-calendar"
                 variant="outlined"
                 density="compact"
                 hide-details
@@ -78,7 +76,7 @@
       </v-row>
 
       <v-row dense class="mb-2">
-        <v-col cols="12" md="2">
+        <v-col cols="6" md="2">
           <v-select
             v-model="viewMode"
             :items="['month', 'quarter', 'year']"
@@ -90,7 +88,7 @@
         </v-col>
 
 
-        <v-col cols="12" md="2">
+        <v-col cols="6" md="2">
           <v-select
             v-model="selectedYear"
             :items="yearOptions"
@@ -274,8 +272,9 @@ watch([filterType, filterRecruiter, filterDepartment, from, to], fetchDashboardS
 <style scoped>
 .sticky-filter {
   position: sticky;
-  top: 64px;
+  top: 5px; /* match your AppTopbar height */
   z-index: 10;
   background-color: white;
+  margin-top: -46px; /* remove excessive gap */
 }
 </style>

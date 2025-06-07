@@ -1,7 +1,9 @@
 <template>
   <v-app>
-    <div class="layout-wrapper">
-      <!-- Sidebar: Fixed, scrollable -->
+    <AppTopbar @toggle-sidebar="toggleSidebar" />
+
+    <v-layout class="main-layout">
+      <!-- Sidebar -->
       <AppSidebar
         v-model:drawer="drawer"
         :role="role"
@@ -9,24 +11,20 @@
         class="sidebar-fixed"
       />
 
-      <!-- Content: Scrollable independently -->
-      <div class="main-scrollable">
-        <AppTopbar @toggle-sidebar="toggleSidebar" />
-
-        <v-main>
-          <v-container fluid class="pa-4">
-            <router-view />
-          </v-container>
-        </v-main>
-      </div>
-    </div>
+      <!-- Main Content Area -->
+      <v-main class="main-content">
+        <v-container fluid class="pa-0 ma-0">
+          <router-view />
+        </v-container>
+      </v-main>
+    </v-layout>
   </v-app>
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import AppTopbar from '@/components/AppTopbar.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
-import { ref } from 'vue'
 
 const drawer = ref(true)
 const role = localStorage.getItem('role') || 'Unknown'
@@ -38,30 +36,30 @@ const toggleSidebar = () => {
 </script>
 
 <style scoped>
-.layout-wrapper {
-  display: flex;
+html, body, .v-application {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+.main-layout {
   height: 100vh;
   overflow: hidden;
 }
 
 .sidebar-fixed {
-  position: sticky;
-  top: 0;
   height: 100vh;
   overflow-y: auto;
-  z-index: 2;
+  border-right: 1px solid #ccc;
+  background-color: #e9f8f8;
+  max-width: 260px;
 }
 
-.main-scrollable {
+.main-content {
   flex: 1;
-  height: 100vh;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.v-main {
   background-color: #f4f6f9;
-  flex-grow: 1;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
 }
 </style>
