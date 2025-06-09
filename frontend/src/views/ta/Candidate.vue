@@ -37,17 +37,36 @@
         </v-col>
 
         <v-col cols="auto">
-        <v-btn
-          color="green"
-          variant="outlined"
-          class="text-white font-weight-bold hover-filled hover-excel "
-          elevation="0"
-          @click="exportToExcel"
-        >
-          <v-icon start>mdi-file-excel</v-icon>
-          Export Excel
-        </v-btn>
-      </v-col>
+          <v-btn
+            color="green"
+            variant="outlined"
+            class="text-white font-weight-bold hover-filled hover-excel "
+            elevation="0"
+            @click="exportToExcel"
+          >
+            <v-icon start>mdi-file-excel</v-icon>
+            Export Excel
+          </v-btn>
+        </v-col>
+        <v-col cols="auto">
+          <v-btn
+            color="orange"
+            variant="outlined"
+            class="text-white font-weight-bold hover-filled hover-excel"
+            elevation="0"
+            @click="$refs.excelInput.click()"
+          >
+            <v-icon start>mdi-upload</v-icon>
+            Import Excel
+          </v-btn>
+          <input
+            ref="excelInput"
+            type="file"
+            accept=".xlsx, .xls"
+            @change="handleImportExcel"
+            style="display: none"
+          />
+        </v-col>
       </v-row>
       
 
@@ -336,7 +355,9 @@ const jobLockedMap = ref({})
 const openStagePopup = (stage, candidate) => {
   selectedStage.value = stage
   selectedCandidate.value = candidate
-  dateModel.value = dayjs(candidate.progressDates?.[stage]).format('YYYY-MM-DD') || dayjs().format('YYYY-MM-DD')
+  const rawDate = candidate.progressDates?.[stage]
+  const parsed = dayjs(rawDate)
+  dateModel.value = parsed.isValid() ? parsed.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD')
   dateMenu.value = true
 }
 
@@ -627,10 +648,10 @@ const exportToExcel = () => {
     JobOffer: formatDate(c.progressDates?.JobOffer),
     Hired: formatDate(c.progressDates?.Hired),
     Onboard: formatDate(c.progressDates?.Onboard),
-    FinalDecision: c.hireDecision || '-',
+    FinalDecision: c.hireDecision || '',
     StartDuration: (c.progressDates?.Application && c.progressDates?.Onboard)
       ? `${daysBetween(c.progressDates.Onboard, c.progressDates.Application)} days`
-      : '-'
+      : ''
   }))
 
   const worksheet = XLSX.utils.json_to_sheet(data)
@@ -640,6 +661,78 @@ const exportToExcel = () => {
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
   const blob = new Blob([excelBuffer], { type: 'application/octet-stream' })
   saveAs(blob, 'Candidates.xlsx')
+}
+const handleImportExcel = async (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+
+  try {
+    const data = await file.arrayBuffer()
+    const workbook = XLSX.read(data, { type: 'array' })
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json(sheet)
+
+    const user = JSON.parse(localStorage.getItem('user'))
+    const selectedCompany = localStorage.getItem('company')
+    const company = user?.role === 'GeneralManager' ? selectedCompany : user?.company
+
+    if (!company) {
+      Swal.fire({ icon: 'error', title: 'Missing company in localStorage' })
+      return
+    }
+
+    const imported = []
+
+    for (const [index, row] of rows.entries()) {
+      const matchedJob = jobRequisitions.value.find(j => j.jobRequisitionId === row.JobID)
+      if (!matchedJob) {
+        console.warn(`Row ${index + 1}: No matching job found for JobID: ${row.JobID}`)
+        continue
+      }
+
+      const payload = {
+        fullName: row.FullName || '',
+        recruiter: row.Recruiter || '',
+        applicationSource: row.Source || '',
+        jobRequisitionId: matchedJob._id,
+        jobRequisitionCode: matchedJob.jobRequisitionId,
+        department: matchedJob.departmentName,
+        jobTitle: matchedJob.jobTitle,
+        company,
+        type: matchedJob.type,
+        subType: matchedJob.subType || null,
+        progressDates: {
+          Application: row.Application || new Date(),
+          ManagerReview: row.ManagerReview || null,
+          Interview: row.Interview || null,
+          JobOffer: row.JobOffer || null,
+          Hired: row.Hired || null,
+          Onboard: row.Onboard || null
+        }
+      }
+
+      try {
+        const res = await axios.post('/candidates', payload)
+        imported.push(res.data)
+      } catch (err) {
+        console.error(`❌ Import row ${index + 1} failed:`, err.response?.data || err.message)
+      }
+    }
+
+    await fetchCandidates()
+
+    Swal.fire({
+      icon: 'success',
+      title: `✅ Imported ${imported.length} candidates to database`,
+      timer: 2000,
+      showConfirmButton: false
+    })
+  } catch (err) {
+    console.error(err)
+    Swal.fire({ icon: 'error', title: 'Import failed', text: err.message })
+  }
+
+  event.target.value = ''
 }
 
 

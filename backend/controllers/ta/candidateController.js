@@ -63,7 +63,7 @@ exports.create = async (req, res) => {
       actionType: 'CREATE',
       collectionName: 'Candidate',
       documentId: newCandidate._id,
-      performedBy: req.user.email,
+      performedBy: req.user?.email || 'Excel Import',
       company,
       previousData: null,
       newData: newCandidate.toObject()
@@ -119,7 +119,7 @@ exports.update = async (req, res) => {
       actionType: 'UPDATE',
       collectionName: 'Candidate',
       documentId: candidate._id,
-      performedBy: req.user.email,
+      performedBy: req.user?.email || 'Excel Import',
       company: candidate.company,
       previousData,
       newData: candidate.toObject()
@@ -156,7 +156,7 @@ exports.remove = async (req, res) => {
       actionType: 'DELETE',
       collectionName: 'Candidate',
       documentId: candidate._id,
-      performedBy: req.user.email,
+      performedBy: req.user?.email || 'Excel Import',
       company: candidate.company,
       previousData,
       newData: null
@@ -171,6 +171,7 @@ exports.remove = async (req, res) => {
     res.status(500).json({ message: 'Error deleting candidate', error: err.message });
   }
 };
+
 // UPDATE STAGE
 exports.updateStage = async (req, res) => {
   try {
@@ -178,6 +179,7 @@ exports.updateStage = async (req, res) => {
     const candidate = await Candidate.findById(req.params.id);
     if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
 
+    // ⛔ Block if final decision is refusal
     if (['Candidate Refusal', 'Not Hired'].includes(candidate.hireDecision)) {
       return res.status(403).json({ message: 'Candidate is marked as refused or not hired' });
     }
@@ -188,7 +190,7 @@ exports.updateStage = async (req, res) => {
       return res.status(403).json({ message: 'Job requisition is cancelled' });
     }
 
-    const previousData = candidate.toObject(); // ✅ snapshot before any changes
+    const previousData = candidate.toObject(); // ✅ snapshot before changes
 
     const stageOrder = ['Application', 'ManagerReview', 'Interview', 'JobOffer', 'Hired', 'Onboard'];
     const currentIndex = stageOrder.indexOf(candidate.progress);
@@ -198,7 +200,13 @@ exports.updateStage = async (req, res) => {
       candidate.progress = stage;
     }
 
-    candidate.progressDates.set(stage, date || new Date());
+    // ✅ Safe date handling
+    const safeDate = new Date(date);
+    if (isNaN(safeDate)) {
+      return res.status(400).json({ message: 'Invalid date format provided' });
+    }
+
+    candidate.progressDates.set(stage, safeDate);
 
     if (stage === 'JobOffer' && !candidate._offerCounted) {
       const activeOffers = await Candidate.countDocuments({
@@ -231,13 +239,14 @@ exports.updateStage = async (req, res) => {
       actionType: 'UPDATE',
       collectionName: 'Candidate',
       documentId: candidate._id,
-      performedBy: req.user.email,
+      performedBy: req.user?.email || 'Excel Import',
       company: candidate.company,
       previousData,
       newData: candidate.toObject()
     });
 
     res.json({ message: `${stage} date updated`, candidate });
+
   } catch (err) {
     console.error('❌ updateStage error:', err);
     res.status(500).json({ message: 'Internal server error', error: err.message });

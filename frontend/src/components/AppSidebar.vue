@@ -94,14 +94,14 @@
             </template>
           </v-list-item>
 
-          <v-list-item disabled>
+          <!-- <v-list-item disabled>
             <template #title>
               <div class="sidebar-link">
                 <font-awesome-icon :icon="['fas', 'lock']" class="sidebar-icon" />
                 Permissions
               </div>
             </template>
-          </v-list-item>
+          </v-list-item> -->
 
           <v-list-item :to="{ path: '/gm/activity-log' }">
             <template #title>

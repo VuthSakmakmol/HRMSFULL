@@ -36,7 +36,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import axios from '@/utils/axios' // ✅ Correct alias path
+import axios from '@/utils/axios'
 import { useRouter } from 'vue-router'
 
 const email = ref('')

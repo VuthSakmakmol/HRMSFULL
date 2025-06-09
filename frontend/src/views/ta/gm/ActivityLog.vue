@@ -6,73 +6,22 @@
       <!-- Filters -->
       <v-row class="mb-4" dense>
         <v-col cols="12" sm="4" md="3">
-          <v-text-field
-            v-model="search"
-            label="Search..."
-            variant="outlined"
-            density="compact"
-            hide-details
-          />
+          <v-text-field v-model="search" label="Search..." variant="outlined" density="compact" hide-details />
         </v-col>
-
         <v-col cols="12" sm="4" md="3">
-          <v-select
-            v-model="selectedCollection"
-            :items="collectionOptions"
-            label="Model"
-            variant="outlined"
-            density="compact"
-            hide-details
-            clearable
-          />
+          <v-select v-model="selectedCollection" :items="collectionOptions" label="Model" variant="outlined" density="compact" hide-details clearable />
         </v-col>
-
         <v-col cols="12" sm="4" md="3">
-          <v-select
-            v-model="selectedAction"
-            :items="['CREATE', 'UPDATE', 'DELETE', 'RESTORE']"
-            label="Action"
-            variant="outlined"
-            density="compact"
-            hide-details
-            clearable
-          />
+          <v-select v-model="selectedAction" :items="['CREATE', 'UPDATE', 'DELETE', 'RESTORE']" label="Action" variant="outlined" density="compact" hide-details clearable />
         </v-col>
-
         <v-col cols="12" sm="4" md="3">
-          <v-select
-            v-model="selectedUser"
-            :items="userOptions"
-            item-title="title"
-            item-value="value"
-            label="Filter by User"
-            variant="outlined"
-            density="compact"
-            hide-details
-            clearable
-          />
+          <v-select v-model="selectedUser" :items="userOptions" item-title="title" item-value="value" label="Filter by User" variant="outlined" density="compact" hide-details clearable />
         </v-col>
-
         <v-col cols="12" sm="6" md="3">
-          <v-text-field
-            v-model="startDate"
-            label="From Date"
-            type="date"
-            variant="outlined"
-            density="compact"
-            hide-details
-          />
+          <v-text-field v-model="startDate" label="From Date" type="date" variant="outlined" density="compact" hide-details />
         </v-col>
-
         <v-col cols="12" sm="6" md="3">
-          <v-text-field
-            v-model="endDate"
-            label="To Date"
-            type="date"
-            variant="outlined"
-            density="compact"
-            hide-details
-          />
+          <v-text-field v-model="endDate" label="To Date" type="date" variant="outlined" density="compact" hide-details />
         </v-col>
       </v-row>
 
@@ -89,24 +38,14 @@
         <template #item.performedAt="{ item }">
           {{ formatDate(item.performedAt) }}
         </template>
-
         <template #item.actionType="{ item }">
-          <v-chip
-            :color="getActionColor(item.actionType)"
-            variant="outlined"
-            size="small"
-            class="text-uppercase font-weight-bold"
-          >
+          <v-chip :color="getActionColor(item.actionType)" variant="outlined" size="small" class="text-uppercase font-weight-bold">
             {{ item.actionType }}
           </v-chip>
         </template>
-
         <template #item.details="{ item }">
-          <v-btn size="small" variant="text" color="primary" @click="viewDetails(item)">
-            View
-          </v-btn>
+          <v-btn size="small" variant="text" color="primary" @click="viewDetails(item)">View</v-btn>
         </template>
-
         <template #item.restore="{ item }">
           <v-btn
             v-if="['DELETE', 'UPDATE'].includes(item.actionType) && !restoredIds.includes(item._id)"
@@ -117,10 +56,7 @@
           >
             Restore
           </v-btn>
-          <span
-            v-else-if="['DELETE', 'UPDATE'].includes(item.actionType)"
-            class="text-grey text-caption font-italic"
-          >
+          <span v-else-if="['DELETE', 'UPDATE'].includes(item.actionType)" class="text-grey text-caption font-italic">
             Restored
           </span>
         </template>
@@ -134,8 +70,12 @@ import { ref, computed, onMounted } from 'vue'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
 
-// State
+dayjs.extend(utc)
+dayjs.extend(timezone)
+
 const logs = ref([])
 const search = ref('')
 const selectedCompany = ref(localStorage.getItem('company') || 'CAM-TAC')
@@ -158,7 +98,6 @@ const headers = [
   { title: 'Restore', value: 'restore', sortable: false }
 ]
 
-// Fetch logs
 const fetchLogs = async () => {
   try {
     const token = localStorage.getItem('token')
@@ -177,7 +116,6 @@ const fetchUserEmails = async () => {
     const res = await axios.get('/users/emails', {
       headers: { Authorization: `Bearer ${token}` }
     })
-
     userOptions.value = res.data.map(user => ({
       title: `${user.name} (${user.email})`,
       value: user.email
@@ -192,38 +130,43 @@ const filteredLogs = computed(() => {
     const inModel = !selectedCollection.value || log.collectionName === selectedCollection.value
     const inAction = !selectedAction.value || log.actionType === selectedAction.value
     const inUser = !selectedUser.value || log.performedBy === selectedUser.value
-    const logDate = dayjs(log.performedAt)
+    const logDate = dayjs(log.performedAt).tz('Asia/Phnom_Penh')
     const inDate =
-      (!startDate.value || logDate.isAfter(dayjs(startDate.value).subtract(1, 'day'))) &&
-      (!endDate.value || logDate.isBefore(dayjs(endDate.value).add(1, 'day')))
+      (!startDate.value || logDate.isAfter(dayjs(startDate.value).subtract(1, 'day')))
+      && (!endDate.value || logDate.isBefore(dayjs(endDate.value).add(1, 'day')))
     return inModel && inAction && inUser && inDate
   })
 })
 
-const formatDate = (dateStr) => dayjs(dateStr).format('YYYY-MM-DD HH:mm')
+const formatDate = (dateStr) => dayjs(dateStr).tz('Asia/Phnom_Penh').format('dddd, YYYY-MM-DD HH:mm')
 
 const viewDetails = (log) => {
-  const isUpdate = log.actionType === 'UPDATE';
-  const previous = log.previousData || {};
-  const current = log.newData || {};
-
-  // Combine all keys from both sides
-  const allKeys = Array.from(new Set([...Object.keys(previous), ...Object.keys(current)]));
-
+  const previous = log.previousData || {}
+  const current = log.newData || {}
+  const allKeys = Array.from(new Set([...Object.keys(previous), ...Object.keys(current)]))
   const rows = allKeys.map(key => {
-    const oldVal = previous[key] ?? '';
-    const newVal = current[key] ?? '';
-    const isDiff = oldVal !== newVal;
+    let oldVal = previous[key] ?? ''
+    let newVal = current[key] ?? ''
 
+    if (key === 'progressDates') {
+      oldVal = formatDateValues(oldVal)
+      newVal = formatDateValues(newVal)
+    }
+
+    if (key === 'createdAt' || key === 'updatedAt') {
+      oldVal = oldVal ? formatDate(oldVal) : ''
+      newVal = newVal ? formatDate(newVal) : ''
+    }
+
+    const isDiff = JSON.stringify(oldVal) !== JSON.stringify(newVal)
     return `
       <tr>
         <td style="padding: 8px 12px; background:#f8f8f8; font-weight: 500;">${key}</td>
         <td style="padding: 8px 12px; border-left: 1px solid #eee; ${isDiff ? 'color: red; font-weight: 600;' : ''}">${oldVal}</td>
         <td style="padding: 8px 12px; border-left: 1px solid #eee; ${isDiff ? 'color: red; font-weight: 600;' : ''}">${newVal}</td>
       </tr>
-    `;
-  }).join('');
-
+    `
+  }).join('')
   Swal.fire({
     title: '📝 Activity Details',
     html: `
@@ -236,33 +179,28 @@ const viewDetails = (log) => {
               <th style="padding: 10px 12px; text-align: left;">After</th>
             </tr>
           </thead>
-          <tbody>
-            ${rows}
-          </tbody>
+          <tbody>${rows}</tbody>
         </table>
       </div>
     `,
     width: 800,
     confirmButtonText: 'Close',
-    customClass: {
-      popup: 'rounded-md'
-    }
-  });
-};
+    customClass: { popup: 'rounded-md' }
+  })
+}
 
+const formatDateValues = (obj) => {
+  if (!obj || typeof obj !== 'object') return ''
+  return Object.entries(obj).map(([stage, dt]) => `${stage}: ${formatDate(dt)}`).join('<br>')
+}
 
 const restoreItem = async (log) => {
   try {
     const confirm = await Swal.fire({
-      title: 'Restore this item?',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Yes',
-      cancelButtonText: 'Cancel'
+      title: 'Restore this item?', icon: 'question', showCancelButton: true,
+      confirmButtonText: 'Yes', cancelButtonText: 'Cancel'
     })
-
     if (!confirm.isConfirmed) return
-
     const token = localStorage.getItem('token')
     await axios.post(`/activity-logs/restore/${log._id}`, {
       collectionName: log.collectionName,
@@ -271,7 +209,6 @@ const restoreItem = async (log) => {
     }, {
       headers: { Authorization: `Bearer ${token}` }
     })
-
     Swal.fire('Restored!', 'This item has been restored.', 'success')
     restoredIds.value.push(log._id)
     fetchLogs()
@@ -317,7 +254,6 @@ pre {
   border-radius: 4px;
   border: 1px solid #ccc;
 }
-
 .v-data-table .v-chip {
   border-width: 1.5px;
   letter-spacing: 0.5px;

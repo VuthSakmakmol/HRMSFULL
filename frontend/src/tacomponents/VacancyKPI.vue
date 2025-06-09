@@ -11,9 +11,9 @@
     </div>
 
     <template v-else>
-      <!-- Replace the fill rate section with this -->
+      <!-- KPI Section -->
       <v-row class="mt-4">
-        <v-col cols="12" md="8">
+        <v-col cols="12" md="8" class="mt-6">
           <v-row dense>
             <v-col
               v-for="(item, index) in kpiList"
@@ -54,7 +54,6 @@
           </div>
         </v-col>
       </v-row>
-
     </template>
   </v-card>
 </template>
@@ -76,8 +75,6 @@ const format = (val, isMoney) => {
 const fillRate = computed(() => parseFloat(props.data.fillRate || 0).toFixed(1))
 
 const kpiList = computed(() => [
-  { label: 'Total Requisitions', value: props.data.totalRequisitions },
-  { label: 'Filled Positions', value: props.data.filled },
   { label: 'Total Hiring Cost ($)', value: props.data.hiringCost, isMoney: true },
   { label: 'Cost per Hire ($)', value: props.data.costPerHire, isMoney: true },
   { label: 'Avg Days to Hire', value: props.data.averageDaysToHire },

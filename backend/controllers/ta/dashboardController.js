@@ -119,24 +119,82 @@ exports.getDashboardStats = async (req, res) => {
 
     const totalRequisitions = allJobs.length;
     const filledPositions = allJobs.filter(j => j.status === 'Filled').length;
-    const totalHiringCost = allJobs.reduce((sum, j) => sum + (j.hiringCost || 0), 0);
-    const onboarded = await Candidate.countDocuments({
+    const activeVacancies = allJobs.filter(j => j.status === 'Vacant').length;
+
+    const onboardedCandidates = await Candidate.find({
       ...baseFilter,
       progress: 'Onboard',
-      _onboardCounted: true
+      _onboardCounted: true,
+      'progressDates.Application': { $exists: true },
+      'progressDates.Onboard': { $exists: true }
     });
 
-    const costPerHire = onboarded ? totalHiringCost / onboarded : 0;
-    const activeVacancies = allJobs.filter(j => j.status === 'Vacant').length;
+    let totalHiringCost = 0;
+    let totalDaysToHire = 0;
+    let validCount = 0;
+
+    for (const candidate of onboardedCandidates) {
+      const job = allJobs.find(j => j._id.toString() === candidate.jobRequisitionId?.toString());
+      if (!job || !job.targetCandidates || job.targetCandidates === 0) continue;
+
+      const perCandidateCost = job.hiringCost / job.targetCandidates;
+      totalHiringCost += perCandidateCost;
+
+      const progress =
+        candidate.progressDates instanceof Map
+          ? Object.fromEntries(candidate.progressDates)
+          : candidate.progressDates;
+
+      const appRaw = progress?.Application;
+      const onboardRaw = progress?.Onboard;
+
+      if (appRaw && onboardRaw) {
+        const appDate = new Date(appRaw);
+        const onboardDate = new Date(onboardRaw);
+
+        if (!isNaN(appDate) && !isNaN(onboardDate)) {
+          const days = Math.floor((onboardDate - appDate) / (1000 * 60 * 60 * 24));
+          totalDaysToHire += days;
+          validCount++;
+
+          // console.log('✅ AvgDaysToHire Track:', {
+          //   name: candidate.fullName,
+          //   application: appDate.toISOString().slice(0, 10),
+          //   onboard: onboardDate.toISOString().slice(0, 10),
+          //   daysBetween: days
+          // });
+        } else {
+          console.warn('⚠️ Invalid date conversion for:', {
+            name: candidate.fullName,
+            appRaw,
+            onboardRaw
+          });
+        }
+      } else {
+        console.warn('⚠️ Missing progress dates for:', {
+          name: candidate.fullName,
+          progressDates: progress
+        });
+      }
+    }
+
+    const onboarded = onboardedCandidates.length;
+    const costPerHire = onboarded > 0 ? totalHiringCost / onboarded : 0;
+    const avgDaysToHire = validCount > 0 ? Math.round(totalDaysToHire / validCount) : 0;
+    const totalTarget = allJobs.reduce((sum, j) => sum + (j.targetCandidates || 0), 0);
+    const fillRate = totalTarget > 0 ? parseFloat(((onboarded / totalTarget) * 100).toFixed(1)) : 0;
 
     const kpi = {
       totalRequisitions,
       filledPositions,
-      totalHiringCost: Math.round(totalHiringCost),
+      hiringCost: Math.round(totalHiringCost),
       costPerHire: parseFloat(costPerHire.toFixed(2)),
-      avgDaysToHire: 0, // Placeholder, calculate if needed
-      activeVacancies
+      averageDaysToHire: avgDaysToHire,
+      activeVacancies,
+      fillRate
     };
+
+
 
     // 🔹 Monthly Applications Chart (if year provided)
     const months = [
