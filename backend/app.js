@@ -14,41 +14,40 @@ app.use(express.json());
 // 🔗 Serve candidate documents
 app.use('/uploads/candidate_docs', express.static(path.join(__dirname, 'uploads/candidate_docs')));
 
-// ─── ROUTES ────────────────────────────────────────────────────────────────────
+// ─── API ROUTES ────────────────────────────────────────────────────────────────
 
 // General Auth/User Routes
-const userRoutes = require('./routes/userRoutes');
-const authRoutes = require('./routes/authRoutes');
-app.use('/api/users', userRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/auth', require('./routes/authRoutes'));
 
 // TA Module Routes
-const departmentRoutes = require('./routes/ta/departmentRoutes');
-const jobRequisitionRoutes = require('./routes/ta/jobRequisitionRoutes');
-const roadmapRoutes = require('./routes/ta/roadmapRoutes');
-const dashboardRoutes = require('./routes/ta/dashboardRoutes');
-
-
-app.use('/api', departmentRoutes);
-app.use('/api', jobRequisitionRoutes);
-app.use('/api/roadmaps', roadmapRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-
-app.use('/api/report', require('./routes/ta/reportRoutes'))
-app.use('/api/recruiters', require('./routes/ta/recruiterRoutes'))
+app.use('/api', require('./routes/ta/departmentRoutes'));
+app.use('/api', require('./routes/ta/jobRequisitionRoutes'));
+app.use('/api/roadmaps', require('./routes/ta/roadmapRoutes'));
+app.use('/api/dashboard', require('./routes/ta/dashboardRoutes'));
+app.use('/api/report', require('./routes/ta/reportRoutes'));
+app.use('/api/recruiters', require('./routes/ta/recruiterRoutes'));
 app.use('/api/candidates', require('./routes/ta/candidateRoutes'));
 app.use('/api/activity-logs', require('./routes/ta/activityLogRoutes'));
 
+// ─── SERVE FRONTEND ────────────────────────────────────────────────────────────
+const frontendDist = path.join(__dirname, '../frontend/dist');
+app.use(express.static(frontendDist));
 
+// Handle SPA routes properly (Vue, React, etc.)
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(frontendDist, 'index.html'));
+});
 
-// Optional: Health check
-app.get('/', (req, res) => {
+// ─── HEALTH CHECK ──────────────────────────────────────────────────────────────
+app.get('/api/health', (req, res) => {
   res.send('✅ HRMS API is running...');
 });
 
 // ─── MONGODB CONNECTION ────────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI, {
-
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
 })
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB connection error:', err));

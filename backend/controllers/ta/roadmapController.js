@@ -19,29 +19,52 @@ exports.getRoadmaps = async (req, res) => {
     res.status(500).json({ message: 'Error fetching roadmaps', error: err.message });
   }
 };
-
 // 🟡 POST - Create roadmap
 exports.createRoadmap = async (req, res) => {
   try {
-    const company = req.body.company?.trim().toUpperCase();
-    if (!company) return res.status(400).json({ message: 'Missing company in request' });
+    // Get and sanitize company
+    const rawCompany = req.body.company;
+    const company = typeof rawCompany === 'string' ? rawCompany.trim().toUpperCase() : null;
 
-    const type = req.body.type;
+    if (!company) {
+      return res.status(400).json({ message: 'Missing company in request' });
+    }
+
+    const { year, month, type } = req.body;
     const subType = type === 'Blue Collar' ? req.body.subType || null : null;
+
+    // 🔒 Check for duplicates (same year, month, type, subType, company)
+    const exists = await Roadmap.findOne({
+      company,
+      year,
+      month,
+      type,
+      subType
+    });
+
+    if (exists) {
+      return res.status(400).json({
+        message: `Roadmap already exists for ${month} ${year} (${type}${subType ? ' - ' + subType : ''})`
+      });
+    }
 
     const newRoadmap = new Roadmap({
       ...req.body,
+      company,
       type,
-      subType,
-      company
+      subType
     });
 
     await newRoadmap.save();
     res.status(201).json(newRoadmap);
+
   } catch (err) {
+    console.error('❌ Roadmap creation error:', err);
     res.status(400).json({ message: 'Creation failed', error: err.message });
   }
 };
+
+
 
 // 🟠 PUT - Update roadmap
 exports.updateRoadmap = async (req, res) => {

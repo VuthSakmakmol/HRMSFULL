@@ -112,7 +112,6 @@
     </v-dialog>
   </v-container>
 </template>
-
 <script setup>
 import { ref, onMounted } from 'vue'
 import Swal from 'sweetalert2'
@@ -145,6 +144,7 @@ const formatType = (type, subType) => {
   if (type === 'Blue Collar') return `Blue Collar - ${subType}`
   return type
 }
+
 const fetchRoadmaps = async () => {
   try {
     const user = JSON.parse(localStorage.getItem('user'))
@@ -154,30 +154,30 @@ const fetchRoadmaps = async () => {
 
     if (!company) {
       console.warn('⚠️ No company found in localStorage')
+      Swal.fire('Missing Company', 'Company not found', 'error')
       return
     }
 
     let url = '/roadmaps'
     const params = []
-
-    params.push(`company=${company.trim().toUpperCase()}`) // ✅ required
-
+    params.push(`company=${company.trim().toUpperCase()}`)
     if (filterYear.value) params.push(`year=${filterYear.value}`)
     if (filterType.value) params.push(`type=${filterType.value}`)
     if (filterSubType.value && filterType.value === 'Blue Collar') {
       params.push(`subType=${filterSubType.value}`)
     }
     if (filterMonth.value) params.push(`month=${filterMonth.value}`)
-
     if (params.length) url += '?' + params.join('&')
 
     const res = await api.get(url)
-    roadmaps.value = res.data
+    console.log('📊 Roadmaps fetched:', res.data.length)
+    roadmaps.value = res.data.slice(0, 100) // 🧊 Limit to 100 rows to prevent freezing
+
   } catch (err) {
     console.error('❌ Failed to fetch roadmaps:', err)
+    Swal.fire('Error', 'Failed to fetch roadmap data', 'error')
   }
 }
-
 
 const openCreateDialog = () => {
   resetForm()
@@ -227,20 +227,53 @@ const saveRoadmap = async () => {
         ...payload,
         month: form.value.months[0]
       })
+
+      await Swal.fire('Updated', 'Roadmap updated successfully', 'success')
+      dialog.value = false
+      fetchRoadmaps()
     } else {
+      const failed = []
+      const success = []
+
       for (const month of form.value.months) {
-        await api.post('/roadmaps', { ...payload, month })
+        try {
+          await api.post('/roadmaps', { ...payload, month })
+          success.push(month)
+        } catch (err) {
+          failed.push(month)
+        }
+      }
+
+      dialog.value = false // ✅ Always close the form
+
+      if (success.length && failed.length) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Partial Success',
+          html: `Some months already exist:<br><b>${failed.join(', ')}</b>`,
+          confirmButtonText: 'OK'
+        })
+        fetchRoadmaps()
+      } else if (failed.length && !success.length) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Duplicate Entries',
+          html: `All selected months already exist:<br><b>${failed.join(', ')}</b>`,
+          confirmButtonText: 'OK'
+        })
+        // ❌ Do not reload — just close form
+      } else {
+        await Swal.fire('Success', 'Roadmaps created successfully', 'success')
+        fetchRoadmaps()
       }
     }
 
-    Swal.fire('Success', `Roadmap ${editMode.value ? 'updated' : 'created'} successfully`, 'success')
-    dialog.value = false
-    fetchRoadmaps()
   } catch (err) {
-    console.error(err)
-    Swal.fire('Error', 'Failed to save roadmap', 'error')
+    console.error('❌ Save error:', err)
+    await Swal.fire('Error', 'Failed to save roadmap', 'error')
   }
 }
+
 
 const deleteRoadmap = async (id) => {
   const result = await Swal.fire({
@@ -277,6 +310,7 @@ const resetForm = () => {
 
 onMounted(fetchRoadmaps)
 </script>
+
 
 <style scoped>
 .roadmap-table-wrapper {
