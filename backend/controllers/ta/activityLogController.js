@@ -1,6 +1,7 @@
 const ActivityLog = require('../../models/ta/ActivityLog');
 
-// 🔍 GET all logs for selected company (GM only)
+
+// 🔍 GM Only: Get All Logs
 exports.getAllLogs = async (req, res) => {
   try {
     const user = req.user;
@@ -14,9 +15,7 @@ exports.getAllLogs = async (req, res) => {
       return res.status(400).json({ message: 'Company query parameter is required' });
     }
 
-    const logs = await ActivityLog.find({ company })
-      .sort({ performedAt: -1 });
-
+    const logs = await ActivityLog.find({ company }).sort({ performedAt: -1 });
     res.json(logs);
   } catch (err) {
     console.error('❌ Failed to fetch activity logs:', err);
@@ -24,53 +23,54 @@ exports.getAllLogs = async (req, res) => {
   }
 };
 
-// ♻️ POST restore data from DELETE or UPDATE logs
 exports.restoreDeleted = async (req, res) => {
   try {
     const { logId } = req.params;
-    const { collectionName, previousData, company } = req.body;
 
     const log = await ActivityLog.findById(logId);
-    if (!log) {
-      return res.status(404).json({ message: 'Log not found' });
-    }
+    if (!log) return res.status(404).json({ message: 'Log not found' });
 
-    if (!['DELETE', 'UPDATE'].includes(log.actionType)) {
-      return res.status(400).json({ message: 'Only DELETE and UPDATE actions are restorable' });
+    const { actionType, collectionName, previousData: oldData, documentId, company } = log;
+  
+    if (!['DELETE', 'UPDATE'].includes(actionType)) {
+      return res.status(400).json({ message: 'Only DELETE or UPDATE actions can be restored' });
     }
 
     const Model = require(`../../models/ta/${collectionName}`);
-    let restoredDoc;
+    let restoredDoc = null;
 
-    if (log.actionType === 'DELETE') {
-      // ➕ Recreate deleted document
-      restoredDoc = await Model.create(previousData);
-    } else if (log.actionType === 'UPDATE') {
-      // 🔁 Revert document to previousData using ID
-      if (!log.documentId) {
-        return res.status(400).json({ message: 'Missing documentId for update restore' });
+    if (actionType === 'DELETE') {
+      if (!oldData) return res.status(400).json({ message: 'No data to restore from DELETE' });
+      restoredDoc = await Model.create(oldData);
+    }
+
+    if (actionType === 'UPDATE') {
+      if (!documentId || !oldData) {
+        return res.status(400).json({ message: 'Missing documentId or oldData for update restore' });
       }
 
-      restoredDoc = await Model.findByIdAndUpdate(log.documentId, previousData, { new: true });
+      restoredDoc = await Model.findByIdAndUpdate(documentId, oldData, { new: true });
       if (!restoredDoc) {
-        return res.status(404).json({ message: 'Document not found for update restoration' });
+        return res.status(404).json({ message: 'Original document not found for restoration' });
       }
     }
 
-    // 📝 Log the restore
+    // 📘 Log the RESTORE action
     await ActivityLog.create({
       actionType: 'RESTORE',
-      collectionName: collectionName,
+      collectionName, // ✅ use correct field
       documentId: restoredDoc._id,
-      previousData,
+      previousData: log.newData || null,
+      newData: restoredDoc.toObject(),
       performedBy: req.user.email,
       company,
       performedAt: new Date()
     });
 
-    res.json({ message: `Restored from ${log.actionType} successfully.` });
+    res.json({ message: `Restored from ${actionType} successfully.`, restoredDoc });
   } catch (err) {
-    console.error('❌ Restore error:', err);
-    res.status(500).json({ message: 'Restore failed', error: err.message });
+    console.error('❌ Restore failed:', err);
+    res.status(500).json({ message: 'Restore error', error: err.message });
   }
 };
+

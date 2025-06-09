@@ -1,6 +1,8 @@
+const fs = require('fs');
 const Candidate = require('../../models/ta/Candidate');
 const JobRequisition = require('../../models/ta/JobRequisition');
 const Counter = require('../../models/ta/Counter');
+const { logActivity } = require('../../utils/logActivity');
 
 // 🎯 Generate candidateId like NS0625-01
 async function generateCandidateId() {
@@ -18,6 +20,7 @@ async function generateCandidateId() {
   return `${prefix}-${counter.value}`;
 }
 
+// CREATE
 exports.create = async (req, res) => {
   try {
     const {
@@ -56,6 +59,15 @@ exports.create = async (req, res) => {
     });
 
     await newCandidate.save();
+    await logActivity({
+      actionType: 'CREATE',
+      collectionName: 'Candidate',
+      documentId: newCandidate._id,
+      performedBy: req.user.email,
+      company,
+      previousData: null,
+      newData: newCandidate.toObject()
+    });
 
     res.status(201).json({ message: 'Candidate created successfully', candidate: newCandidate });
   } catch (err) {
@@ -63,7 +75,6 @@ exports.create = async (req, res) => {
     res.status(500).json({ message: 'Failed to create candidate', error: err.message });
   }
 };
-
 
 // GET ALL
 exports.getAll = async (req, res) => {
@@ -89,11 +100,13 @@ exports.getOne = async (req, res) => {
   }
 };
 
-// UPDATE BASIC
+// UPDATE
 exports.update = async (req, res) => {
   try {
     const candidate = await Candidate.findById(req.params.id);
     if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
+
+    const previousData = candidate.toObject();
 
     const updatable = ['fullName', 'recruiter', 'applicationSource', 'hireDecision', 'noted'];
     updatable.forEach(key => {
@@ -101,6 +114,16 @@ exports.update = async (req, res) => {
     });
 
     await candidate.save();
+
+    await logActivity({
+      actionType: 'UPDATE',
+      collectionName: 'Candidate',
+      documentId: candidate._id,
+      performedBy: req.user.email,
+      company: candidate.company,
+      previousData,
+      newData: candidate.toObject()
+    });
 
     if (
       req.body.hireDecision &&
@@ -126,9 +149,19 @@ exports.remove = async (req, res) => {
       return res.status(404).json({ message: 'Candidate not found' });
     }
 
+    const previousData = candidate.toObject();
     await candidate.deleteOne();
 
-    // ✅ Reevaluate job status after deletion
+    await logActivity({
+      actionType: 'DELETE',
+      collectionName: 'Candidate',
+      documentId: candidate._id,
+      performedBy: req.user.email,
+      company: candidate.company,
+      previousData,
+      newData: null
+    });
+
     const job = await JobRequisition.findById(candidate.jobRequisitionId);
     if (job) await reevaluateJobStatus(job);
 
@@ -138,8 +171,7 @@ exports.remove = async (req, res) => {
     res.status(500).json({ message: 'Error deleting candidate', error: err.message });
   }
 };
-
-
+// UPDATE STAGE
 exports.updateStage = async (req, res) => {
   try {
     const { stage, date } = req.body;
@@ -152,10 +184,11 @@ exports.updateStage = async (req, res) => {
 
     const job = await JobRequisition.findById(candidate.jobRequisitionId);
     if (!job) return res.status(404).json({ message: 'Job requisition not found' });
-
     if (job.status === 'Cancel') {
       return res.status(403).json({ message: 'Job requisition is cancelled' });
     }
+
+    const previousData = candidate.toObject(); // ✅ snapshot before any changes
 
     const stageOrder = ['Application', 'ManagerReview', 'Interview', 'JobOffer', 'Hired', 'Onboard'];
     const currentIndex = stageOrder.indexOf(candidate.progress);
@@ -165,15 +198,8 @@ exports.updateStage = async (req, res) => {
       candidate.progress = stage;
     }
 
-    // ✅ Always allow date update
     candidate.progressDates.set(stage, date || new Date());
 
-    // ✅ Only promote progress if stage is forward
-    if (targetIndex > currentIndex) {
-      candidate.progress = stage;
-    }
-
-    // ✅ Offer count logic
     if (stage === 'JobOffer' && !candidate._offerCounted) {
       const activeOffers = await Candidate.countDocuments({
         jobRequisitionId: job._id,
@@ -189,24 +215,29 @@ exports.updateStage = async (req, res) => {
       candidate._offerCounted = true;
     }
 
-    // ✅ Onboard logic
     if (stage === 'Onboard' && !candidate._onboardCounted) {
       if (!candidate._offerCounted) {
         return res.status(400).json({ message: 'Must reach JobOffer before Onboard' });
       }
       candidate._onboardCounted = true;
-      candidate._offerCounted = false; // remove offer count
-
-      // ✅ Auto-set final decision
+      candidate._offerCounted = false;
       candidate.hireDecision = 'Hired';
     }
-
 
     await candidate.save();
     await reevaluateJobStatus(job);
 
-    res.json({ message: `${stage} date updated`, candidate });
+    await logActivity({
+      actionType: 'UPDATE',
+      collectionName: 'Candidate',
+      documentId: candidate._id,
+      performedBy: req.user.email,
+      company: candidate.company,
+      previousData,
+      newData: candidate.toObject()
+    });
 
+    res.json({ message: `${stage} date updated`, candidate });
   } catch (err) {
     console.error('❌ updateStage error:', err);
     res.status(500).json({ message: 'Internal server error', error: err.message });
@@ -214,7 +245,7 @@ exports.updateStage = async (req, res) => {
 };
 
 
-// Re-evaluate Job Requisition status
+// Reevaluates Job Requisition Status
 async function reevaluateJobStatus(job) {
   const activeOffers = await Candidate.countDocuments({
     jobRequisitionId: job._id,
@@ -230,9 +261,12 @@ async function reevaluateJobStatus(job) {
     hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
   });
 
-  if (activeOnboard >= job.targetCandidates) job.status = 'Filled';
-  else if (activeOffers >= job.targetCandidates) job.status = 'Suspended';
-  else job.status = 'Vacant';
+  job.status =
+    activeOnboard >= job.targetCandidates
+      ? 'Filled'
+      : activeOffers >= job.targetCandidates
+      ? 'Suspended'
+      : 'Vacant';
 
   job.offerCount = activeOffers;
   job.onboardCount = activeOnboard;
@@ -240,7 +274,7 @@ async function reevaluateJobStatus(job) {
   await job.save();
 }
 
-// UPLOAD DOCS
+// UPLOAD DOCUMENT
 exports.uploadDocument = async (req, res) => {
   try {
     const candidate = await Candidate.findById(req.params.id);
@@ -256,7 +290,7 @@ exports.uploadDocument = async (req, res) => {
   }
 };
 
-// DELETE DOC
+// DELETE DOCUMENT
 exports.deleteDocument = async (req, res) => {
   try {
     const { filename } = req.body;
