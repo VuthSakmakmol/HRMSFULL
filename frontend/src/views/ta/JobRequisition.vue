@@ -64,6 +64,25 @@
             Export to Excel
           </v-btn>
         </v-col>
+        <v-col cols="auto">
+          <v-btn
+            color="success"
+            variant="outlined"
+            class="text-white font-weight-bold hover-filled"
+            elevation="0"
+            @click="triggerFileInput"
+          >
+            <v-icon start>mdi-file-import</v-icon>
+            Import from Excel
+          </v-btn>
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".xlsx, .xls"
+            style="display: none"
+            @change="handleFileUpload"
+          />
+        </v-col>
       </v-row>
 
 
@@ -401,6 +420,7 @@ import dayjs from 'dayjs'
 import api from '@/utils/axios'
 import Swal from 'sweetalert2'
 import * as XLSX from 'xlsx'
+import { saveAs } from 'file-saver'
 
 const dateMenu = ref(false)
 const jobTitles = ref([])
@@ -411,6 +431,11 @@ const recruiterList = ref([])
 const showLoader = ref(true)
 const loadValue = ref(0)
 const router = useRouter()
+const fileInput = ref(null)
+
+const triggerFileInput = () => {
+  fileInput.value.click()
+}
 
 
 const goToCandidates = (job) => {
@@ -705,17 +730,76 @@ const exportToExcel = () => {
     'Job ID': job.jobRequisitionId,
     Department: job.departmentName,
     'Job Title': job.jobTitle,
-    'Opening Date': dayjs(job.openingDate).format('DD-MMM-YYYY'),
     Recruiter: job.recruiter,
+    'Opening Date': job.openingDate ? dayjs(job.openingDate).format('DD-MMM-YYYY') : '',
+    'Start Date': job.startDate ? dayjs(job.startDate).format('DD-MMM-YYYY') : '',
+    'Hiring Cost': job.hiringCost || '',
     Status: job.status,
-    'New Hire Start Date': dayjs(job.startDate).format('DD-MMM-YYYY'),
-    'Hiring Cost': job.hiringCost
+    'Target Candidates': job.targetCandidates || '',
+    'Offer Count': job.offerCount || 0,
+    'Onboard Count': job.onboardCount || 0
   }))
 
   const worksheet = XLSX.utils.json_to_sheet(exportData)
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Job Requisitions')
-  XLSX.writeFile(workbook, `JobRequisitions_${dayjs().format('YYYY-MM-DD')}.xlsx`)
+
+  const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+  const blob = new Blob([buffer], { type: 'application/octet-stream' })
+  saveAs(blob, `JobRequisitions_${dayjs().format('YYYY-MM-DD')}.xlsx`)
+}
+
+
+const handleFileUpload = async (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    const data = new Uint8Array(e.target.result)
+    const workbook = XLSX.read(data, { type: 'array' })
+    const sheetName = workbook.SheetNames[0]
+    const sheet = workbook.Sheets[sheetName]
+    const json = XLSX.utils.sheet_to_json(sheet)
+
+    // Optional: validate headers
+    const validHeaders = ['Job Title', 'Recruiter', 'Target Candidates', 'Opening Date', 'Hiring Cost', 'Start Date']
+    const missingHeaders = validHeaders.filter(header => !Object.keys(json[0]).includes(header))
+    if (missingHeaders.length > 0) {
+      return Swal.fire({ icon: 'error', title: 'Invalid Excel Format', text: 'Missing: ' + missingHeaders.join(', ') })
+    }
+
+    // Loop and submit
+    for (const row of json) {
+      try {
+        const jobTitleObj = jobTitles.value.find(j => j.jobTitle === row['Job Title'])
+        if (!jobTitleObj) continue // Skip unknown job title
+
+        const payload = {
+          jobTitle: row['Job Title'],
+          recruiter: row['Recruiter'],
+          targetCandidates: row['Target Candidates'] || 1,
+          openingDate: dayjs(row['Opening Date']).format('YYYY-MM-DD'),
+          hiringCost: row['Hiring Cost'],
+          startDate: row['Start Date'] ? dayjs(row['Start Date']).format('YYYY-MM-DD') : '',
+          departmentId: jobTitleObj.departmentId,
+          departmentName: jobTitleObj.departmentName,
+          type: jobTitleObj.type,
+          subType: jobTitleObj.subType,
+          status: 'Vacant'
+        }
+
+        await api.post('/job-requisitions', payload)
+      } catch (err) {
+        console.error('❌ Failed to import row:', row, err)
+      }
+    }
+
+    await Swal.fire({ icon: 'success', title: 'Import Complete', text: 'All valid rows imported.' })
+    fetchRequisitions()
+  }
+
+  reader.readAsArrayBuffer(file)
 }
 
 

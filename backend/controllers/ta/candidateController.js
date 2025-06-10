@@ -4,12 +4,20 @@ const JobRequisition = require('../../models/ta/JobRequisition');
 const Counter = require('../../models/ta/Counter');
 const { logActivity } = require('../../utils/logActivity');
 
-// 🎯 Generate candidateId like NS0625-01
-async function generateCandidateId() {
+
+// 🎯 Generate candidateId based on type and subType
+async function generateCandidateId(type, subType) {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const year = String(now.getFullYear()).slice(-2);
-  const prefix = `NS${month}${year}`;
+
+  let prefixType = 'WC'; // default: White Collar
+
+  if (type === 'Blue Collar') {
+    prefixType = subType === 'Sewer' ? 'BS' : 'BN';
+  }
+
+  const prefix = `${prefixType}${month}${year}`;
 
   const counter = await Counter.findOneAndUpdate(
     { name: `candidate-${prefix}` },
@@ -19,6 +27,7 @@ async function generateCandidateId() {
 
   return `${prefix}-${counter.value}`;
 }
+
 
 // CREATE
 exports.create = async (req, res) => {
@@ -36,7 +45,7 @@ exports.create = async (req, res) => {
       subType
     } = req.body;
 
-    const candidateId = await generateCandidateId();
+    const candidateId = await generateCandidateId(type, subType);
 
     const progressDates = req.body.progressDates || {};
     if (!progressDates.Application) {
