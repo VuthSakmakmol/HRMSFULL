@@ -87,7 +87,7 @@
               return-object
               auto-select-first
               required
-              :disabled="isEditMode"
+              
             />
           </v-col>
           <v-col cols="8" md="2">

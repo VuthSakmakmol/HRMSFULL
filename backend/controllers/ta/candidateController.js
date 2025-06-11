@@ -3,6 +3,7 @@ const Candidate = require('../../models/ta/Candidate');
 const JobRequisition = require('../../models/ta/JobRequisition');
 const Counter = require('../../models/ta/Counter');
 const { logActivity } = require('../../utils/logActivity');
+const mongoose = require('mongoose');
 
 
 // 🎯 Generate candidateId based on type and subType
@@ -110,15 +111,56 @@ exports.getOne = async (req, res) => {
 };
 
 // UPDATE
+// UPDATE
 exports.update = async (req, res) => {
   try {
     const candidate = await Candidate.findById(req.params.id);
     if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
 
     const previousData = candidate.toObject();
+    const editableFields = ['fullName', 'recruiter', 'applicationSource', 'hireDecision', 'noted'];
 
-    const updatable = ['fullName', 'recruiter', 'applicationSource', 'hireDecision', 'noted'];
-    updatable.forEach(key => {
+    // ✅ Always re-fetch job details if jobRequisitionId is provided
+    if (req.body.jobRequisitionId) {
+      const newJob = await JobRequisition.findById(req.body.jobRequisitionId);
+
+      if (!newJob) {
+        return res.status(404).json({ message: 'Job requisition not found' });
+      }
+
+      const jobChanged = String(candidate.jobRequisitionId) !== String(newJob._id);
+
+      // 🔐 Only block change if already Onboarded
+      if (candidate.progress === 'Onboard' && jobChanged) {
+        return res.status(400).json({ message: 'Cannot change job after Onboard stage' });
+      }
+
+      if (jobChanged) {
+        candidate.jobRequisitionId = newJob._id;
+        candidate.jobRequisitionCode = newJob.jobRequisitionId;
+        candidate.department = newJob.departmentName;
+        candidate.jobTitle = newJob.jobTitle;
+        candidate.type = newJob.type;
+        candidate.subType = newJob.subType || null;
+
+        console.log('🔁 Job changed, updated fields:', {
+          code: newJob.jobRequisitionId,
+          title: newJob.jobTitle,
+          dept: newJob.departmentName
+        });
+      } else {
+        // Still sync job fields (if no change)
+        candidate.jobTitle = newJob.jobTitle;
+        candidate.department = newJob.departmentName;
+        candidate.type = newJob.type;
+        candidate.subType = newJob.subType || null;
+
+        console.log('🔄 Job ID same, synced job fields from DB');
+      }
+    }
+
+    // ✅ Update editable fields
+    editableFields.forEach((key) => {
       if (req.body[key] !== undefined) candidate[key] = req.body[key];
     });
 
@@ -134,6 +176,7 @@ exports.update = async (req, res) => {
       newData: candidate.toObject()
     });
 
+    // 🔁 Re-evaluate job requisition if hireDecision changed
     if (
       req.body.hireDecision &&
       ['Candidate Refusal', 'Not Hired', 'Candidate in Process'].includes(req.body.hireDecision)
@@ -142,11 +185,16 @@ exports.update = async (req, res) => {
       if (job) await reevaluateJobStatus(job);
     }
 
-    res.json({ message: 'Candidate updated', candidate });
+    res.json({ message: 'Candidate updated successfully', candidate });
   } catch (err) {
+    console.error('❌ Error updating candidate:', err);
     res.status(500).json({ message: 'Update error', error: err.message });
   }
 };
+
+
+
+
 
 // DELETE
 exports.remove = async (req, res) => {
