@@ -26,7 +26,7 @@ import { ref } from 'vue'
 import AppTopbar from '@/components/AppTopbar.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
 
-const drawer = ref(true)
+const drawer = ref(false)
 const role = localStorage.getItem('role') || 'Unknown'
 const company = localStorage.getItem('company') || 'No Company'
 

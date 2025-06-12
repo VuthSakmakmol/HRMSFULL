@@ -30,6 +30,12 @@ app.use('/api/recruiters', require('./routes/ta/recruiterRoutes'));
 app.use('/api/candidates', require('./routes/ta/candidateRoutes'));
 app.use('/api/activity-logs', require('./routes/ta/activityLogRoutes'));
 
+// HRSS Module Routes
+
+app.use('/api/employees', require('./routes/hrss/employeeRoutes'));
+
+
+
 // ─── SERVE FRONTEND ────────────────────────────────────────────────────────────
 const frontendDist = path.join(__dirname, '../frontend/dist');
 app.use(express.static(frontendDist));

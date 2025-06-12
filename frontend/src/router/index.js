@@ -31,6 +31,15 @@ const routes = [
       { path: 'roadmap', component: () => import('@/views/ta/Roadmap.vue')},
     ]
   },
+  {
+    path: '/hrss',
+    component: DefaultLayout,
+    children: [
+      { path: 'employees', component: () => import('@/views/hrss/EmployeeList.vue') },
+      { path: 'addemployee', component: () => import('@/views/hrss/AddEmployee.vue') }
+    ]
+  },
+
 
   // Default and fallback
   { path: '/', redirect: '/login' },

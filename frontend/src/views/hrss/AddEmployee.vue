@@ -33,18 +33,20 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from '@/utils/axios'
+import Swal from 'sweetalert2'
 
+// Step components
 import Step1 from '@/hrsscomponents/EmployeeSteps/Step1.vue'
 import Step2 from '@/hrsscomponents/EmployeeSteps/Step2.vue'
 import Step3 from '@/hrsscomponents/EmployeeSteps/Step3.vue'
 import Step4 from '@/hrsscomponents/EmployeeSteps/Step4.vue'
 import Step5 from '@/hrsscomponents/EmployeeSteps/Step5.vue'
 
-const route = useRoute()
 const router = useRouter()
+const route = useRoute()
 const step = ref(1)
 const employeeId = ref(route.query.id || null)
 
@@ -52,8 +54,10 @@ const stepComponents = [Step1, Step2, Step3, Step4, Step5]
 
 const form = ref({
   employeeId: '',
-  khmerName: '',
-  latinName: '',
+  khmerFirstName: '',
+  khmerLastName: '',
+  englishFirstName: '',
+  englishLastName: '',
   gender: '',
   dob: '',
   age: null,
@@ -77,48 +81,65 @@ const form = ref({
   passport: '', passportExpireDate: '', visaExpireDate: '',
   remark: '', email: '', phoneNumber: '',
   placeOfBirth: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
-  placeOfLiving: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' }
+  placeOfLiving: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
+  company: localStorage.getItem('company') || 'CAM-TAC'
 })
-
 
 const totalFields = 48
 
 const completionPercentage = computed(() => {
-  // Flatten all values into one array
-  const flatValues = Object.values(form.value).flatMap(v =>
-    typeof v === 'object' && v !== null
-      ? Object.values(v)
-      : [v]
+  const flat = Object.values(form.value).flatMap(v =>
+    typeof v === 'object' && v !== null ? Object.values(v) : [v]
   )
-
-  const filled = flatValues.filter(v => v !== '' && v !== null && v !== undefined)
-  const percent = Math.round((filled.length / totalFields) * 100)
-  return Math.min(percent, 100)
+  const filled = flat.filter(v => v !== '' && v !== null && v !== undefined)
+  return Math.min(Math.round((filled.length / totalFields) * 100), 100)
 })
 
-
-// ✅ Handle Step Submission
 const handleStepSubmit = async () => {
   try {
-    if (!employeeId.value && step.value === 1) {
-      const res = await axios.post('/api/employees', form.value)
+    if (!employeeId.value) {
+      // Step 1 (Create new employee)
+      const res = await axios.post('/employees', form.value)
+
+      if (!res.data || !res.data._id) {
+        throw new Error('No _id returned from server')
+      }
+
       employeeId.value = res.data._id
-      router.replace({ path: '/employee/register', query: { id: employeeId.value } })
-    } else if (employeeId.value) {
-      await axios.put(`/api/employees/${employeeId.value}`, form.value)
+      Swal.fire({ icon: 'success', title: 'Employee created!' })
+      router.replace({ path: '/hrss/addemployee', query: { id: employeeId.value } })
+    } else {
+      // Step 2+ (Update existing employee)
+      await axios.put(`/employees/${employeeId.value}`, form.value)
+      Swal.fire({ icon: 'success', title: `Step ${step.value} saved!` })
     }
 
-    // Next or complete
-    if (step.value < stepComponents.length) step.value++
-    else alert('✅ All data saved.')
+    // ✅ Move to next step only after save
+    if (step.value < stepComponents.length) {
+      step.value++
+    } else {
+      Swal.fire({
+        icon: 'success',
+        title: '🎉 All data saved!',
+        confirmButtonText: 'OK',
+        allowEnterKey: true
+      }).then(() => {
+        router.push('/hrss/employees')  // ✅ Adjust route path as needed
+      })
+    }
+
+
   } catch (err) {
-    console.error(err)
-    alert('❌ Failed to save.')
+    console.error('❌ Save failed:', err)
+    Swal.fire({ icon: 'error', title: 'Failed to save', text: err.message })
   }
 }
 
+
+
+// ✅ Reset form
 const startNewEmployee = () => {
-  form.value = {
+  Object.assign(form.value, {
     employeeId: '',
     khmerName: '',
     latinName: '',
@@ -145,24 +166,27 @@ const startNewEmployee = () => {
     passport: '', passportExpireDate: '', visaExpireDate: '',
     remark: '', email: '', phoneNumber: '',
     placeOfBirth: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
-    placeOfLiving: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' }
-  }
+    placeOfLiving: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
+    company: localStorage.getItem('company') || 'CAM-TAC'
+  })
   employeeId.value = null
   step.value = 1
-  completionPercentage.value = 0
-  router.replace({ path: '/employee/register' }) // clean URL
+  router.replace({ path: '/hrss/employees/register' })
 }
 
-
-
-// ✅ Load if resuming
+// ✅ Auto-load existing data
 onMounted(async () => {
   if (employeeId.value) {
-    const res = await axios.get(`/api/employees/${employeeId.value}`)
-    form.value = res.data
+    try {
+      const res = await axios.get(`/employees/${employeeId.value}`)
+      form.value = { ...form.value, ...res.data }
+    } catch (err) {
+      console.error('❌ Failed to load employee:', err)
+    }
   }
 })
 </script>
+
 
 <style scoped>
 .v-btn {

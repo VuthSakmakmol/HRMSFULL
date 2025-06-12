@@ -73,6 +73,28 @@
         </v-list-item>
       </v-list-group>
 
+      <!-- HRSS Section -->
+      <v-list-group>
+        <template #activator="{ props }">
+          <v-list-item v-bind="props">
+            <template #prepend>
+              <font-awesome-icon :icon="['fas', 'clipboard-user']" class="sidebar-icon me-2" />
+            </template>
+            <template #title>HRSS</template>
+          </v-list-item>
+        </template>
+
+        <v-list-item :to="{ path: '/hrss/employees' }">
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
+              Employee List
+            </div>
+          </template>
+        </v-list-item>
+      </v-list-group>
+
+
       <!-- GM Section -->
       <template v-if="role === 'GeneralManager'">
         <v-list-group>
@@ -93,15 +115,6 @@
               </div>
             </template>
           </v-list-item>
-
-          <!-- <v-list-item disabled>
-            <template #title>
-              <div class="sidebar-link">
-                <font-awesome-icon :icon="['fas', 'lock']" class="sidebar-icon" />
-                Permissions
-              </div>
-            </template>
-          </v-list-item> -->
 
           <v-list-item :to="{ path: '/gm/activity-log' }">
             <template #title>

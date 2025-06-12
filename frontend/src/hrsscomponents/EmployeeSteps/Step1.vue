@@ -6,10 +6,16 @@
         <v-text-field v-model="form.employeeId" label="Employee ID *" dense density="compact" variant="outlined" />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.khmerName" label="Khmer Name *" dense density="compact" variant="outlined" />
+        <v-text-field v-model="form.khmerFirstName" label="Khmer First Name *" dense density="compact" variant="outlined" />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.latinName" label="Latin Name *" dense density="compact" variant="outlined" />
+        <v-text-field v-model="form.khmerLastName" label="Khmer Last Name *" dense density="compact" variant="outlined" />
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.englishFirstName" label="English First Name *" dense density="compact" variant="outlined" />
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.englishLastName" label="English Last Name *" dense density="compact" variant="outlined" />
       </v-col>
       <v-col cols="12" sm="2">
         <v-select v-model="form.gender" :items="['Male', 'Female', 'Other']" label="Gender *" dense density="compact" variant="outlined" />

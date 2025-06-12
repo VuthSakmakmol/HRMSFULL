@@ -3,6 +3,9 @@
     <h3 class="text-subtitle-1 font-weight-bold mb-4">Step 4: Document Info</h3>
     <v-row dense>
       <v-col cols="12" sm="6">
+        <v-text-field v-model="form.education" label="Education" dense outlined />
+      </v-col>
+      <v-col cols="12" sm="6">
         <v-text-field v-model="form.idCard" label="ID Card" dense outlined />
       </v-col>
       <v-col cols="12" sm="6">
