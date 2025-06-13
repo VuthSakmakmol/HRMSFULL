@@ -33,7 +33,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
@@ -47,8 +47,8 @@ import Step5 from '@/hrsscomponents/EmployeeSteps/Step5.vue'
 
 const router = useRouter()
 const route = useRoute()
-const step = ref(1)
 const employeeId = ref(route.query.id || null)
+const step = ref(parseInt(localStorage.getItem('currentStep') || '1'))
 
 const stepComponents = [Step1, Step2, Step3, Step4, Step5]
 
@@ -86,13 +86,17 @@ const form = ref({
 })
 
 const totalFields = 48
-
 const completionPercentage = computed(() => {
   const flat = Object.values(form.value).flatMap(v =>
     typeof v === 'object' && v !== null ? Object.values(v) : [v]
   )
   const filled = flat.filter(v => v !== '' && v !== null && v !== undefined)
   return Math.min(Math.round((filled.length / totalFields) * 100), 100)
+})
+
+// ✅ Store step in localStorage
+watch(step, (newStep) => {
+  localStorage.setItem('currentStep', newStep)
 })
 
 const handleStepSubmit = async () => {
@@ -106,12 +110,12 @@ const handleStepSubmit = async () => {
       }
 
       employeeId.value = res.data._id
+
       Swal.fire({ icon: 'success', title: 'Employee created!' })
       router.replace({ path: '/hrss/addemployee', query: { id: employeeId.value } })
     } else {
       // Step 2+ (Update existing employee)
       await axios.put(`/employees/${employeeId.value}`, form.value)
-      Swal.fire({ icon: 'success', title: `Step ${step.value} saved!` })
     }
 
     // ✅ Move to next step only after save
@@ -124,10 +128,10 @@ const handleStepSubmit = async () => {
         confirmButtonText: 'OK',
         allowEnterKey: true
       }).then(() => {
-        router.push('/hrss/employees')  // ✅ Adjust route path as needed
+        localStorage.removeItem('currentStep')
+        router.push('/hrss/employees')
       })
     }
-
 
   } catch (err) {
     console.error('❌ Save failed:', err)
@@ -135,44 +139,80 @@ const handleStepSubmit = async () => {
   }
 }
 
-
-
 // ✅ Reset form
-const startNewEmployee = () => {
-  Object.assign(form.value, {
-    employeeId: '',
-    khmerName: '',
-    latinName: '',
-    gender: '',
-    dob: '',
-    age: null,
-    idCard: '',
-    idCardExpireDate: '',
-    nssf: '',
-    joinDate: '',
-    department: '',
-    position: '',
-    agentPhoneNumber: '',
-    marriedStatus: '',
-    agentPerson: '',
-    spouseName: '',
-    spouseContactNumber: '',
-    line: '', team: '', section: '',
-    education: '', religion: '', nationality: '',
-    status: '', shift: '',
-    sourceOfHiring: '', introducerId: '', employeeType: '',
-    singleNeedle: '', overlock: '', coverstitch: '', totalMachine: null,
-    workingBook: '', medicalCheck: '', medicalCheckDate: '',
-    passport: '', passportExpireDate: '', visaExpireDate: '',
-    remark: '', email: '', phoneNumber: '',
-    placeOfBirth: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
-    placeOfLiving: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
-    company: localStorage.getItem('company') || 'CAM-TAC'
-  })
-  employeeId.value = null
-  step.value = 1
-  router.replace({ path: '/hrss/employees/register' })
+const startNewEmployee = async () => {
+  try {
+    // ✅ Only save if form has meaningful values (not empty form)
+    const hasData = Object.values(form.value).some(v =>
+      typeof v === 'object'
+        ? Object.values(v).some(n => n) // nested object (placeOfBirth etc.)
+        : v
+    )
+
+    if (hasData && !employeeId.value) {
+      // Save as new employee before reset
+      const res = await axios.post('/employees', form.value)
+      if (res.data?._id) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Current employee saved before starting new',
+          confirmButtonText: 'OK'
+        })
+      }
+    } else if (employeeId.value) {
+      // Existing employee, update first
+      await axios.put(`/employees/${employeeId.value}`, form.value)
+      Swal.fire({
+        icon: 'success',
+        title: 'Existing employee updated before starting new',
+        confirmButtonText: 'OK'
+      })
+    }
+
+    // ✅ Now reset form and state
+    Object.assign(form.value, {
+      employeeId: '',
+      khmerFirstName: '',
+      khmerLastName: '',
+      englishFirstName: '',
+      englishLastName: '',
+      gender: '',
+      dob: '',
+      age: null,
+      idCard: '',
+      idCardExpireDate: '',
+      nssf: '',
+      joinDate: '',
+      department: '',
+      position: '',
+      agentPhoneNumber: '',
+      marriedStatus: '',
+      agentPerson: '',
+      spouseName: '',
+      spouseContactNumber: '',
+      line: '', team: '', section: '',
+      education: '', religion: '', nationality: '',
+      status: '', shift: '',
+      sourceOfHiring: '', introducerId: '', employeeType: '',
+      singleNeedle: '', overlock: '', coverstitch: '', totalMachine: null,
+      workingBook: '', medicalCheck: '', medicalCheckDate: '',
+      passport: '', passportExpireDate: '', visaExpireDate: '',
+      remark: '', email: '', phoneNumber: '',
+      placeOfBirth: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
+      placeOfLiving: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
+      company: localStorage.getItem('company') || 'CAM-TAC'
+    })
+    employeeId.value = null
+    step.value = 1
+    localStorage.removeItem('currentStep')
+
+    router.replace({ path: '/hrss/addemployee' })
+  } catch (err) {
+    console.error('❌ Failed to save before resetting:', err)
+    Swal.fire({ icon: 'error', title: 'Save failed', text: err.message })
+  }
 }
+
 
 // ✅ Auto-load existing data
 onMounted(async () => {
@@ -188,8 +228,3 @@ onMounted(async () => {
 </script>
 
 
-<style scoped>
-.v-btn {
-  min-width: 120px;
-}
-</style>

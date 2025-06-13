@@ -5,7 +5,7 @@
     <!-- Top Bar -->
     <v-row class="mb-4" align-center="center" justify="space-between">
       <v-col cols="auto">
-        <v-btn color="primary" @click="$router.push('/hrss/addemployee')">
+        <v-btn color="primary" @click="goToAddEmployee">
           <v-icon start>mdi-plus</v-icon> Add Employee
         </v-btn>
       </v-col>
@@ -17,113 +17,163 @@
           <v-icon start>mdi-file-excel</v-icon> Export Excel
         </v-btn>
       </v-col>
+      <div class="text-caption mt-1 text-grey">
+        ScrollTop: {{ scrollWrapper?.scrollTop || 0 }}
+      </div>
+
+
     </v-row>
 
-    <!-- Scrollable Table -->
+    <!-- Table -->
     <v-card>
-      <div class="table-scroll-wrapper">
+      <div class="table-scroll-wrapper" ref="scrollWrapper">
         <table class="scrollable-table">
           <thead>
             <tr>
-              <th>
-                <v-checkbox
-                  v-model="selectAll"
-                  @change="toggleSelectAll"
-                  hide-details
-                  density="compact"
-                ></v-checkbox>
-              </th>
+              <th><v-checkbox v-model="selectAll" @change="toggleSelectAll" hide-details density="compact" /></th>
               <th>No</th>
               <th>Info</th>
               <th>Profile</th>
               <th v-for="n in 5" :key="n">Details Block {{ n }}</th>
-              <th class="bg-orange">Actions</th>
+              <th class="bg-action">Actions</th>
             </tr>
           </thead>
-
           <tbody>
             <tr v-for="(emp, index) in paginatedEmployees" :key="emp._id">
               <td>
-                <v-checkbox
-                  v-model="selected"
-                  :value="emp._id"
-                  hide-details
-                  density="compact"
-                ></v-checkbox>
+                <v-checkbox v-model="selected" :value="emp._id" hide-details density="compact" />
               </td>
               <td>{{ getRowNumber(index) }}</td>
               <td>{{ getCompletionRate(emp) }}%</td>
               <td class="img-cell">
                 <img :src="emp.profileImage || defaultImage" class="profile-img" />
               </td>
-
-              <!-- Generate 5 blocks × 6 fields -->
               <td v-for="(block, blockIndex) in chunkedEmployeeInfo(emp)" :key="blockIndex">
                 <div v-for="item in block" :key="item.label" class="info-block">
                   <span class="label">{{ item.label }}:</span> {{ item.value }}
                 </div>
               </td>
-
-              <!-- Actions -->
-              <td class="bg-orange align-top">
-                <div class="d-flex flex-column align-center pa-1" style="gap: 6px; height: 80%;">
-                  <!-- Buttons -->
-                  <div>
-                    <v-btn icon size="small" color="primary" @click="editEmployee(emp)">
-                      <v-icon>mdi-pencil</v-icon>
-                    </v-btn>
-                    <v-btn icon size="small" color="error" @click="deleteEmployee(emp._id)">
-                      <v-icon>mdi-delete</v-icon>
-                    </v-btn>
-                  </div>
-
-                  <!-- Note (Multiline Textarea) -->
+              <td class="bg-action align-top">
+                <div class="d-flex flex-column align-center pa-1" style="gap: 6px; height: 100%;">
+                  <v-btn icon size="small" color="primary" @click="editEmployee(emp)">
+                    <v-icon>mdi-pencil</v-icon>
+                  </v-btn>
+                  <v-btn icon size="small" color="error" @click="deleteEmployee(emp._id)">
+                    <v-icon>mdi-delete</v-icon>
+                  </v-btn>
                   <v-textarea
                     v-model="emp.note"
                     auto-grow
-                    variant="underlined"
+                    variant="outlined"
                     hide-details
                     placeholder="Write note..."
-                    class="mt-1"
-                    style="width: 100%; font-size: 12px; min-height: 60px; max-height: 180px;"
+                    style="width: 100%; font-size: 7px; min-height: 40px;"
+                    :counter="60"
+                    maxlength="60"
                     @change="updateNote(emp)"
                   />
                 </div>
               </td>
+              
             </tr>
           </tbody>
         </table>
       </div>
     </v-card>
+
+    <!-- Sticky Pagination Footer -->
+    <v-sheet elevation="3" class="position-sticky bottom-0 bg-white px-4 py-2" style="z-index: 10;">
+      <v-row align-center="center" justify="space-between">
+        <v-col cols="auto">
+          <v-select
+            v-model="itemsPerPage"
+            :items="[10, 50, 100]"
+            label="Rows per page"
+            density="compact"
+            hide-details
+            style="width: 130px"
+          />
+        </v-col>
+        <v-col cols="auto">
+          <v-pagination
+            v-model="page"
+            :length="Math.ceil(employees.length / itemsPerPage)"
+            rounded
+            color="primary"
+          />
+        </v-col>
+      </v-row>
+    </v-sheet>
   </v-container>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, onActivated, onDeactivated, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
 
+defineOptions({ name: 'EmployeeList' })
+
 const employees = ref([])
 const selected = ref([])
 const selectAll = ref(false)
-const page = ref(1)
+const page = ref(parseInt(sessionStorage.getItem('employeePage')) || 1)
 const itemsPerPage = ref(10)
 const defaultImage = '/default_images/girl_default_pf.jpg'
+const hasLoaded = ref(false)
+const router = useRouter()
+const scrollWrapper = ref(null)
 
-const toggleSelectAll = () => {
-  if (selectAll.value) {
-    selected.value = employees.value.map(emp => emp._id)
-  } else {
-    selected.value = []
+// Navigate to Add Employee
+const goToAddEmployee = () => router.push('/hrss/addemployee')
+
+// Save scroll & page before navigating away
+onDeactivated(() => {
+  const wrapper = scrollWrapper.value
+  if (wrapper) {
+    sessionStorage.setItem('employeeScrollTop', wrapper.scrollTop)
+    sessionStorage.setItem('employeePage', page.value)
+    console.log('💾 Saved scrollTop:', wrapper.scrollTop, 'Page:', page.value)
   }
+})
+
+// Restore scroll & page on return
+onActivated(() => {
+  console.log('✅ onActivated (restoring scroll + page)')
+  nextTick(() => {
+    const wrapper = scrollWrapper.value
+    const savedScroll = parseInt(sessionStorage.getItem('employeeScrollTop') || '0')
+    const savedPage = parseInt(sessionStorage.getItem('employeePage') || '1')
+    if (wrapper) {
+      wrapper.scrollTop = savedScroll
+      console.log('🔁 Restored scrollTop to:', savedScroll)
+    }
+    page.value = savedPage
+    console.log('🔁 Restored page to:', savedPage)
+  })
+})
+
+// Table logic
+const toggleSelectAll = () => {
+  selectAll.value = !selectAll.value
+  selected.value = selectAll.value ? employees.value.map(emp => emp._id) : []
 }
 
+const paginatedEmployees = computed(() => {
+  const start = (page.value - 1) * itemsPerPage.value
+  return employees.value.slice(start, start + itemsPerPage.value)
+})
 
-// Format date
-const formatDate = val => (val ? dayjs(val).format('YYYY-MM-DD') : '')
+watch(itemsPerPage, () => {
+  page.value = 1
+})
 
-// Get completion %
+watch(page, () => {
+  sessionStorage.setItem('employeePage', page.value)
+})
+
 const getCompletionRate = emp => {
   const values = Object.values(emp).flatMap(v =>
     typeof v === 'object' && v !== null ? Object.values(v) : [v]
@@ -134,19 +184,8 @@ const getCompletionRate = emp => {
 
 const getRowNumber = index => (page.value - 1) * itemsPerPage.value + index + 1
 
-// Paginated
-const paginatedEmployees = computed(() => {
-  const start = (page.value - 1) * itemsPerPage.value
-  return employees.value.slice(start, start + itemsPerPage.value)
-})
-
-// Fields to show (can customize order here)
 const employeeFields = emp => [
-  // 🔖 Identification
   { label: 'Employee ID', value: emp.employeeId },
-  // { label: 'Company', value: emp.company },
-
-  // 🧑‍💼 Personal Info
   { label: 'Khmer Name', value: `${emp.khmerFirstName} ${emp.khmerLastName}` },
   { label: 'English Name', value: `${emp.englishFirstName} ${emp.englishLastName}` },
   { label: 'Gender', value: emp.gender },
@@ -156,19 +195,11 @@ const employeeFields = emp => [
   { label: 'Phone Number', value: emp.phoneNumber },
   { label: 'Agent Phone Number', value: emp.agentPhoneNumber },
   { label: 'Agent Person', value: emp.agentPerson },
-
-  // 👪 Family
   { label: 'Married Status', value: emp.marriedStatus },
   { label: 'Spouse Name', value: emp.spouseName },
   { label: 'Spouse Contact', value: emp.spouseContactNumber },
-
-  // 📚 Education & Religion
   { label: 'Religion', value: emp.religion },
   { label: 'Nationality', value: emp.nationality },
-
-  
-
-  // 🏢 Work Info
   { label: 'Introducer ID', value: emp.introducerId },
   { label: 'Join Date', value: formatDate(emp.joinDate) },
   { label: 'Department', value: emp.department },
@@ -179,16 +210,11 @@ const employeeFields = emp => [
   { label: 'Section', value: emp.section },
   { label: 'Shift', value: emp.shift },
   { label: 'Status', value: emp.status },
-
-  // 📥 Source & Skills
   { label: 'Source of Hiring', value: emp.sourceOfHiring },
   { label: 'Single Needle', value: emp.singleNeedle },
   { label: 'Overlock', value: emp.overlock },
   { label: 'Coverstitch', value: emp.coverstitch },
   { label: 'Total Machines', value: emp.totalMachine },
-
-
-  // 📄 Documents
   { label: 'Education', value: emp.education },
   { label: 'ID Card', value: emp.idCard },
   { label: 'ID Expire', value: formatDate(emp.idCardExpireDate) },
@@ -199,33 +225,26 @@ const employeeFields = emp => [
   { label: 'Medical Check', value: emp.medicalCheck },
   { label: 'Medical Check Date', value: formatDate(emp.medicalCheckDate) },
   { label: 'Working Book', value: emp.workingBook },
-
-  
-
-  // 📍 Address
-  { label: 'Place of Birth - Province', value: emp.placeOfBirth?.provinceNameKh },
-  { label: 'Place of Birth - District', value: emp.placeOfBirth?.districtNameKh },
-  { label: 'Place of Birth - Commune', value: emp.placeOfBirth?.communeNameKh },
-  { label: 'Place of Birth - Village', value: emp.placeOfBirth?.villageNameKh },
-  { label: 'Place of Living - Province', value: emp.placeOfLiving?.provinceNameKh },
-  { label: 'Place of Living - District', value: emp.placeOfLiving?.districtNameKh },
-  { label: 'Place of Living - Commune', value: emp.placeOfLiving?.communeNameKh },
-  { label: 'Place of Living - Village', value: emp.placeOfLiving?.villageNameKh },
+  { label: 'PoB - Province', value: emp.placeOfBirth?.provinceNameKh },
+  { label: 'PoB - District', value: emp.placeOfBirth?.districtNameKh },
+  { label: 'PoB - Commune', value: emp.placeOfBirth?.communeNameKh },
+  { label: 'PoB - Village', value: emp.placeOfBirth?.villageNameKh },
+  { label: 'PoL - Province', value: emp.placeOfLiving?.provinceNameKh },
+  { label: 'PoL - District', value: emp.placeOfLiving?.districtNameKh },
+  { label: 'PoL - Commune', value: emp.placeOfLiving?.communeNameKh },
+  { label: 'PoL - Village', value: emp.placeOfLiving?.villageNameKh },
   { label: 'Remark', value: emp.remark },
+]
 
-];
-
-
-// Break into 5 columns × 6 rows
 const chunkedEmployeeInfo = emp => {
   const info = employeeFields(emp)
   const chunked = []
-  for (let i = 0; i < info.length; i += 10) {
-    chunked.push(info.slice(i, i + 10))
-  }
-  while (chunked.length < 5) chunked.push([]) // Ensure 5 blocks
+  for (let i = 0; i < info.length; i += 10) chunked.push(info.slice(i, i + 10))
+  while (chunked.length < 5) chunked.push([])
   return chunked
 }
+
+const formatDate = val => (val ? dayjs(val).format('YYYY-MM-DD') : '')
 
 const fetchEmployees = async () => {
   const res = await axios.get(`/employees?company=${localStorage.getItem('company')}`)
@@ -246,9 +265,17 @@ const deleteSelected = async () => {
 
 const exportToExcel = () => console.log('Exporting...')
 const editEmployee = emp => console.log('Edit:', emp)
+const updateNote = emp => console.log('Update note for', emp)
 
-onMounted(fetchEmployees)
+// Load only once
+onMounted(async () => {
+  if (!hasLoaded.value) {
+    await fetchEmployees()
+    hasLoaded.value = true
+  }
+})
 </script>
+
 
 <style scoped>
 .table-scroll-wrapper {
@@ -256,6 +283,8 @@ onMounted(fetchEmployees)
   max-width: 100%;
   border: 1px solid #ccc;
   border-radius: 6px;
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 .scrollable-table {
@@ -264,13 +293,26 @@ onMounted(fetchEmployees)
   font-size: 13px;
 }
 
+.scrollable-table th {
+  position: sticky;
+  top: 0;
+  background-color: #f9f9f9;
+  z-index: 2;
+}
+
 .scrollable-table th,
 .scrollable-table td {
   border: 1px solid #ccc;
   padding: 6px 10px;
-  text-align: left;
-  vertical-align: top;
+  text-align: center;
+  vertical-align: middle;
   white-space: nowrap;
+  transition: background-color 0.2s ease;
+}
+
+.scrollable-table tbody tr:hover {
+  background-color: #dfedfc;
+  cursor: pointer;
 }
 
 .profile-img {
@@ -287,18 +329,19 @@ onMounted(fetchEmployees)
   text-align: center;
 }
 
-.bg-orange {
-  background-color: #ffe0b2;
+.bg-action {
+  background-color: #e0ddd7;
+  width: 140px;
 }
 
 .info-block {
   margin-bottom: 4px;
   font-size: 13px;
+  text-align: left;
 }
 
 .label {
-  font-weight: 500; /* medium bold */
+  font-weight: 500;
   margin-right: 4px;
 }
-
 </style>

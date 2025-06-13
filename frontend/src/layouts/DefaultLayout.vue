@@ -14,7 +14,11 @@
       <!-- Main Content Area -->
       <v-main class="main-content">
         <v-container fluid class="pa-0 ma-0">
-          <router-view />
+          <router-view v-slot="{ Component }">
+            <keep-alive include="EmployeeList">
+              <component :is="Component" :key="$route.fullPath" />
+            </keep-alive>
+          </router-view>
         </v-container>
       </v-main>
     </v-layout>
@@ -43,8 +47,21 @@ html, body, .v-application {
 }
 
 .main-layout {
-  height: 100vh;
+  height: 91vh;
+  display: flex;
   overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.main-content > .v-container {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .sidebar-fixed {
@@ -53,13 +70,5 @@ html, body, .v-application {
   border-right: 1px solid #ccc;
   background-color: #e9f8f8;
   max-width: 260px;
-}
-
-.main-content {
-  flex: 1;
-  overflow-y: auto;
-  background-color: #f4f6f9;
-  padding-top: 0 !important;
-  margin-top: 0 !important;
 }
 </style>

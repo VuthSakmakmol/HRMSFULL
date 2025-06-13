@@ -35,7 +35,7 @@ const routes = [
     path: '/hrss',
     component: DefaultLayout,
     children: [
-      { path: 'employees', component: () => import('@/views/hrss/EmployeeList.vue') },
+      { path: 'employees', name: 'EmployeeList', component: () => import('@/views/hrss/EmployeeList.vue') },
       { path: 'addemployee', component: () => import('@/views/hrss/AddEmployee.vue') }
     ]
   },

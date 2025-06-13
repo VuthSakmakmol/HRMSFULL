@@ -31,8 +31,9 @@ app.use('/api/candidates', require('./routes/ta/candidateRoutes'));
 app.use('/api/activity-logs', require('./routes/ta/activityLogRoutes'));
 
 // HRSS Module Routes
-
 app.use('/api/employees', require('./routes/hrss/employeeRoutes'));
+app.use('/api/location', require('./routes/hrss/locationRoutes'))
+app.use('/api/meta', require('./routes/hrss/metaRoutes'))
 
 
 
