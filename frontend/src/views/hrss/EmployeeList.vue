@@ -3,7 +3,7 @@
     <h2 class="text-h6 font-weight-bold mb-4">Employee Management</h2>
 
     <!-- Top Bar -->
-    <v-row class="mb-4" align-center="center" justify="space-between">
+    <v-row class="mb-4" align-center justify="space-between">
       <v-col cols="auto">
         <v-btn color="primary" @click="goToAddEmployee">
           <v-icon start>mdi-plus</v-icon> Add Employee
@@ -20,8 +20,6 @@
       <div class="text-caption mt-1 text-grey">
         ScrollTop: {{ scrollWrapper?.scrollTop || 0 }}
       </div>
-
-
     </v-row>
 
     <!-- Table -->
@@ -39,7 +37,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(emp, index) in paginatedEmployees" :key="emp._id">
+            <tr v-for="(emp, index) in employees" :key="emp._id">
               <td>
                 <v-checkbox v-model="selected" :value="emp._id" hide-details density="compact" />
               </td>
@@ -74,7 +72,6 @@
                   />
                 </div>
               </td>
-              
             </tr>
           </tbody>
         </table>
@@ -83,11 +80,11 @@
 
     <!-- Sticky Pagination Footer -->
     <v-sheet elevation="3" class="position-sticky bottom-0 bg-white px-4 py-2" style="z-index: 10;">
-      <v-row align-center="center" justify="space-between">
+      <v-row align-center justify="space-between">
         <v-col cols="auto">
           <v-select
             v-model="itemsPerPage"
-            :items="[10, 50, 100]"
+            :items="['10', '30', '60', '100', 'all']"
             label="Rows per page"
             density="compact"
             hide-details
@@ -96,8 +93,9 @@
         </v-col>
         <v-col cols="auto">
           <v-pagination
+            v-if="itemsPerPage !== 'all'"
             v-model="page"
-            :length="Math.ceil(employees.length / itemsPerPage)"
+            :length="totalEmployees > 0 ? Math.ceil(totalEmployees / parseInt(itemsPerPage)) : 1"
             rounded
             color="primary"
           />
@@ -107,8 +105,9 @@
   </v-container>
 </template>
 
+
 <script setup>
-import { ref, computed, onMounted, watch, onActivated, onDeactivated, nextTick } from 'vue'
+import { ref, watch, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
@@ -116,63 +115,90 @@ import dayjs from 'dayjs'
 
 defineOptions({ name: 'EmployeeList' })
 
+// ============= Pagination ==============
+const page = ref(parseInt(sessionStorage.getItem('employeePage')) || 1)
+const itemsPerPage = ref('10')
+const totalEmployees = ref(0)
+const getRowNumber = index => {
+  const perPage = itemsPerPage.value === 'all' ? totalEmployees.value : parseInt(itemsPerPage.value)
+  return (page.value - 1) * perPage + index + 1
+}
+
+watch([page, itemsPerPage], () => {
+  sessionStorage.setItem('employeePage', page.value)
+  fetchEmployees()
+})
+watch(itemsPerPage, () => page.value = 1)
+// ============= End Pagination ==============
+
+// ============= Fetch Employees =============
 const employees = ref([])
+const hasLoaded = ref(false)
+const fetchEmployees = async () => {
+  const res = await axios.get('/employees', {
+    params: {
+      company: localStorage.getItem('company'), // should be 'CAM-TAC'
+      page: page.value,
+      limit: itemsPerPage.value
+    }
+  })
+
+  console.log('✅ Response:', res.data) // 🔍 ADD THIS LINE
+
+  employees.value = res.data.employees
+  totalEmployees.value = res.data.total
+}
+
+// ============= End Fetch Employees =============
+
+const router = useRouter()
 const selected = ref([])
 const selectAll = ref(false)
-const page = ref(parseInt(sessionStorage.getItem('employeePage')) || 1)
-const itemsPerPage = ref(10)
-const defaultImage = '/default_images/girl_default_pf.jpg'
-const hasLoaded = ref(false)
-const router = useRouter()
 const scrollWrapper = ref(null)
+const defaultImage = '/default_images/girl_default_pf.jpg'
 
-// Navigate to Add Employee
-const goToAddEmployee = () => router.push('/hrss/addemployee')
-
-// Save scroll & page before navigating away
+// Save scroll position before leave
 onDeactivated(() => {
   const wrapper = scrollWrapper.value
   if (wrapper) {
     sessionStorage.setItem('employeeScrollTop', wrapper.scrollTop)
     sessionStorage.setItem('employeePage', page.value)
-    console.log('💾 Saved scrollTop:', wrapper.scrollTop, 'Page:', page.value)
   }
 })
 
-// Restore scroll & page on return
+// Restore scroll on return
 onActivated(() => {
-  console.log('✅ onActivated (restoring scroll + page)')
   nextTick(() => {
     const wrapper = scrollWrapper.value
     const savedScroll = parseInt(sessionStorage.getItem('employeeScrollTop') || '0')
     const savedPage = parseInt(sessionStorage.getItem('employeePage') || '1')
-    if (wrapper) {
-      wrapper.scrollTop = savedScroll
-      console.log('🔁 Restored scrollTop to:', savedScroll)
-    }
+    if (wrapper) wrapper.scrollTop = savedScroll
     page.value = savedPage
-    console.log('🔁 Restored page to:', savedPage)
   })
 })
 
-// Table logic
+const goToAddEmployee = () => router.push('/hrss/addemployee')
+
 const toggleSelectAll = () => {
   selectAll.value = !selectAll.value
   selected.value = selectAll.value ? employees.value.map(emp => emp._id) : []
 }
 
-const paginatedEmployees = computed(() => {
-  const start = (page.value - 1) * itemsPerPage.value
-  return employees.value.slice(start, start + itemsPerPage.value)
-})
+const deleteEmployee = async id => {
+  await axios.delete(`/api/employees/${id}`)
+  employees.value = employees.value.filter(e => e._id !== id)
+  Swal.fire({ icon: 'success', title: 'Deleted' })
+}
 
-watch(itemsPerPage, () => {
-  page.value = 1
-})
+const deleteSelected = async () => {
+  for (const id of selected.value) await deleteEmployee(id)
+  selected.value = []
+  selectAll.value = false
+}
 
-watch(page, () => {
-  sessionStorage.setItem('employeePage', page.value)
-})
+const exportToExcel = () => console.log('Exporting...')
+const editEmployee = emp => console.log('Edit:', emp)
+const updateNote = emp => console.log('Update note for', emp)
 
 const getCompletionRate = emp => {
   const values = Object.values(emp).flatMap(v =>
@@ -181,8 +207,6 @@ const getCompletionRate = emp => {
   const filled = values.filter(v => v !== '' && v !== null && v !== undefined)
   return Math.min(Math.round((filled.length / 48) * 100), 100)
 }
-
-const getRowNumber = index => (page.value - 1) * itemsPerPage.value + index + 1
 
 const employeeFields = emp => [
   { label: 'Employee ID', value: emp.employeeId },
@@ -246,28 +270,6 @@ const chunkedEmployeeInfo = emp => {
 
 const formatDate = val => (val ? dayjs(val).format('YYYY-MM-DD') : '')
 
-const fetchEmployees = async () => {
-  const res = await axios.get(`/employees?company=${localStorage.getItem('company')}`)
-  employees.value = res.data
-}
-
-const deleteEmployee = async id => {
-  await axios.delete(`/api/employees/${id}`)
-  employees.value = employees.value.filter(e => e._id !== id)
-  Swal.fire({ icon: 'success', title: 'Deleted' })
-}
-
-const deleteSelected = async () => {
-  for (const id of selected.value) await deleteEmployee(id)
-  selected.value = []
-  selectAll.value = false
-}
-
-const exportToExcel = () => console.log('Exporting...')
-const editEmployee = emp => console.log('Edit:', emp)
-const updateNote = emp => console.log('Update note for', emp)
-
-// Load only once
 onMounted(async () => {
   if (!hasLoaded.value) {
     await fetchEmployees()
@@ -275,6 +277,7 @@ onMounted(async () => {
   }
 })
 </script>
+
 
 
 <style scoped>
