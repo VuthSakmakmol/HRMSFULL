@@ -21,6 +21,7 @@
     "dayjs": "^1.11.13",
     "dayjs-plugin-utc": "^0.1.2",
     "file-saver": "^2.0.5",
+    "socket.io-client": "^4.8.1",
     "sweetalert2": "^11.22.0",
     "timezone": "^1.0.23",
     "utc": "^0.1.0",

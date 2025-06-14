@@ -289,14 +289,14 @@
   </v-container>
 </template>
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount  } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
-
+import socket from '@/utils/socket' // ✅ Use shared socket instance
 
 const activeTab = ref('White Collar')
 const showForm = ref(false)
@@ -306,7 +306,14 @@ const selectedRequisition = ref(null)
 const isEditMode = ref(false)
 const editId = ref(null)
 const route = useRoute()
+const socketListenerAdded = ref(false)
 
+
+// ================= Web Socket ========================
+
+
+
+// ================= End Web socket
 
 // ================= Paginationc========================
 const candidatePage = ref(1)
@@ -739,13 +746,20 @@ const handleImportExcel = async (event) => {
 
 
 
+
 const formatDate = (val) => (!val ? '-' : dayjs(val).format('DD-MMM-YY').toUpperCase())
 const daysBetween = (end, start) => dayjs(end).diff(dayjs(start), 'day')
 
-// onMounted(async () => {
-//   await fetchJobRequisitions()
-//   await fetchCandidates()
-// })
+onBeforeUnmount(() => {
+  if (socketListenerAdded.value) {
+    socket.off('candidateAdded')
+    socket.off('candidateUpdated')
+    socket.off('candidateDeleted')
+    socketListenerAdded.value = false
+  }
+})
+
+
 
 onMounted(async () => {
   await fetchJobRequisitions()
@@ -755,15 +769,12 @@ onMounted(async () => {
   if (jobRequisitionId) {
     const job = jobRequisitions.value.find(j => j._id === jobRequisitionId)
     if (job) {
-      // Set the active tab
       if (job.type === 'White Collar') activeTab.value = 'White Collar'
       else if (job.subType === 'Sewer') activeTab.value = 'Blue Collar Sewer'
       else activeTab.value = 'Blue Collar Non-Sewer'
 
-      // ✅ Auto-fill the form with this job
       selectedRequisition.value = job
       showForm.value = true
-
       form.value.department = job.departmentName
       form.value.recruiter = job.recruiter
       form.value.jobRequisitionCode = job.jobRequisitionId
@@ -771,11 +782,65 @@ onMounted(async () => {
       form.value.subType = job.subType
     }
   }
+
+  const tabToRoom = {
+    'White Collar': 'white-collar',
+    'Blue Collar Sewer': 'blue-collar-sewer',
+    'Blue Collar Non-Sewer': 'blue-collar-nonsewer'
+  }
+  socket.emit('joinRoom', tabToRoom[activeTab.value])
+
+  // ✅ Prevent duplicate listeners
+  if (!socketListenerAdded.value) {
+    socket.on('candidateAdded', (candidate) => {
+      console.log('📥 New candidate received via WebSocket:', candidate)
+      if (candidatePage.value === 1) {
+        candidates.value.unshift(candidate)
+        if (candidates.value.length > candidatePerPage.value) {
+          candidates.value.pop()
+        }
+      } else {
+        Swal.fire({
+          icon: 'info',
+          title: 'New Candidate Added',
+          text: 'Click to refresh and see the update.',
+          confirmButtonText: 'Refresh Now',
+          allowEnterKey: true
+        }).then(result => {
+          if (result.isConfirmed) fetchCandidates()
+        })
+      }
+    })
+
+    socket.on('candidateUpdated', (updated) => {
+      const index = candidates.value.findIndex(c => c._id === updated._id)
+      if (index !== -1) {
+        candidates.value[index] = updated
+      }
+    })
+
+    socket.on('candidateDeleted', (deletedId) => {
+      candidates.value = candidates.value.filter(c => c._id !== deletedId)
+    })
+
+    socket.on('jobUpdated', (updatedJob) => {
+      const i = jobRequisitions.value.findIndex(j => j._id === updatedJob._id)
+      if (i !== -1) jobRequisitions.value[i] = updatedJob
+    })
+
+
+    socketListenerAdded.value = true
+  }
 })
 
-
-
-
+onBeforeUnmount(() => {
+  if (socketListenerAdded.value) {
+    socket.off('candidateAdded')
+    socket.off('candidateUpdated')
+    socket.off('candidateDeleted')
+    socketListenerAdded.value = false
+  }
+})
 
 </script>
 

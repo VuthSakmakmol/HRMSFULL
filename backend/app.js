@@ -3,9 +3,35 @@ const mongoose = require('mongoose');
 const path = require('path');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
+
 
 dotenv.config();
 const app = express();
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log('📡 WebSocket client connected:', socket.id)
+
+  socket.on('joinRoom', (roomName) => {
+    socket.join(roomName)
+    console.log(`📥 Socket ${socket.id} joined room: ${roomName}`)
+  })
+
+  socket.on('disconnect', () => {
+    console.log('❌ Client disconnected:', socket.id)
+  })
+})
+
+
+app.set('io', io);
 
 // ─── MIDDLEWARE ────────────────────────────────────────────────────────────────
 app.use(cors());
@@ -61,6 +87,8 @@ mongoose.connect(process.env.MONGO_URI, {
 
 // ─── START SERVER ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4700;
-app.listen(PORT, () => {
+
+server.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
+

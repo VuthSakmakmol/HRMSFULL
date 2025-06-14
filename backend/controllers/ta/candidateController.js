@@ -69,6 +69,10 @@ exports.create = async (req, res) => {
     });
 
     await newCandidate.save();
+
+    const io = req.app.get('io');                      // ✅ WebSocket instance
+    io.emit('candidateAdded', newCandidate);           // ✅ Broadcast to all clients
+
     await logActivity({
       actionType: 'CREATE',
       collectionName: 'Candidate',
@@ -165,6 +169,8 @@ exports.update = async (req, res) => {
     });
 
     await candidate.save();
+    const io = req.app.get('io')
+    io.emit('candidateUpdated', candidate) // ✅ broadcast updated candidate
 
     await logActivity({
       actionType: 'UPDATE',
@@ -206,8 +212,14 @@ exports.remove = async (req, res) => {
       return res.status(404).json({ message: 'Candidate not found' });
     }
 
-    const previousData = candidate.toObject();
-    await candidate.deleteOne();
+    const previousData = candidate.toObject()
+
+    await candidate.deleteOne()
+
+    const io = req.app.get('io') // ✅ valid
+
+    io.emit('candidateDeleted', candidate._id) // ✅ correct object ID
+
 
     await logActivity({
       actionType: 'DELETE',
@@ -290,7 +302,9 @@ exports.updateStage = async (req, res) => {
     }
 
     await candidate.save();
-    await reevaluateJobStatus(job);
+    await reevaluateJobStatus(job, req);
+    const io = req.app.get('io');
+    io.emit('candidateUpdated', candidate);
 
     await logActivity({
       actionType: 'UPDATE',
@@ -312,7 +326,7 @@ exports.updateStage = async (req, res) => {
 
 
 // Reevaluates Job Requisition Status
-async function reevaluateJobStatus(job) {
+async function reevaluateJobStatus(job, req = null) {
   const activeOffers = await Candidate.countDocuments({
     jobRequisitionId: job._id,
     progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
@@ -338,7 +352,14 @@ async function reevaluateJobStatus(job) {
   job.onboardCount = activeOnboard;
 
   await job.save();
+
+  // ✅ Emit to frontend via WebSocket
+  if (req) {
+    const io = req.app.get('io');
+    io.emit('jobUpdated', job); // broadcast to all
+  }
 }
+
 
 // UPLOAD DOCUMENT
 exports.uploadDocument = async (req, res) => {
