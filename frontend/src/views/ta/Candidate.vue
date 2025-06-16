@@ -73,7 +73,7 @@
 
 
       <!-- Candidate Form -->
-      <v-form v-if="showForm" @submit.prevent="submitCandidate">
+      <v-form v-if="showForm" ref="formSection" @submit.prevent="submitCandidate">
         <v-row dense>
           <v-col cols="12" md="3">
             <v-autocomplete
@@ -203,14 +203,14 @@
               <th>Recruiter</th>
               <th>Candidate Name</th>
               <th>Source</th>
-              <th v-for="stage in ['Application','ManagerReview','Interview','JobOffer','Hired','Onboard']" :key="stage">{{ stage }}</th>
+              <th v-for="stage in ['Application','Sent to Manager','Interview','JobOffer','Hired','Onboard']" :key="stage">{{ stage }}</th>
               <th>Final Decision</th>
               <th>Start Duration</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(c, index) in paginatedCandidates" :key="c._id">
+            <tr v-for="(c, index) in candidates" :key="c._id">
               <td>{{ (candidatePage - 1) * candidatePerPage + index + 1 }}</td>
               <td>{{ c.candidateId }}</td>
               <td>{{ c.jobRequisitionCode }}</td>
@@ -219,7 +219,7 @@
               <td>{{ c.recruiter }}</td>
               <td>{{ c.fullName }}</td>
               <td>{{ c.applicationSource }}</td>
-              <td v-for="stage in ['Application','ManagerReview','Interview','JobOffer','Hired','Onboard']" :key="stage">
+              <td v-for="stage in ['Application','Sent to Manager','Interview','JobOffer','Hired','Onboard']" :key="stage">
                 <v-btn
                   :class="[getStageClass(c.progressDates?.[stage]), isAllStagesBlocked(c) ? 'disabled-btn' : '']"
                   :disabled="isAllStagesBlocked(c)"
@@ -252,9 +252,9 @@
         <v-col cols="12" md="6" class="d-flex align-center">
           <v-pagination
             v-model="candidatePage"
-            :length="Math.ceil(filteredCandidates.length / candidatePerPage)"
+            :length="Math.ceil(totalCandidates / candidatePerPage)"
             total-visible="7"
-            class="flex"
+            @update:model-value="fetchCandidates"
           />
         </v-col>
 
@@ -288,8 +288,10 @@
     </v-card>
   </v-container>
 </template>
+
+
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount  } from 'vue'
+import { ref, nextTick, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
@@ -307,6 +309,8 @@ const isEditMode = ref(false)
 const editId = ref(null)
 const route = useRoute()
 const socketListenerAdded = ref(false)
+const totalCandidates = ref(0)
+const formSection = ref(null)
 
 
 // ================= Web Socket ========================
@@ -319,11 +323,11 @@ const socketListenerAdded = ref(false)
 const candidatePage = ref(1)
 const candidatePerPage = ref(25)
 
-const paginatedCandidates = computed(() => {
-  const start = (candidatePage.value - 1) * candidatePerPage.value
-  const end = start + candidatePerPage.value
-  return filteredCandidates.value.slice(start, end)
-})
+// const paginatedCandidates = computed(() => {
+//   const start = (candidatePage.value - 1) * candidatePerPage.value
+//   const end = start + candidatePerPage.value
+//   return filteredCandidates.value.slice(start, end)
+// })
 
 // =================== End Pagination ======================
 
@@ -386,21 +390,22 @@ const updateProgressStage = async () => {
 }
 
 const isAllStagesBlocked = (candidate) => {
-  const status = candidate.jobRequisitionId?.status
-  if (['Candidate Refusal', 'Not Hired'].includes(candidate.hireDecision)) return true
-  if (status === 'Cancel') return true
+  const status = candidate.jobRequisitionId?.status;
+  if (['Candidate Refusal', 'Not Hired'].includes(candidate.hireDecision)) return true;
+  if (status === 'Cancel') return true;
 
-  const jobId = candidate.jobRequisitionId?._id || candidate.jobRequisitionId
-  const allowedIds = jobLockedMap.value[jobId]
-  if (!allowedIds) return false
+  const jobId = candidate.jobRequisitionId?._id || candidate.jobRequisitionId;
+  const allowedIds = jobLockedMap.value[jobId];
+  if (!allowedIds) return false;
 
-  return !allowedIds.includes(candidate._id)
+  return !allowedIds.includes(candidate._id);
 }
+
 
 const updateJobLockedMap = () => {
   jobLockedMap.value = {}
-
   const grouped = {}
+
   for (const c of candidates.value) {
     const jobId = c.jobRequisitionId
     if (!grouped[jobId]) grouped[jobId] = []
@@ -422,9 +427,7 @@ const updateJobLockedMap = () => {
   }
 }
 
-const getStageClass = (date) => {
-  return date ? 'stage-btn green-btn' : 'stage-btn red-btn'
-}
+
 
 // === Form Logic ===
 const toggleForm = () => {
@@ -455,14 +458,20 @@ const startEdit = (candidate) => {
 
   selectedRequisition.value = jobRequisitions.value.find(j => j.jobRequisitionId === candidate.jobRequisitionCode)
 
-  form.value.fullName = candidate.fullName
-  form.value.applicationSource = candidate.applicationSource
-  form.value.department = candidate.department
-  form.value.recruiter = candidate.recruiter
-  form.value.jobRequisitionCode = candidate.jobRequisitionCode
-  form.value.type = candidate.type
-  form.value.subType = candidate.subType
-  form.value.hireDecision = candidate.hireDecision || 'Candidate in Process'
+  form.value = {
+    fullName: candidate.fullName,
+    applicationSource: candidate.applicationSource,
+    department: candidate.department,
+    recruiter: candidate.recruiter,
+    jobRequisitionCode: candidate.jobRequisitionCode,
+    type: candidate.type,
+    subType: candidate.subType,
+    hireDecision: candidate.hireDecision || 'Candidate in Process'
+  }
+  nextTick(() => {
+    const formEl = formSection.value?.$el || formSection.value
+    formEl?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 const submitCandidate = async () => {
@@ -542,20 +551,36 @@ const fetchCandidates = async () => {
   try {
     const user = JSON.parse(localStorage.getItem('user'))
     const selectedCompany = localStorage.getItem('company')
-    const query = user?.role === 'GeneralManager' && selectedCompany ? `?company=${selectedCompany}` : ''
-    const res = await axios.get(`/candidates${query}`)
+    const company = user?.role === 'GeneralManager' ? selectedCompany : user?.company
+    if (!company) throw new Error('Company not found')
 
-    candidates.value = res.data.map(c => ({
-      ...c,
-      jobRequisitionStatus: c.jobRequisitionId?.status || null
-    }))
+    const params = {
+      page: candidatePage.value,
+      limit: candidatePerPage.value,
+      company,
+      ...filters.value,
+      type: activeTab.value === 'White Collar' ? 'White Collar' : 'Blue Collar',
+      subType:
+        activeTab.value === 'Blue Collar Sewer'
+          ? 'Sewer'
+          : activeTab.value === 'Blue Collar Non-Sewer'
+          ? 'Non-Sewer'
+          : undefined
+    }
+
+    const res = await axios.get('/candidates', { params })
+
+    candidates.value = res.data.candidates
+    totalCandidates.value = res.data.total
     updateJobLockedMap()
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Failed to fetch candidates', text: err.message || 'Unknown error' })
+    Swal.fire({ icon: 'error', title: 'Fetch Error', text: err.message })
   }
 }
 
-
+const getStageClass = (date) => { return date ? 'stage-btn green-btn' : 'stage-btn red-btn'}
+const formatDate = (val) => (!val ? '-' : dayjs(val).format('DD-MMM-YY').toUpperCase())
+const daysBetween = (end, start) => dayjs(end).diff(dayjs(start), 'day')
 
 const fetchJobRequisitions = async () => {
   try {
@@ -564,12 +589,13 @@ const fetchJobRequisitions = async () => {
     const company = user?.role === 'GeneralManager' ? selectedCompany : user?.company
     if (!company) throw new Error('Missing company info')
 
-    const res = await axios.get(`/job-requisitions?company=${company}`)
-    jobRequisitions.value = res.data
+    const res = await axios.get(`/job-requisitions?company=${company}&all=true`)
+    jobRequisitions.value = res.data.requisitions || []
   } catch (err) {
     Swal.fire({ icon: 'error', title: 'Failed to fetch requisitions', text: err.message })
   }
 }
+
 
 // === UI & Filters ===
 const setActive = (tab) => {
@@ -577,67 +603,18 @@ const setActive = (tab) => {
 }
 
 
-const filteredJobTitleOptions = computed(() =>
-  jobRequisitions.value.filter(j => {
+const filteredJobTitleOptions = computed(() => {
+  const isWhite = (j) => activeTab.value === 'White Collar' && j.type === 'White Collar'
+  const isSewer = (j) => activeTab.value === 'Blue Collar Sewer' && j.type === 'Blue Collar' && j.subType === 'Sewer'
+  const isNonSewer = (j) => activeTab.value === 'Blue Collar Non-Sewer' && j.type === 'Blue Collar' && j.subType === 'Non-Sewer'
+
+  return jobRequisitions.value.filter(j => {
     if (showForm.value && j.status !== 'Vacant') return false
-    if (activeTab.value === 'White Collar') return j.type === 'White Collar'
-    if (activeTab.value === 'Blue Collar Sewer') return j.type === 'Blue Collar' && j.subType === 'Sewer'
-    if (activeTab.value === 'Blue Collar Non-Sewer') return j.type === 'Blue Collar' && j.subType === 'Non-Sewer'
-    return false
+    return isWhite(j) || isSewer(j) || isNonSewer(j)
   })
-)
-const filteredCandidates = computed(() => {
-  let base = candidates.value
-  candidatePage.value = 1
-
-  // Route filter
-  const jobRequisitionId = route.query.jobRequisitionId
-  if (jobRequisitionId) {
-    base = base.filter(c => {
-      if (typeof c.jobRequisitionId === 'string') return c.jobRequisitionId === jobRequisitionId
-      return c.jobRequisitionId?._id === jobRequisitionId
-    })
-  }
-
-
-  // Tab filter
-  if (activeTab.value === 'White Collar') {
-    base = base.filter(c => c.type === 'White Collar')
-  } else if (activeTab.value === 'Blue Collar Sewer') {
-    base = base.filter(c => c.type === 'Blue Collar' && c.subType === 'Sewer')
-  } else if (activeTab.value === 'Blue Collar Non-Sewer') {
-    base = base.filter(c => c.type === 'Blue Collar' && c.subType === 'Non-Sewer')
-  }
-
-  // Text filters
-  
-  if (filters.value.candidateId) {
-    base = base.filter(c => c.candidateId?.toLowerCase().includes(filters.value.candidateId.toLowerCase()))
-  }
-  if (filters.value.jobId) {
-    base = base.filter(c => c.jobRequisitionCode?.toLowerCase().includes(filters.value.jobId.toLowerCase()))
-  }
-  if (filters.value.department) {
-    base = base.filter(c => c.department?.toLowerCase().includes(filters.value.department.toLowerCase()))
-  }
-  if (filters.value.jobTitle) {
-    base = base.filter(c => c.jobTitle?.toLowerCase().includes(filters.value.jobTitle.toLowerCase()))
-  }
-  if (filters.value.fullName) {
-    base = base.filter(c => c.fullName?.toLowerCase().includes(filters.value.fullName.toLowerCase()))
-  }
-  if (filters.value.recruiter) {
-    base = base.filter(c => c.recruiter?.toLowerCase().includes(filters.value.recruiter.toLowerCase()))
-  }
-  if (filters.value.applicationSource) {
-    base = base.filter(c => c.applicationSource?.toLowerCase().includes(filters.value.applicationSource.toLowerCase()))
-  }
-  if (filters.value.hireDecision) {
-    base = base.filter(c => c.hireDecision === filters.value.hireDecision)
-  }
-
-  return base
 })
+
+
 
 const exportToExcel = () => {
   const data = filteredCandidates.value.map((c, index) => ({
@@ -743,13 +720,6 @@ const handleImportExcel = async (event) => {
 }
 
 
-
-
-
-
-const formatDate = (val) => (!val ? '-' : dayjs(val).format('DD-MMM-YY').toUpperCase())
-const daysBetween = (end, start) => dayjs(end).diff(dayjs(start), 'day')
-
 onBeforeUnmount(() => {
   if (socketListenerAdded.value) {
     socket.off('candidateAdded')
@@ -763,6 +733,7 @@ onBeforeUnmount(() => {
 
 onMounted(async () => {
   await fetchJobRequisitions()
+  console.log('✅ jobRequisitions:', jobRequisitions.value)
   await fetchCandidates()
 
   const jobRequisitionId = route.query.jobRequisitionId
@@ -790,7 +761,6 @@ onMounted(async () => {
   }
   socket.emit('joinRoom', tabToRoom[activeTab.value])
 
-  // ✅ Prevent duplicate listeners
   if (!socketListenerAdded.value) {
     socket.on('candidateAdded', (candidate) => {
       console.log('📥 New candidate received via WebSocket:', candidate)
@@ -828,18 +798,46 @@ onMounted(async () => {
       if (i !== -1) jobRequisitions.value[i] = updatedJob
     })
 
+    // ✅ NEW: real-time availability update
+    socket.on('jobAvailabilityChanged', (availability) => {
+      const index = jobRequisitions.value.findIndex(j => j._id === availability.jobId)
+      if (index !== -1) {
+        jobRequisitions.value[index].offerFull = availability.offerFull
+        jobRequisitions.value[index].onboardFull = availability.onboardFull
+        jobRequisitions.value[index].offerCount = availability.offerCount
+        jobRequisitions.value[index].onboardCount = availability.onboardCount
+      }
+    })
 
     socketListenerAdded.value = true
   }
 })
+
 
 onBeforeUnmount(() => {
   if (socketListenerAdded.value) {
     socket.off('candidateAdded')
     socket.off('candidateUpdated')
     socket.off('candidateDeleted')
+    socket.off('jobUpdated')
+    socket.off('jobAvailabilityChanged') // ✅ cleanup new listener
     socketListenerAdded.value = false
   }
+})
+
+watch(candidatePerPage, () => {
+  candidatePage.value = 1
+  fetchCandidates()
+})
+
+watch([filters, activeTab], () => {
+  candidatePage.value = 1
+  fetchCandidates()
+}, { deep: true })
+
+watch([activeTab], async () => {
+  await fetchJobRequisitions()
+  await fetchCandidates()
 })
 
 </script>

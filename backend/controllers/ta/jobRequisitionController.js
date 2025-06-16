@@ -173,24 +173,61 @@ exports.deleteJobRequisition = async (req, res) => {
   }
 };
 
-// 📋 Get all job requisitions
+// 📋 Get job requisitions with pagination + filters
 exports.getJobRequisitions = async (req, res) => {
   try {
     const role = req.user?.role;
     const userCompany = req.user?.company;
     const queryCompany = req.query.company;
-    const companyFilter = role === 'GeneralManager' ? queryCompany : userCompany;
+    const company = role === 'GeneralManager' ? queryCompany : userCompany;
 
-    if (!companyFilter) {
+    if (!company) {
       return res.status(400).json({ message: 'Company is required' });
     }
 
-    const jobList = await JobRequisition.find({
-      company: companyFilter.trim().toUpperCase()
-    }).sort({ createdAt: -1 }).lean();
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 25;
+    const skip = (page - 1) * limit;
 
+    // Filters
+    const {
+      jobId,
+      department,
+      jobTitle,
+      openingDate,
+      recruiter,
+      status,
+      startDate,
+      hiringCost,
+      type,
+      subType
+    } = req.query;
+
+    const filter = { company: company.trim().toUpperCase() };
+
+    if (jobId) filter.jobRequisitionId = { $regex: jobId, $options: 'i' };
+    if (department) filter.departmentName = { $regex: department, $options: 'i' };
+    if (jobTitle) filter.jobTitle = { $regex: jobTitle, $options: 'i' };
+    if (openingDate) filter.openingDate = { $regex: openingDate, $options: 'i' };
+    if (recruiter) filter.recruiter = { $regex: recruiter, $options: 'i' };
+    if (status) filter.status = status;
+    if (startDate) filter.startDate = { $regex: startDate, $options: 'i' };
+    if (hiringCost) filter.hiringCost = Number(hiringCost); // optional: support exact number filter
+    if (type) filter.type = type;
+    if (subType) filter.subType = subType;
+
+    // Total count for pagination
+    const total = await JobRequisition.countDocuments(filter);
+
+    const jobList = await JobRequisition.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Count onboard + offer by progress stage
     const jobIds = jobList.map(j => j._id);
-
     const counts = await Candidate.aggregate([
       {
         $match: {
@@ -237,12 +274,13 @@ exports.getJobRequisitions = async (req, res) => {
       };
     });
 
-    res.json(jobsWithCounts);
+    res.json({ requisitions: jobsWithCounts, total });
   } catch (err) {
-    console.error('❌ Error fetching requisitions:', err);
-    res.status(500).json({ message: 'Error fetching job requisitions', error: err.message });
+    console.error('❌ Error fetching job requisitions:', err);
+    res.status(500).json({ message: 'Error fetching requisitions', error: err.message });
   }
 };
+
 
 // GET /ta/job-requisitions/vacant
 exports.getVacantRequisitions = async (req, res) => {

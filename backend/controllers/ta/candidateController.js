@@ -91,17 +91,63 @@ exports.create = async (req, res) => {
 };
 
 // GET ALL
+// ✅ GET ALL — With Pagination and Filters
 exports.getAll = async (req, res) => {
   try {
-    const company = req.user.role === 'GeneralManager' ? req.query.company : req.user.company;
+    const role = req.user?.role;
+    const userCompany = req.user?.company;
+    const queryCompany = req.query.company;
+
+    const company = role === 'GeneralManager' ? queryCompany : userCompany;
     if (!company) return res.status(400).json({ message: 'Company is required' });
 
-    const candidates = await Candidate.find({ company }).sort({ createdAt: -1 });
-    res.json(candidates);
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 25;
+    const skip = (page - 1) * limit;
+
+    // Filters
+    const {
+      candidateId,
+      jobId,
+      jobTitle,
+      department,
+      recruiter,
+      fullName,
+      applicationSource,
+      hireDecision,
+      type,
+      subType
+    } = req.query;
+
+    const filter = { company };
+
+    if (candidateId) filter.candidateId = { $regex: candidateId, $options: 'i' };
+    if (jobId) filter.jobRequisitionCode = { $regex: jobId, $options: 'i' };
+    if (jobTitle) filter.jobTitle = { $regex: jobTitle, $options: 'i' };
+    if (department) filter.department = { $regex: department, $options: 'i' };
+    if (recruiter) filter.recruiter = { $regex: recruiter, $options: 'i' };
+    if (fullName) filter.fullName = { $regex: fullName, $options: 'i' };
+    if (applicationSource) filter.applicationSource = applicationSource;
+    if (hireDecision) filter.hireDecision = hireDecision;
+    if (type) filter.type = type;
+    if (subType) filter.subType = subType;
+
+    const [candidates, total] = await Promise.all([
+      Candidate.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Candidate.countDocuments(filter)
+    ]);
+
+    res.json({ candidates, total });
   } catch (err) {
+    console.error('❌ Failed to fetch candidates:', err);
     res.status(500).json({ message: 'Fetch error', error: err.message });
   }
 };
+
 
 // GET ONE
 exports.getOne = async (req, res) => {
@@ -353,12 +399,16 @@ async function reevaluateJobStatus(job, req = null) {
 
   await job.save();
 
-  // ✅ Emit to frontend via WebSocket
+  // ✅ Emit real-time updates
   if (req) {
     const io = req.app.get('io');
-    io.emit('jobUpdated', job); // broadcast to all
+    io.emit('jobUpdated', job);
+
+    const availability = await getAvailabilityStatus(job._id);
+    io.emit('jobAvailabilityChanged', availability);
   }
 }
+
 
 
 // UPLOAD DOCUMENT
@@ -396,30 +446,41 @@ exports.deleteDocument = async (req, res) => {
   }
 };
 
-// GET JOB AVAILABILITY
 exports.getAvailability = async (req, res) => {
   try {
-    const job = await JobRequisition.findById(req.params.id);
-    if (!job) return res.status(404).json({ message: 'Job not found' });
-
-    const offerCount = await Candidate.countDocuments({
-      jobRequisitionId: job._id,
-      progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
-      _offerCounted: true,
-      hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
-    });
-
-    const onboardCount = await Candidate.countDocuments({
-      jobRequisitionId: job._id,
-      progress: 'Onboard',
-      _onboardCounted: true
-    });
-
-    res.json({
-      offerFull: offerCount >= job.targetCandidates,
-      onboardFull: onboardCount >= job.targetCandidates
-    });
+    const status = await getAvailabilityStatus(req.params.id);
+    if (!status) return res.status(404).json({ message: 'Job not found' });
+    res.json(status);
   } catch (err) {
     res.status(500).json({ message: 'Availability error', error: err.message });
   }
 };
+
+
+// GET JOB AVAILABILITY
+async function getAvailabilityStatus(jobId) {
+  const job = await JobRequisition.findById(jobId);
+  if (!job) return null;
+
+  const offerCount = await Candidate.countDocuments({
+    jobRequisitionId: job._id,
+    progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
+    _offerCounted: true,
+    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+  });
+
+  const onboardCount = await Candidate.countDocuments({
+    jobRequisitionId: job._id,
+    progress: 'Onboard',
+    _onboardCounted: true
+  });
+
+  return {
+    jobId: job._id,
+    offerFull: offerCount >= job.targetCandidates,
+    onboardFull: onboardCount >= job.targetCandidates,
+    offerCount,
+    onboardCount
+  };
+}
+

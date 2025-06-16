@@ -327,6 +327,7 @@
                   size="small"
                   variant="outlined"
                   class="cursor-pointer"
+                  :class="{ 'flash-chip': recentlyUpdatedJobId === job._id }"
                   @click="goToCandidates(job)"
                 >
                   {{ job.status }}
@@ -414,13 +415,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import api from '@/utils/axios'
 import Swal from 'sweetalert2'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
+import socket from '@/utils/socket'
+
 
 const dateMenu = ref(false)
 const jobTitles = ref([])
@@ -432,6 +435,7 @@ const showLoader = ref(true)
 const loadValue = ref(0)
 const router = useRouter()
 const fileInput = ref(null)
+const total = ref(0)
 
 const triggerFileInput = () => {
   fileInput.value.click()
@@ -572,13 +576,43 @@ const fetchJobTitles = async () => {
 
 const fetchRequisitions = async () => {
   try {
-    const query = role === 'GeneralManager' ? `?company=${company}` : ''
-    const res = await api.get(`/job-requisitions${query}`)
-    requisitions.value = res.data
+    const user = JSON.parse(localStorage.getItem('user'))
+    const company = user.role === 'GeneralManager' ? localStorage.getItem('company') : user.company
+
+    const res = await api.get('/job-requisitions', {
+      params: {
+        page: page.value,
+        limit: itemsPerPage.value,
+        company,
+        type: getTypeFromTab(activeTab.value),
+        subType: getSubTypeFromTab(activeTab.value)
+      }
+    })
+
+
+    requisitions.value = res.data.requisitions
+    total.value = res.data.total
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Failed to Load Requisitions', text: err?.response?.data?.message || 'Error loading requisitions' })
+    Swal.fire({ icon: 'error', title: 'Error', text: err.message })
   }
 }
+
+watch(itemsPerPage, () => {
+  page.value = 1
+  fetchRequisitions()
+})
+
+const getTypeFromTab = (tab) => {
+  if (tab === 'White Collar') return 'White Collar'
+  return 'Blue Collar'
+}
+
+const getSubTypeFromTab = (tab) => {
+  if (tab === 'Blue Collar Sewer') return 'Sewer'
+  if (tab === 'Blue Collar Non-Sewer') return 'Non-Sewer'
+  return undefined
+}
+
 
 const submitRequisition = async () => {
   try {
@@ -602,7 +636,10 @@ const setActive = (tab) => {
   activeTab.value = tab
   alerts.value[tab] = false
   localStorage.setItem(`seen_${tab}`, 'true')
+  page.value = 1
+  fetchRequisitions()  // ✅ refresh with new tab's filter
 }
+
 
 const onJobTitleSelected = () => {
   const found = jobTitles.value.find(j => j.jobTitle === form.value.jobTitle)
@@ -802,6 +839,7 @@ const handleFileUpload = async (event) => {
   reader.readAsArrayBuffer(file)
 }
 
+const recentlyUpdatedJobId = ref(null)
 
 
 onMounted(() => {
@@ -820,8 +858,38 @@ onMounted(() => {
   for (const key in alerts.value) {
     alerts.value[key] = localStorage.getItem(`seen_${key}`) !== 'true'
   }
+
+  socket.on('jobUpdated', (updatedJob) => {
+    const index = requisitions.value.findIndex(j => j._id === updatedJob._id)
+    if (index !== -1) {
+      requisitions.value[index] = updatedJob
+      recentlyUpdatedJobId.value = updatedJob._id
+
+      setTimeout(() => {
+        recentlyUpdatedJobId.value = null
+      }, 2000)
+    }
+  })
+
+
+  socket.on('jobAvailabilityChanged', (availability) => {
+    const i = requisitions.value.findIndex(j => j._id === availability.jobId)
+    if (i !== -1) {
+      requisitions.value[i].offerCount = availability.offerCount
+      requisitions.value[i].onboardCount = availability.onboardCount
+
+      // Optional: also update status if backend didn't emit jobUpdated
+      if (availability.onboardFull) requisitions.value[i].status = 'Filled'
+      else if (availability.offerFull) requisitions.value[i].status = 'Suspended'
+      else requisitions.value[i].status = 'Vacant'
+    }
+  })
 })
 
+onBeforeUnmount(() => {
+  socket.off('jobUpdated')
+  socket.off('jobAvailabilityChanged')
+})
 
 </script>
 
@@ -887,4 +955,15 @@ onMounted(() => {
   background-color: #0288d1 !important;
   color: white !important;
 }
+
+.flash-chip {
+  animation: flash 1s ease-in-out 2;
+}
+
+@keyframes flash {
+  0% { background-color: #fff59d; }
+  50% { background-color: #fff176; }
+  100% { background-color: inherit; }
+}
+
 </style>
