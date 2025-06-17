@@ -17,12 +17,18 @@
           <v-icon start>mdi-file-excel</v-icon> Export Excel
         </v-btn>
       </v-col>
-      <div class="text-caption mt-1 text-grey">
-        ScrollTop: {{ scrollWrapper?.scrollTop || 0 }}
-      </div>
     </v-row>
 
-    <!-- Table -->
+    <!-- Step Form for Add/Edit -->
+    <EmployeeForm
+      v-if="showForm"
+      v-model="form"
+      :editMode="isEditMode"
+      @submit="handleFormSubmit"
+      @cancel="cancelForm"
+    />
+
+    <!-- Employee Table -->
     <v-card>
       <div class="table-scroll-wrapper" ref="scrollWrapper">
         <table class="scrollable-table">
@@ -38,9 +44,7 @@
           </thead>
           <tbody>
             <tr v-for="(emp, index) in employees" :key="emp._id">
-              <td>
-                <v-checkbox v-model="selected" :value="emp._id" hide-details density="compact" />
-              </td>
+              <td><v-checkbox v-model="selected" :value="emp._id" hide-details density="compact" /></td>
               <td>{{ getRowNumber(index) }}</td>
               <td>{{ getCompletionRate(emp) }}%</td>
               <td class="img-cell">
@@ -78,13 +82,13 @@
       </div>
     </v-card>
 
-    <!-- Sticky Pagination Footer -->
+    <!-- Pagination Footer -->
     <v-sheet elevation="3" class="position-sticky bottom-0 bg-white px-4 py-2" style="z-index: 10;">
       <v-row align-center justify="space-between">
         <v-col cols="auto">
           <v-select
             v-model="itemsPerPage"
-            :items="['10', '30', '60', '100', 'all']"
+            :items="['10', '30', '60', '100', '300', 'all']"
             label="Rows per page"
             density="compact"
             hide-details
@@ -92,13 +96,12 @@
           />
         </v-col>
         <v-col cols="auto">
-          <v-select
-            v-model="itemsPerPage"
-            :items="[10, 25, 50, 100]"
-            label="Rows per page"
-            density="compact"
-            hide-details
-            style="width: 130px"
+          <v-pagination
+            v-if="itemsPerPage !== 'all'"
+            v-model="page"
+            :length="totalEmployees > 0 ? Math.ceil(totalEmployees / parseInt(itemsPerPage)) : 1"
+            rounded
+            color="primary"
           />
         </v-col>
       </v-row>
@@ -113,15 +116,28 @@ import { useRouter } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
+import EmployeeForm from './AddEmployee.vue'
 
 defineOptions({ name: 'EmployeeList' })
+
+const showForm = ref(false)
+const isEditMode = ref(false)
+const form = ref({})
+
+
+const goToAddEmployee = () => {
+  isEditMode.value = false
+  form.value = {}
+  showForm.value = true
+}
+
 
 // ============= Pagination ==============
 const page = ref(parseInt(sessionStorage.getItem('employeePage')) || 1)
 const itemsPerPage = ref('10')
 const totalEmployees = ref(0)
 const getRowNumber = index => {
-  const perPage = parseInt(itemsPerPage.value)
+  const perPage = itemsPerPage.value === 'all' ? totalEmployees.value : parseInt(itemsPerPage.value)
   return (page.value - 1) * perPage + index + 1
 }
 
@@ -135,13 +151,23 @@ watch(itemsPerPage, () => page.value = 1)
 // ============= Fetch Employees =============
 const employees = ref([])
 const hasLoaded = ref(false)
-watch([page, itemsPerPage], () => {
-  page.value = Math.max(1, page.value)
-  sessionStorage.setItem('employeePage', page.value)
-  fetchEmployees()
-})
+const fetchEmployees = async () => {
+  const params = {
+    company: localStorage.getItem('company'),
+  }
 
+  if (itemsPerPage.value !== 'all') {
+    params.page = page.value
+    params.limit = itemsPerPage.value
+  }
 
+  const res = await axios.get('/employees', { params })
+
+  console.log('✅ Response:', res.data)
+
+  employees.value = res.data.employees
+  totalEmployees.value = res.data.total || res.data.employees?.length || 0
+}
 
 
 // ============= End Fetch Employees =============
@@ -172,7 +198,7 @@ onActivated(() => {
   })
 })
 
-const goToAddEmployee = () => router.push('/hrss/addemployee')
+// const goToAddEmployee = () => router.push('/hrss/addemployee')
 
 const toggleSelectAll = () => {
   selectAll.value = !selectAll.value
@@ -192,7 +218,14 @@ const deleteSelected = async () => {
 }
 
 const exportToExcel = () => console.log('Exporting...')
-const editEmployee = emp => console.log('Edit:', emp)
+const editEmployee = (emp) => {
+  router.push({
+    path: '/hrss/addemployee',
+    query: { id: emp._id }
+  })
+}
+
+
 const updateNote = emp => console.log('Update note for', emp)
 
 const getCompletionRate = emp => {
@@ -262,6 +295,29 @@ const chunkedEmployeeInfo = emp => {
   while (chunked.length < 5) chunked.push([])
   return chunked
 }
+
+const handleFormSubmit = async () => {
+  try {
+    if (isEditMode.value) {
+      await axios.put(`/api/employees/${form.value._id}`, form.value)
+      Swal.fire({ icon: 'success', title: 'Employee Updated' })
+    }
+    showForm.value = false
+    isEditMode.value = false
+    await fetchEmployees()
+  } catch (err) {
+    console.error(err)
+    Swal.fire({ icon: 'error', title: 'Failed to update' })
+  }
+}
+
+const cancelForm = () => {
+  showForm.value = false
+  form.value = {}
+  isEditMode.value = false
+}
+
+
 
 const formatDate = val => (val ? dayjs(val).format('YYYY-MM-DD') : '')
 
