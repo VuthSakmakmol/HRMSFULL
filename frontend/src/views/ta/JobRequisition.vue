@@ -29,7 +29,7 @@
         <v-col cols="auto">
           <v-btn
             color="primary"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             class="text-white font-weight-bold hover-filled hover-primary"
             elevation="0"
             @click="showCreateForm = !showCreateForm"
@@ -42,7 +42,7 @@
         <v-col cols="auto">
           <v-btn
             color="teal"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             class="text-white font-weight-bold hover-filled hover-teal"
             elevation="0"
             @click="showFilterForm = !showFilterForm"
@@ -55,7 +55,7 @@
         <v-col cols="auto">
           <v-btn
             color="info"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             class="text-white font-weight-bold hover-filled hover-info"
             elevation="0"
             @click="exportToExcel"
@@ -67,7 +67,7 @@
         <v-col cols="auto">
           <v-btn
             color="success"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             class="text-white font-weight-bold hover-filled"
             elevation="0"
             @click="triggerFileInput"
@@ -96,7 +96,7 @@
                 :items="jobTitles.map(j => j.jobTitle)"
                 label="Job Title"
                 clearable
-                variant="outlined"
+                variant="outlined" autocomplete="off"
                 density="compact"
                 hide-details
                 auto-select-first
@@ -110,7 +110,7 @@
                 :items="recruiterList"
                 label="Recruiter"
                 clearable
-                variant="outlined"
+                variant="outlined" autocomplete="off"
                 density="compact"
                 hide-details
                 auto-select-first
@@ -123,7 +123,7 @@
                 label="Target Candidates"
                 type="number"
                 min="1"
-                variant="outlined"
+                variant="outlined" autocomplete="off"
                 density="compact"
                 hide-details
               />
@@ -138,7 +138,7 @@
                     label="Opening Date"
                     readonly
                     prepend-inner-icon="mdi-calendar"
-                    variant="outlined"
+                    variant="outlined" autocomplete="off"
                     density="compact"
                     hide-details
                   />
@@ -153,7 +153,7 @@
                 v-model="form.status"
                 :items="['Vacant', 'Filled', 'Suspended', 'Cancel']"
                 label="Status"
-                variant="outlined"
+                variant="outlined" autocomplete="off"
                 clearable
                 density="compact"
                 hide-details
@@ -166,7 +166,7 @@
                 v-model.number="form.hiringCost"
                 type="number"
                 label="Hiring Cost"
-                variant="outlined"
+                variant="outlined" autocomplete="off"
                 density="compact"
                 hide-details
               />
@@ -182,7 +182,7 @@
                       label="New Hire Start Date"
                       readonly
                       prepend-inner-icon="mdi-calendar"
-                      variant="outlined"
+                      variant="outlined" autocomplete="off"
                       density="compact"
                       hide-details
                     />
@@ -192,7 +192,7 @@
               </v-col>
 
             <v-col cols="12" md="3" class="d-flex align-end">
-              <v-btn type="submit" color="success" variant="outlined" block>
+              <v-btn type="submit" color="success" variant="outlined" autocomplete="off" block>
                 {{ isEditing ? 'UPDATE' : 'CREATE' }}
               </v-btn>
             </v-col>
@@ -208,7 +208,9 @@
             v-model="filters.jobId"
             label="Job ID"
             prepend-inner-icon="mdi-magnify"
-            variant="outlined"
+            variant="outlined" 
+            autocomplete="off"
+            density="compact"
             clearable
             dense
             hide-details
@@ -219,7 +221,9 @@
             v-model="filters.department"
             label="Department"
             prepend-inner-icon="mdi-office-building"
-            variant="outlined"
+            variant="outlined" 
+            autocomplete="off"
+            density="compact"
             clearable
             dense
             hide-details
@@ -230,7 +234,9 @@
             v-model="filters.jobTitle"
             label="Job Title"
             prepend-inner-icon="mdi-briefcase"
-            variant="outlined"
+            variant="outlined" 
+            autocomplete="off"
+            density="compact"
             clearable
             dense
             hide-details
@@ -241,7 +247,9 @@
             v-model="filters.openingDate"
             label="Opening Date (YYYY-MM-DD)"
             prepend-inner-icon="mdi-calendar"
-            variant="outlined"
+            variant="outlined" 
+            autocomplete="off"
+            density="compact"
             clearable
             dense
             hide-details
@@ -252,7 +260,9 @@
             v-model="filters.recruiter"
             label="Recruiter"
             prepend-inner-icon="mdi-account"
-            variant="outlined"
+            variant="outlined" 
+            autocomplete="off"
+            density="compact"
             clearable
             dense
             hide-details
@@ -263,7 +273,9 @@
             v-model="filters.status"
             :items="['Vacant', 'Filled', 'Suspended', 'Cancel']"
             label="Status"
-            variant="outlined"
+            variant="outlined" 
+            density="compact"
+            autocomplete="off"
             clearable
             dense
             hide-details
@@ -274,7 +286,9 @@
             v-model="filters.startDate"
             label="Start Date (YYYY-MM-DD)"
             prepend-inner-icon="mdi-calendar"
-            variant="outlined"
+            variant="outlined" 
+            autocomplete="off"
+            density="compact"
             clearable
             dense
             hide-details
@@ -287,6 +301,8 @@
             prepend-inner-icon="mdi-cash"
             type="number"
             variant="outlined"
+            density="compact" 
+            autocomplete="off"
             clearable
             dense
             hide-details

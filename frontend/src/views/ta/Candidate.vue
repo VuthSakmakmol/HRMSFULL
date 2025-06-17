@@ -13,7 +13,7 @@
         <v-col cols="auto">
           <v-btn
             color="primary"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             class="text-white font-weight-bold hover-filled hover-primary"
             elevation="0"
             @click="toggleForm"
@@ -26,7 +26,7 @@
         <v-col cols="auto">
           <v-btn
             color="teal"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             class="text-white font-weight-bold hover-filled hover-teal"
             elevation="0"
             @click="showFilterForm = !showFilterForm"
@@ -39,7 +39,7 @@
         <v-col cols="auto">
           <v-btn
             color="green"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             class="text-white font-weight-bold hover-filled hover-excel "
             elevation="0"
             @click="exportToExcel"
@@ -51,7 +51,7 @@
         <v-col cols="auto">
           <v-btn
             color="orange"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             class="text-white font-weight-bold hover-filled hover-excel"
             elevation="0"
             @click="$refs.excelInput.click()"
@@ -82,7 +82,7 @@
               :item-title="item => `${item.jobRequisitionId} - ${item.jobTitle}`"
               item-value="_id"
               label="Job Title"
-              variant="outlined"
+              variant="outlined" autocomplete="off"
               density="compact"
               return-object
               auto-select-first
@@ -95,7 +95,7 @@
               v-model="form.fullName"
               label="Candidate Name"
               required
-              variant="outlined"
+              variant="outlined" autocomplete="off"
               density="compact"
               hide-details
             />
@@ -106,7 +106,7 @@
               :items="['Agency', 'Banner / Job Announcement Board', 'Brochure', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'LinkedIn','Telegram', 'Other', ]"
               label="Application Source"
               clearable
-              variant="outlined"
+              variant="outlined" autocomplete="off"
               density="compact"
               hide-details
               auto-select-first
@@ -118,7 +118,7 @@
                 :items="['Candidate in Process', 'Candidate Refusal', 'Not Hired']"
                 label="Final Decision"
                 clearable
-                variant="outlined"
+                variant="outlined" autocomplete="off"
                 density="compact"
                 hide-details
                 auto-select-first
@@ -129,7 +129,7 @@
             <v-btn
               color="success"
               type="submit"
-              variant="outlined"
+              variant="outlined" autocomplete="off"
               density="compact"
               style="height: 40px"
               block
@@ -144,29 +144,29 @@
       <!-- ✅ Filter Form should be OUTSIDE -->
       <v-row v-if="showFilterForm" class="mb-4" dense>
         <v-col cols="12" md="2">
-          <v-text-field v-model="filters.candidateId" label="Candidate Id" variant="outlined" clearable density="compact" hide-details/>
+          <v-text-field v-model="filters.candidateId" label="Candidate Id" variant="outlined" autocomplete="off" clearable density="compact" hide-details/>
         </v-col>
         <v-col cols="12" md="2">
-          <v-text-field v-model="filters.jobId" label="Job Id" variant="outlined" clearable dense density="compact" hide-details />
+          <v-text-field v-model="filters.jobId" label="Job Id" variant="outlined" autocomplete="off" clearable dense density="compact" hide-details />
         </v-col>
         <v-col cols="12" md="2">
-          <v-text-field v-model="filters.department" label="Department" variant="outlined" clearable dense density="compact" hide-details/>
+          <v-text-field v-model="filters.department" label="Department" variant="outlined" autocomplete="off" clearable dense density="compact" hide-details/>
         </v-col>
         <v-col cols="12" md="3">
-          <v-text-field v-model="filters.jobTitle" label="Job Title" variant="outlined" clearable dense density="compact" hide-details/>
+          <v-text-field v-model="filters.jobTitle" label="Job Title" variant="outlined" autocomplete="off" clearable dense density="compact" hide-details/>
         </v-col>
         <v-col cols="12" md="2">
-          <v-text-field v-model="filters.recruiter" label="Recruiter" variant="outlined" clearable dense density="compact" hide-details/>
+          <v-text-field v-model="filters.recruiter" label="Recruiter" variant="outlined" autocomplete="off" clearable dense density="compact" hide-details/>
         </v-col>
         <v-col cols="12" md="2">
-          <v-text-field v-model="filters.fullName" label="Candidate Name" variant="outlined" clearable dense density="compact" hide-details/>
+          <v-text-field v-model="filters.fullName" label="Candidate Name" variant="outlined" autocomplete="off" clearable dense density="compact" hide-details/>
         </v-col>
         <v-col cols="12" md="3">
           <v-select
             v-model="filters.applicationSource"
             :items="['Agency', 'Banner / Job Announcement Board', 'Brochure', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'LinkedIn','Telegram', 'Other', ]"
             label="Application Source"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             clearable
             dense
             density="compact"
@@ -178,7 +178,7 @@
             v-model="filters.hireDecision"
             :items="['Candidate in Process', 'Candidate Refusal', 'Not Hired']"
             label="Final Decision"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             clearable
             density="compact"
             dense
@@ -219,7 +219,7 @@
               <td>{{ c.recruiter }}</td>
               <td>{{ c.fullName }}</td>
               <td>{{ c.applicationSource }}</td>
-              <td v-for="stage in ['Application','Sent to Manager','Interview','JobOffer','Hired','Onboard']" :key="stage">
+              <td v-for="stage in ['Application','ManagerReview','Interview','JobOffer','Hired','Onboard']" :key="stage">
                 <v-btn
                   :class="[getStageClass(c.progressDates?.[stage]), isAllStagesBlocked(c) ? 'disabled-btn' : '']"
                   :disabled="isAllStagesBlocked(c)"
@@ -263,7 +263,7 @@
             v-model="candidatePerPage"
             :items="[25, 50, 100]"
             label="Rows per page"
-            variant="outlined"
+            variant="outlined" autocomplete="off"
             density="compact"
             hide-details
             style="max-width: 180px"

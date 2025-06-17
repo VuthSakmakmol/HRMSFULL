@@ -92,12 +92,13 @@
           />
         </v-col>
         <v-col cols="auto">
-          <v-pagination
-            v-if="itemsPerPage !== 'all'"
-            v-model="page"
-            :length="totalEmployees > 0 ? Math.ceil(totalEmployees / parseInt(itemsPerPage)) : 1"
-            rounded
-            color="primary"
+          <v-select
+            v-model="itemsPerPage"
+            :items="[10, 25, 50, 100]"
+            label="Rows per page"
+            density="compact"
+            hide-details
+            style="width: 130px"
           />
         </v-col>
       </v-row>
@@ -120,7 +121,7 @@ const page = ref(parseInt(sessionStorage.getItem('employeePage')) || 1)
 const itemsPerPage = ref('10')
 const totalEmployees = ref(0)
 const getRowNumber = index => {
-  const perPage = itemsPerPage.value === 'all' ? totalEmployees.value : parseInt(itemsPerPage.value)
+  const perPage = parseInt(itemsPerPage.value)
   return (page.value - 1) * perPage + index + 1
 }
 
@@ -134,20 +135,14 @@ watch(itemsPerPage, () => page.value = 1)
 // ============= Fetch Employees =============
 const employees = ref([])
 const hasLoaded = ref(false)
-const fetchEmployees = async () => {
-  const res = await axios.get('/employees', {
-    params: {
-      company: localStorage.getItem('company'), // should be 'CAM-TAC'
-      page: page.value,
-      limit: itemsPerPage.value
-    }
-  })
+watch([page, itemsPerPage], () => {
+  page.value = Math.max(1, page.value)
+  sessionStorage.setItem('employeePage', page.value)
+  fetchEmployees()
+})
 
-  console.log('✅ Response:', res.data) // 🔍 ADD THIS LINE
 
-  employees.value = res.data.employees
-  totalEmployees.value = res.data.total
-}
+
 
 // ============= End Fetch Employees =============
 

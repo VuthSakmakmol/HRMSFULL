@@ -2,7 +2,8 @@
 import { io } from 'socket.io-client'
 
 // ✅ Avoid multiple connections by using singleton
-const socket = io('http://localhost:4700', {
+// const socket = io('http://localhost:4700', {
+  const socket = io('http://157.245.59.122:4700', {
   autoConnect: true,
   transports: ['websocket'], // Optional: forces WebSocket only
   reconnection: true,        // Optional: auto reconnect

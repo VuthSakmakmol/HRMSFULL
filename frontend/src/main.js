@@ -21,14 +21,19 @@ library.add(fas)
 
 const app = createApp(App)
 
-// ✅ Register apexchart ONCE
+// ✅ ApexCharts
 app.component('apexchart', VueApexCharts)
 
-// ✅ Register font-awesome globally
+// ✅ Font Awesome
 app.component('font-awesome-icon', FontAwesomeIcon)
 
-// ✅ Register Vuetify and other plugins
+// ✅ Plugins like Vuetify
 registerPlugins(app)
 
-// ✅ Mount app
+// ✅ Register Socket.IO globally
+import socket from '@/socket'
+app.config.globalProperties.$socket = socket
+app.provide('$socket', socket)
+
+// ✅ Mount App
 app.mount('#app')

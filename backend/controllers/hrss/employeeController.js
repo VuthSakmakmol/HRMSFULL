@@ -15,30 +15,34 @@ exports.createEmployee = async (req, res) => {
 }
 
 
+// ✅ Backend Pagination with Limit (no "all")
 exports.getAllEmployees = async (req, res) => {
   try {
     const { company, page = 1, limit = 10 } = req.query;
     if (!company) return res.status(400).json({ message: 'Company is required' });
 
-    const isAll = limit === 'all';
     const pageInt = parseInt(page);
-    const limitInt = isAll ? 0 : parseInt(limit);
+    const limitInt = Math.max(parseInt(limit), 1); // Ensure it's a valid number
     const skip = (pageInt - 1) * limitInt;
 
-    const query = { company }; // <== Make sure your database has company = 'CAM-TAC'
+    const query = { company };
 
     const [employees, total] = await Promise.all([
-      Employee.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitInt),
-      Employee.countDocuments(query)
+      Employee.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitInt),
+      Employee.countDocuments(query),
     ]);
 
     res.json({
       employees,
       total,
       currentPage: pageInt,
-      totalPages: isAll ? 1 : Math.ceil(total / limitInt)
+      totalPages: Math.ceil(total / limitInt),
     });
   } catch (err) {
+    console.error('[ERROR]', err);
     res.status(500).json({ message: 'Failed to get employees', error: err.message });
   }
 };

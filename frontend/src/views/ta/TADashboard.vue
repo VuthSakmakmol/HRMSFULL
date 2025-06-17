@@ -275,6 +275,6 @@ watch([filterType, filterRecruiter, filterDepartment, from, to], fetchDashboardS
   top: 5px; /* match your AppTopbar height */
   z-index: 10;
   background-color: white;
-  margin-top: -46px; /* remove excessive gap */
+  
 }
 </style>
