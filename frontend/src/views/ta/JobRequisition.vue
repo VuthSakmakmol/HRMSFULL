@@ -843,6 +843,7 @@ const recentlyUpdatedJobId = ref(null)
 
 
 onMounted(() => {
+  // 🌀 Loading animation
   let interval = setInterval(() => {
     if (loadValue.value >= 100) {
       showLoader.value = false
@@ -852,9 +853,20 @@ onMounted(() => {
     }
   }, 10)
 
+  socket.on('jobUpdated', (updatedJob) => {
+    const index = requisitions.value.findIndex(j => j._id === updatedJob._id)
+    if (index !== -1) {
+      requisitions.value.splice(index, 1, updatedJob)
+    }
+  })
+
+
+  // 🧩 Data fetch
   fetchJobTitles()
   fetchRequisitions()
   fetchRecruiters()
+
+  // 🧠 Restore seen alerts
   for (const key in alerts.value) {
     alerts.value[key] = localStorage.getItem(`seen_${key}`) !== 'true'
   }
@@ -890,6 +902,8 @@ onBeforeUnmount(() => {
   socket.off('jobUpdated')
   socket.off('jobAvailabilityChanged')
 })
+
+
 
 </script>
 
