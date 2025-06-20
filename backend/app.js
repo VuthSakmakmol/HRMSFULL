@@ -61,12 +61,12 @@ app.use('/api/employees', require('./routes/hrss/employeeRoutes'));
 app.use('/api/location', require('./routes/hrss/locationRoutes'))
 app.use('/api/meta', require('./routes/hrss/metaRoutes'))
 
-// Serve uploaded images statically
-app.use('/upload', express.static(path.join(__dirname, 'upload')));
+// 🔗 Serve uploaded profile images
+app.use('/upload', express.static(path.join(__dirname, 'upload'))) // ✅ required
 
-// Register upload route (IMPORTANT)
-const uploadRoutes = require('./routes/hrss/upload');
-app.use('/api/upload', uploadRoutes);
+// 📦 Register upload route
+const uploadRoutes = require('./routes/hrss/upload')
+app.use('/api/upload', uploadRoutes) // ✅ mount it under /api/upload
 
 
 // ─── SERVE FRONTEND ────────────────────────────────────────────────────────────

@@ -19,14 +19,7 @@
       </v-col>
     </v-row>
 
-    <!-- Step Form for Add/Edit -->
-    <EmployeeForm
-      v-if="showForm"
-      v-model="form"
-      :editMode="isEditMode"
-      @submit="handleFormSubmit"
-      @cancel="cancelForm"
-    />
+    
 
     <!-- Employee Table -->
     <v-card>
@@ -128,6 +121,9 @@ const getImageUrl = (url) => {
   return defaultImage
 }
 
+const goToAddEmployee = () => {
+  router.push('/hrss/addemployee')
+}
 
 
 defineOptions({ name: 'EmployeeList' })
@@ -135,13 +131,6 @@ defineOptions({ name: 'EmployeeList' })
 const showForm = ref(false)
 const isEditMode = ref(false)
 const form = ref({})
-
-
-const goToAddEmployee = () => {
-  isEditMode.value = false
-  form.value = {}
-  showForm.value = true
-}
 
 
 // ============= Pagination ==============
@@ -308,20 +297,26 @@ const chunkedEmployeeInfo = emp => {
   return chunked
 }
 
-const handleFormSubmit = async () => {
-  try {
-    if (isEditMode.value) {
-      await axios.put(`/api/employees/${form.value._id}`, form.value)
-      Swal.fire({ icon: 'success', title: 'Employee Updated' })
+const submitForm = async () => {
+  // If image file selected but not uploaded yet
+  if (form.value.profileImageFile && !form.value.profileImage?.startsWith('/upload')) {
+    const formData = new FormData()
+    formData.append('image', form.value.profileImageFile)
+
+    try {
+      const { data } = await axios.post('/api/upload/hrss/profile-image', formData)
+      form.value.profileImage = data.imageUrl
+    } catch (err) {
+      console.error('❌ Image upload failed:', err)
+      return Swal.fire({ icon: 'error', title: 'Image upload failed' })
     }
-    showForm.value = false
-    isEditMode.value = false
-    await fetchEmployees()
-  } catch (err) {
-    console.error(err)
-    Swal.fire({ icon: 'error', title: 'Failed to update' })
   }
+
+  // Now send the full form
+  await axios.post('/api/employees', form.value)
+  Swal.fire({ icon: 'success', title: 'Employee added' })
 }
+
 
 const cancelForm = () => {
   showForm.value = false

@@ -1,14 +1,14 @@
 const Employee = require('../../models/hrss/employee');
 const { logActivity } = require('../../utils/logActivity');
 
-
+  
 // Create new employee (Step 1)
 exports.createEmployee = async (req, res) => {
   try {
     console.log('[Creating Employee]', req.body) // log incoming data
     const newEmp = await Employee.create(req.body)
     res.status(201).json(newEmp)
-    console.log('📦 Final form before submit:', form.value);
+    console.log('📦 Final data saved to DB:', newEmp);
   } catch (err) {
     console.error('[CREATE ERROR]', err)
     res.status(500).json({ error: err.message })
