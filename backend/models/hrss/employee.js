@@ -13,7 +13,7 @@ const employeeSchema = new mongoose.Schema({
 
   // 🔖 Identification
   employeeId: { type: String, default: '' },
-  company: { type: String, default: '' }, // ✅ Added company field
+  company: { type: String, default: '' }, // 
 
   // 🧑‍💼 Personal Info
   khmerFirstName: { type: String, default: '' },

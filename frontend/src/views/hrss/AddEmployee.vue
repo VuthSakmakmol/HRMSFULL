@@ -1,6 +1,6 @@
 <template>
   <v-container fluid class="pa-4">
-    <h2 class="text-h6 font-weight-bold mb-4">🧍 Employee Registration</h2>
+    <h2 class="text-h6 font-weight-bold mb-4">🢍 Employee Registration</h2>
 
     <!-- Progress Bar -->
     <v-progress-linear
@@ -23,7 +23,7 @@
       @cancelEdit="router.push('/hrss/employees')"
     />
 
-    <!-- Navigation Buttons (Only if not edit mode or beyond Step1) -->
+    <!-- Navigation Buttons -->
     <v-row justify="space-between" class="mt-4" v-if="!isEditMode || step !== 1">
       <v-btn :disabled="step === 1" @click="step--" variant="outlined">Back</v-btn>
       <v-btn color="green" class="mb-4" @click="startNewEmployee">➕ New Employee</v-btn>
@@ -52,11 +52,11 @@ const route = useRoute()
 
 const step = ref(parseInt(localStorage.getItem('currentStep') || '1'))
 const stepComponents = [Step1, Step2, Step3, Step4, Step5]
-
 const employeeId = ref(route.query.id || null)
 const isEditMode = ref(false)
 
 const form = ref({
+  profileImage: '', profileImageFile: null,
   employeeId: '', khmerFirstName: '', khmerLastName: '',
   englishFirstName: '', englishLastName: '', gender: '', dob: '', age: null,
   idCard: '', idCardExpireDate: '', nssf: '', joinDate: '',
@@ -71,10 +71,9 @@ const form = ref({
   remark: '', email: '', phoneNumber: '',
   placeOfBirth: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
   placeOfLiving: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
-  company: localStorage.getItem('company') || 'CAM-TAC'
+  company: localStorage.getItem('company')
 })
 
-// Progress Bar
 const totalFields = 48
 const completionPercentage = computed(() => {
   const flat = Object.values(form.value).flatMap(v =>
@@ -84,36 +83,49 @@ const completionPercentage = computed(() => {
   return Math.min(Math.round((filled.length / totalFields) * 100), 100)
 })
 
-// Store current step
-watch(step, newStep => {
-  localStorage.setItem('currentStep', newStep)
-})
+watch(step, newStep => localStorage.setItem('currentStep', newStep))
 
-// Load existing employee if editing
+// 🔃 Handle Image Upload Before Save
+const handleProfileImageUpload = async () => {
+  const file = form.value.profileImageFile
+  if (!file) return
+
+  try {
+    const formData = new FormData()
+    formData.append('image', file)
+    const res = await axios.post('/upload/profile-image', formData)
+    form.value.profileImage = res.data.imageUrl
+  } catch (err) {
+    console.error('❌ Upload failed:', err)
+    Swal.fire({ icon: 'error', title: 'Upload failed', text: err.message })
+  }
+}
+
+// 📥 Load if Edit Mode
 onMounted(async () => {
   if (employeeId.value) {
     try {
       const res = await axios.get(`/employees/${employeeId.value}`)
       form.value = { ...form.value, ...res.data }
       isEditMode.value = true
-      step.value = 1 // Force go to step 1
+      step.value = 1
     } catch (err) {
       console.error('❌ Failed to load employee:', err)
     }
   }
 })
 
-// Handle submit button
+// 💾 Step Handler
 const handleStepSubmit = async () => {
   try {
+    await handleProfileImageUpload()
+
     if (!employeeId.value) {
       const res = await axios.post('/employees', form.value)
       if (!res.data?._id) throw new Error('No _id returned')
-
       employeeId.value = res.data._id
       form.value._id = res.data._id
       Swal.fire({ icon: 'success', title: 'Employee created!' })
-
       router.replace({ path: '/hrss/addemployee', query: { id: employeeId.value } })
     } else {
       await axios.put(`/employees/${employeeId.value}`, form.value)
@@ -136,7 +148,7 @@ const handleStepSubmit = async () => {
   }
 }
 
-// Start new form (reset)
+// 🆕 Reset to New
 const startNewEmployee = async () => {
   try {
     const hasData = Object.values(form.value).some(v =>
@@ -146,7 +158,7 @@ const startNewEmployee = async () => {
     if (hasData && !employeeId.value) {
       const res = await axios.post('/employees', form.value)
       if (res.data?._id) {
-        Swal.fire({ icon: 'success', title: 'Saved current before starting new' })
+        Swal.fire({ icon: 'success', title: 'Saved current before new' })
       }
     } else if (employeeId.value) {
       await axios.put(`/employees/${employeeId.value}`, form.value)
@@ -154,6 +166,7 @@ const startNewEmployee = async () => {
     }
 
     Object.assign(form.value, {
+      profileImage: '', profileImageFile: null,
       employeeId: '', khmerFirstName: '', khmerLastName: '',
       englishFirstName: '', englishLastName: '', gender: '', dob: '', age: null,
       idCard: '', idCardExpireDate: '', nssf: '', joinDate: '',
@@ -168,7 +181,7 @@ const startNewEmployee = async () => {
       remark: '', email: '', phoneNumber: '',
       placeOfBirth: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
       placeOfLiving: { provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: '' },
-      company: localStorage.getItem('company') || 'CAM-TAC'
+      company: localStorage.getItem('company')
     })
 
     employeeId.value = null
@@ -178,7 +191,7 @@ const startNewEmployee = async () => {
     router.replace({ path: '/hrss/addemployee' })
   } catch (err) {
     console.error('❌ Reset error:', err)
-    Swal.fire({ icon: 'error', title: 'Save failed', text: err.message })
+    Swal.fire({ icon: 'error', title: 'Reset failed', text: err.message })
   }
 }
 </script>

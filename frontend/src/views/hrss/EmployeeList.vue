@@ -48,7 +48,7 @@
               <td>{{ getRowNumber(index) }}</td>
               <td>{{ getCompletionRate(emp) }}%</td>
               <td class="img-cell">
-                <img :src="emp.profileImage || defaultImage" class="profile-img" />
+                <img :src="getImageUrl(emp.profileImage)" class="profile-img" />
               </td>
               <td v-for="(block, blockIndex) in chunkedEmployeeInfo(emp)" :key="blockIndex">
                 <div v-for="item in block" :key="item.label" class="info-block">
@@ -117,6 +117,18 @@ import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
 import EmployeeForm from './AddEmployee.vue'
+
+
+
+const getImageUrl = (url) => {
+  const backendBase = axios.defaults.baseURL?.replace(/\/api$/, '') || ''
+  if (!url || url === '') return defaultImage
+  if (url.startsWith('/upload')) return `${backendBase}${url}`
+  if (url.startsWith('http')) return url
+  return defaultImage
+}
+
+
 
 defineOptions({ name: 'EmployeeList' })
 

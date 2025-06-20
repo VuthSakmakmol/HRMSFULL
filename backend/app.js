@@ -57,10 +57,16 @@ app.use('/api/candidates', require('./routes/ta/candidateRoutes'));
 app.use('/api/activity-logs', require('./routes/ta/activityLogRoutes'));
 
 // HRSS Module Routes
-app.use('/api/employees', require('./routes/hrss/employeeRoutes'));
+app.use('/api/employees', require('./routes/hrss/employeeRoutes')); 
 app.use('/api/location', require('./routes/hrss/locationRoutes'))
 app.use('/api/meta', require('./routes/hrss/metaRoutes'))
 
+// Serve uploaded images statically
+app.use('/upload', express.static(path.join(__dirname, 'upload')));
+
+// Register upload route (IMPORTANT)
+const uploadRoutes = require('./routes/hrss/upload');
+app.use('/api/upload', uploadRoutes);
 
 
 // ─── SERVE FRONTEND ────────────────────────────────────────────────────────────
@@ -79,8 +85,7 @@ app.get('/api/health', (req, res) => {
 
 // ─── MONGODB CONNECTION ────────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
+
 })
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB connection error:', err));

@@ -8,6 +8,7 @@ exports.createEmployee = async (req, res) => {
     console.log('[Creating Employee]', req.body) // log incoming data
     const newEmp = await Employee.create(req.body)
     res.status(201).json(newEmp)
+    console.log('📦 Final form before submit:', form.value);
   } catch (err) {
     console.error('[CREATE ERROR]', err)
     res.status(500).json({ error: err.message })
