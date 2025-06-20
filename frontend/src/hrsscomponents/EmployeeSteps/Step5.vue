@@ -1,64 +1,153 @@
 <template>
-  <v-card flat class="pa-4 mb-4">
-    <h3 class="text-subtitle-1 font-weight-bold mb-4">Step 5: Skills & Location</h3>
-    <v-row dense>
+  <v-card flat class="pa-4 mb-6 rounded-xl elevation-1">
+    <h3 class="text-h6 font-weight-bold mb-2"> Step 5: Skills & Location</h3>
 
-      <!-- 🔵 Place of Birth -->
+    <!-- 🔵 Place of Birth -->
+    <v-row dense>
       <v-col cols="12">
         <h4 class="text-subtitle-2 font-weight-medium mt-2 mb-2">Place of Birth</h4>
       </v-col>
       <v-col cols="12" sm="2">
-        <v-autocomplete v-model="form.placeOfBirth.provinceNameKh" :items="provinceOptions" label="Province" dense variant="outlined" autocomplete="off" />
+        <v-autocomplete
+          v-model="form.placeOfBirth.provinceNameKh"
+          :items="provinceOptions"
+          label="Province"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="birth-province"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-autocomplete v-model="form.placeOfBirth.districtNameKh" :items="birthDistricts" label="District" dense variant="outlined" autocomplete="off" />
+        <v-autocomplete
+          v-model="form.placeOfBirth.districtNameKh"
+          :items="birthDistricts"
+          label="District"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="birth-district"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-autocomplete v-model="form.placeOfBirth.communeNameKh" :items="birthCommunes" label="Commune" dense variant="outlined" autocomplete="off" />
+        <v-autocomplete
+          v-model="form.placeOfBirth.communeNameKh"
+          :items="birthCommunes"
+          label="Commune"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="birth-commune"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.placeOfBirth.villageNameKh" label="Village" dense variant="outlined" autocomplete="off" />
+        <v-text-field
+          v-model="form.placeOfBirth.villageNameKh"
+          label="Village"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="birth-village"
+        />
       </v-col>
+    </v-row>
 
-      <!-- 🔴 Place of Living -->
+    <!-- 🔴 Place of Living -->
+    <v-row dense>
       <v-col cols="12" class="d-flex align-center">
         <h4 class="text-subtitle-2 font-weight-medium mt-4 mb-2 me-4">Place of Living</h4>
         <v-btn
           size="small"
           :color="sameAsBirth ? 'green' : 'primary'"
           variant="tonal"
-          @click="toggleSameAsBirth"
           class="mt-n1"
+          @click="toggleSameAsBirth"
         >
           {{ sameAsBirth ? 'Synced from Birth' : 'Same as Place of Birth' }}
         </v-btn>
       </v-col>
       <v-col cols="12" sm="2">
-        <v-autocomplete v-model="form.placeOfLiving.provinceNameKh" :items="provinceOptions" label="Province" dense variant="outlined" autocomplete="off" :disabled="sameAsBirth" />
+        <v-autocomplete
+          v-model="form.placeOfLiving.provinceNameKh"
+          :items="provinceOptions"
+          label="Province"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="living-province"
+          :disabled="sameAsBirth"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-autocomplete v-model="form.placeOfLiving.districtNameKh" :items="livingDistricts" label="District" dense variant="outlined" autocomplete="off" :disabled="sameAsBirth" />
+        <v-autocomplete
+          v-model="form.placeOfLiving.districtNameKh"
+          :items="livingDistricts"
+          label="District"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="living-district"
+          :disabled="sameAsBirth"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-autocomplete v-model="form.placeOfLiving.communeNameKh" :items="livingCommunes" label="Commune" dense variant="outlined" autocomplete="off" :disabled="sameAsBirth" />
+        <v-autocomplete
+          v-model="form.placeOfLiving.communeNameKh"
+          :items="livingCommunes"
+          label="Commune"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="living-commune"
+          :disabled="sameAsBirth"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.placeOfLiving.villageNameKh" label="Village" dense variant="outlined" autocomplete="off" :disabled="sameAsBirth" />
+        <v-text-field
+          v-model="form.placeOfLiving.villageNameKh"
+          label="Village"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="living-village"
+          :disabled="sameAsBirth"
+        />
       </v-col>
+    </v-row>
 
-      <!-- ✍️ Opinion Fields -->
+    <!-- ✍️ Opinion Fields -->
+    <v-row dense>
       <v-col cols="12">
-        <h4 class="text-subtitle-2 font-weight-medium mt-4 mb-2">Opinion</h4>
+        <h4 class="text-subtitle-2 font-weight-medium mb-2">Opinion</h4>
       </v-col>
       <v-col cols="12" sm="3">
-        <v-textarea v-model="form.remark" label="Remark" rows="3" auto-grow density="compact" variant="outlined" />
+        <v-textarea
+          v-model="form.remark"
+          label="Remark"
+          rows="3"
+          auto-grow
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="remark"
+        />
       </v-col>
       <v-col cols="12" sm="3">
-        <v-textarea v-model="form.note" label="Note" rows="3" auto-grow density="compact" variant="outlined" />
+        <v-textarea
+          v-model="form.note"
+          label="Note"
+          rows="3"
+          auto-grow
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="note"
+        />
       </v-col>
     </v-row>
   </v-card>
 </template>
+
 
 <script setup>
 import { ref, watch, onMounted } from 'vue'

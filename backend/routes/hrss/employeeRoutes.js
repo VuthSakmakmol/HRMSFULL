@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const multer = require('multer');
+const Employee = require('../../models/hrss/employee')
 
 const {
   getAllEmployees,
@@ -42,5 +43,22 @@ router.post('/upload', upload.single('image'), (req, res) => {
   const imageUrl = `/upload/employeeImages/${req.file.filename}`;
   res.json({ imageUrl });
 });
+
+
+//======= Import data ================
+router.post('/import', async (req, res) => {
+  try {
+    const data = req.body
+    if (!Array.isArray(data)) {
+      return res.status(400).json({ message: 'Invalid format' })
+    }
+
+    await Employee.insertMany(data)
+    res.status(200).json({ message: 'Import success' })
+  } catch (err) {
+    res.status(500).json({ message: 'Import failed', error: err.message })
+  }
+})
+
 
 module.exports = router;

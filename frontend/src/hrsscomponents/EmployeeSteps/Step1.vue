@@ -1,43 +1,52 @@
 <template>
-  <v-card flat class="pa-4 mb-4">
-    <h3 class="text-subtitle-1 font-weight-bold mb-4">Step 1: Core Identity</h3>
+  <v-card flat class="pa-4 mb-6 rounded-xl elevation-1">
+    <h3 class="text-h6 font-weight-bold mb-6"> Step 1: Personal Information</h3>
 
-    <!-- Image Upload Mode Switch -->
-    <v-btn-toggle v-model="imageMode" color="primary" class="mb-3" mandatory>
-      <v-btn value="upload">Upload Image</v-btn>
-      <v-btn value="link">Paste URL</v-btn>
-    </v-btn-toggle>
+    <!-- Image Input + Preview in one row -->
+    <v-row dense align-center="center" class="mb-6">
+      <v-col cols="12" md="6">
+        <v-btn-toggle
+          v-model="imageMode"
+          color="primary"
+          mandatory
+          rounded
+          variant="outlined"
+          class="mb-3"
+        >
+          <v-btn value="upload" prepend-icon="mdi-upload">Upload</v-btn>
+          <v-btn value="link" prepend-icon="mdi-link">Paste URL</v-btn>
+        </v-btn-toggle>
 
-    <!-- Image Input -->
-    <v-row dense class="mb-4">
-      <v-col cols="12" md="6" v-if="imageMode === 'upload'">
         <v-file-input
+          v-if="imageMode === 'upload'"
           v-model="form.profileImageFile"
           label="Upload Profile Image"
           accept="image/*"
           prepend-icon="mdi-camera"
           show-size
-          outlined
+          variant="outlined"
+          density="comfortable"
         />
-      </v-col>
 
-      <v-col cols="12" md="6" v-if="imageMode === 'link'">
         <v-text-field
+          v-else
           v-model="form.profileImage"
           label="Image URL"
           placeholder="https://example.com/image.jpg"
+          prepend-icon="mdi-link-variant"
+          variant="outlined"
+          density="comfortable"
         />
       </v-col>
 
-      <!-- Preview Image -->
-      <v-col cols="12">
+      <v-col cols="12" md="2" class="d-flex justify-center">
         <v-img
           :src="previewUrl || defaultImage"
           alt="Preview"
-          width="120"
+          width="80"
           height="120"
-          class="rounded mt-2"
-          style="border: 1px solid #ccc"
+          class="rounded-xl elevation-2 transition-ease-in-out"
+          style="border: 2px solid #ddd"
         >
           <template #placeholder>
             <v-skeleton-loader type="image" height="120" width="120" />
@@ -46,26 +55,73 @@
       </v-col>
     </v-row>
 
-    <!-- Personal Info -->
+
+    <!-- Personal Info Fields -->
     <v-row dense>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.employeeId" label="Employee ID *" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.khmerFirstName" label="Khmer First Name *" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.khmerLastName" label="Khmer Last Name *" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.englishFirstName" label="English First Name *" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.englishLastName" label="English Last Name *" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-select v-model="form.gender" :items="enumOptions.genderOptions" label="Gender *" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.dob" label="Date of Birth *" type="date" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.age" label="Age" type="number" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.email" label="Email" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.phoneNumber" label="Phone Number" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.agentPhoneNumber" label="Agent Phone Number" dense variant="outlined" /></v-col>
-      <v-col cols="12" sm="2"><v-text-field v-model="form.agentPerson" label="Agent Person" dense variant="outlined" /></v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.employeeId" label="Employee ID *" variant="outlined" density="comfortable" autocomplete="off" />
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.khmerFirstName" label="Khmer First Name *" variant="outlined" density="comfortable" autocomplete="off"/>
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.khmerLastName" label="Khmer Last Name *" variant="outlined" density="comfortable" autocomplete="off"/>
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.englishFirstName" label="English First Name *" variant="outlined" density="comfortable" autocomplete="off"/>
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.englishLastName" label="English Last Name *" variant="outlined" density="comfortable" autocomplete="off"/>
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-select
+          v-model="form.gender"
+          :items="enumOptions.genderOptions"
+          label="Gender *"
+          variant="outlined"
+          density="comfortable"
+        />
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.dob" label="Date of Birth *" type="date" variant="outlined" density="comfortable" autocomplete="off"/>
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.age" label="Age" type="number" variant="outlined" density="comfortable" autocomplete="off"/>
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.email" label="Email" variant="outlined" density="comfortable" autocomplete="off"/>
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.phoneNumber" label="Phone Number" variant="outlined" density="comfortable" autocomplete="off"/>
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.agentPhoneNumber" label="Agent Phone" variant="outlined" density="comfortable" autocomplete="off"/>
+      </v-col>
+      <v-col cols="12" sm="2">
+        <v-text-field v-model="form.agentPerson" label="Agent Person" variant="outlined" density="comfortable" autocomplete="off"/>
+      </v-col>
     </v-row>
 
-    <!-- Edit Mode Buttons (Only show on Step 1) -->
-    <v-row justify="end" class="mt-4" v-if="isEditMode && step === 1">
-      <v-btn variant="outlined" color="grey" @click="emit('cancelEdit')">Cancel</v-btn>
-      <v-btn color="primary" class="ml-2" @click="handleSubmitEdit">Update</v-btn>
+    <!-- Action Buttons -->
+    <v-row justify="end" class="mt-6" v-if="isEditMode && step === 1">
+      <v-btn
+        variant="text"
+        color="grey"
+        class="mr-2"
+        prepend-icon="mdi-close-circle-outline"
+        @click="emit('cancelEdit')"
+      >
+        Cancel
+      </v-btn>
+      <v-btn
+        color="primary"
+        variant="flat"
+        prepend-icon="mdi-check-circle"
+        class="text-white"
+        @click="handleSubmitEdit"
+      >
+        Update
+      </v-btn>
     </v-row>
   </v-card>
 </template>

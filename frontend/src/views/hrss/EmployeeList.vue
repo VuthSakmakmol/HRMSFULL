@@ -10,21 +10,60 @@
         </v-btn>
       </v-col>
       
-      <v-col cols="auto" class="d-flex gap-2">
-        <v-btn
-          color="blue"
-          :disabled="selected.length !== 1"
-          @click="editSelectedEmployee"
-        >
-          <v-icon start>mdi-pencil</v-icon> Edit
-        </v-btn>
-        <v-btn color="error" :disabled="!selected.length" @click="deleteSelected">
-          <v-icon start>mdi-delete</v-icon> Delete
-        </v-btn>
-        <v-btn color="success" :disabled="!selected.length" @click="exportToExcel">
-          <v-icon start>mdi-file-excel</v-icon> Export Excel
-        </v-btn>
+      <v-col cols="12" md="auto">
+        <v-row class="flex-wrap" dense>
+          <v-col cols="auto">
+            <v-btn
+              color="blue"
+              variant="flat"
+              :disabled="selected.length !== 1"
+              @click="editSelectedEmployee"
+            >
+              <v-icon start>mdi-pencil</v-icon> Edit
+            </v-btn>
+          </v-col>
+
+          <v-col cols="auto">
+            <v-btn
+              color="error"
+              variant="flat"
+              :disabled="!selected.length"
+              @click="deleteSelected"
+            >
+              <v-icon start>mdi-delete</v-icon> Delete
+            </v-btn>
+          </v-col>
+
+          <v-col cols="auto">
+            <v-btn
+              color="indigo"
+              variant="flat"
+              @click="triggerImportFile"
+            >
+              <v-icon start>mdi-file-import"></v-icon> Import
+            </v-btn>
+            <input
+              ref="fileInput"
+              type="file"
+              accept=".xlsx"
+              @change="handleImportExcel"
+              style="display: none"
+            />
+          </v-col>
+
+          <v-col cols="auto">
+            <v-btn
+              color="success"
+              variant="flat"
+              :disabled="!selected.length"
+              @click="exportToExcel"
+            >
+              <v-icon start>mdi-file-excel"></v-icon> Export
+            </v-btn>
+          </v-col>
+        </v-row>
       </v-col>
+
     </v-row>
 
     
@@ -327,6 +366,43 @@ const exportToExcel = () => {
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Employees')
   XLSX.writeFile(workbook, 'Employees.xlsx')
+}
+
+
+// import data to employee list
+const fileInput = ref(null)
+
+const triggerImportFile = () => {
+  fileInput.value?.click()
+}
+
+const handleImportExcel = async (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+
+  try {
+    const data = await file.arrayBuffer()
+    const workbook = XLSX.read(data, { type: 'array' })
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json(sheet)
+
+    // Optional: Add company if not in file
+    const company = localStorage.getItem('company') || 'DEFAULT'
+
+    const payload = rows.map(row => ({
+      ...row,
+      company // attach default company if needed
+    }))
+
+    await axios.post('/employees/import', payload) // your backend endpoint
+    Swal.fire({ icon: 'success', title: '✅ Imported successfully!' })
+    fetchEmployees()
+  } catch (err) {
+    console.error('❌ Import error:', err)
+    Swal.fire({ icon: 'error', title: 'Import failed', text: err.message })
+  } finally {
+    event.target.value = '' // clear file input
+  }
 }
 
 
