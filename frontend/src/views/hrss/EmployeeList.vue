@@ -9,7 +9,15 @@
           <v-icon start>mdi-plus</v-icon> Add Employee
         </v-btn>
       </v-col>
+      
       <v-col cols="auto" class="d-flex gap-2">
+        <v-btn
+          color="blue"
+          :disabled="selected.length !== 1"
+          @click="editSelectedEmployee"
+        >
+          <v-icon start>mdi-pencil</v-icon> Edit
+        </v-btn>
         <v-btn color="error" :disabled="!selected.length" @click="deleteSelected">
           <v-icon start>mdi-delete</v-icon> Delete
         </v-btn>
@@ -49,13 +57,7 @@
                 </div>
               </td>
               <td class="bg-action align-top">
-                <div class="d-flex flex-column align-center pa-1" style="gap: 6px; height: 100%;">
-                  <v-btn icon size="small" color="primary" @click="editEmployee(emp)">
-                    <v-icon>mdi-pencil</v-icon>
-                  </v-btn>
-                  <v-btn icon size="small" color="error" @click="deleteEmployee(emp._id)">
-                    <v-icon>mdi-delete</v-icon>
-                  </v-btn>
+                <div class="d-flex flex-column align-center pa-1" style="gap: 6px; height: 100%;">                
                   <v-textarea
                     v-model="emp.note"
                     auto-grow
@@ -109,7 +111,9 @@ import { useRouter } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
-import EmployeeForm from './AddEmployee.vue'
+import * as XLSX from 'xlsx'
+const formatDate = val => (val ? dayjs(val).format('YYYY-MM-DD') : '')
+
 
 
 
@@ -200,31 +204,132 @@ onActivated(() => {
 })
 
 // const goToAddEmployee = () => router.push('/hrss/addemployee')
-
 const toggleSelectAll = () => {
-  selectAll.value = !selectAll.value
-  selected.value = selectAll.value ? employees.value.map(emp => emp._id) : []
+  const currentPageIds = employees.value.map(emp => emp._id)
+  if (selectAll.value) {
+    selected.value = [...new Set([...selected.value, ...currentPageIds])]
+  } else {
+    selected.value = selected.value.filter(id => !currentPageIds.includes(id))
+  }
 }
 
-const deleteEmployee = async id => {
-  await axios.delete(`/api/employees/${id}`)
-  employees.value = employees.value.filter(e => e._id !== id)
-  Swal.fire({ icon: 'success', title: 'Deleted' })
-}
+watch([selected, employees], () => {
+  const currentPageIds = employees.value.map(emp => emp._id)
+  selectAll.value = currentPageIds.every(id => selected.value.includes(id))
+})
 
 const deleteSelected = async () => {
-  for (const id of selected.value) await deleteEmployee(id)
-  selected.value = []
-  selectAll.value = false
+  if (!selected.value.length) {
+    return Swal.fire({ icon: 'warning', title: 'No employees selected' })
+  }
+
+  const confirm = await Swal.fire({
+    icon: 'warning',
+    title: `Delete ${selected.value.length} employees?`,
+    text: "This action cannot be undone.",
+    showCancelButton: true,
+    confirmButtonText: 'Yes, delete',
+    cancelButtonText: 'Cancel',
+    confirmButtonColor: '#e53935'
+  })
+
+  if (confirm.isConfirmed) {
+    try {
+      await Promise.all(selected.value.map(id => axios.delete(`/employees/${id}`)))
+      employees.value = employees.value.filter(e => !selected.value.includes(e._id))
+      selected.value = []
+      selectAll.value = false
+      Swal.fire({ icon: 'success', title: 'Deleted successfully' })
+      fetchEmployees()
+    } catch (err) {
+      console.error('❌ Deletion failed:', err)
+      Swal.fire({ icon: 'error', title: 'Failed to delete', text: err.message })
+    }
+  }
 }
 
-const exportToExcel = () => console.log('Exporting...')
-const editEmployee = (emp) => {
+
+const editSelectedEmployee = () => {
+  if (selected.value.length !== 1) {
+    return Swal.fire({ icon: 'warning', title: 'Please select exactly 1 employee to edit.' })
+  }
+
+  const employeeIdToEdit = selected.value[0]
   router.push({
     path: '/hrss/addemployee',
-    query: { id: emp._id }
+    query: { id: employeeIdToEdit }
   })
 }
+
+
+const exportToExcel = () => {
+  if (!selected.value.length) {
+    return Swal.fire({ icon: 'warning', title: 'Please select at least one employee to export.' })
+  }
+
+  const exportData = employees.value
+    .filter(emp => selected.value.includes(emp._id))
+    .map(emp => ({
+      'Employee ID': emp.employeeId,
+      'Khmer Name': `${emp.khmerFirstName} ${emp.khmerLastName}`,
+      'English Name': `${emp.englishFirstName} ${emp.englishLastName}`,
+      'Gender': emp.gender,
+      'Date of Birth': formatDate(emp.dob),
+      'Age': emp.age,
+      'Email': emp.email,
+      'Phone Number': emp.phoneNumber,
+      'Agent Phone': emp.agentPhoneNumber,
+      'Agent Person': emp.agentPerson,
+      'Married Status': emp.marriedStatus,
+      'Spouse Name': emp.spouseName,
+      'Spouse Contact': emp.spouseContactNumber,
+      'Education': emp.education,
+      'Religion': emp.religion,
+      'Nationality': emp.nationality,
+      'Introducer ID': emp.introducerId,
+      'Join Date': formatDate(emp.joinDate),
+      'Department': emp.department,
+      'Position': emp.position,
+      'Line': emp.line,
+      'Team': emp.team,
+      'Section': emp.section,
+      'Shift': emp.shift,
+      'Status': emp.status,
+      'Source of Hiring': emp.sourceOfHiring,
+      'Single Needle': emp.singleNeedle,
+      'Overlock': emp.overlock,
+      'Coverstitch': emp.coverstitch,
+      'Total Machines': emp.totalMachine,
+      'Education Level': emp.education,
+      'ID Card': emp.idCard,
+      'ID Expire': formatDate(emp.idCardExpireDate),
+      'NSSF': emp.nssf,
+      'Passport': emp.passport,
+      'Passport Expire Date': formatDate(emp.passportExpireDate),
+      'Visa Expire Date': formatDate(emp.visaExpireDate),
+      'Medical Check': emp.medicalCheck,
+      'Medical Check Date': formatDate(emp.medicalCheckDate),
+      'Working Book': emp.workingBook,
+      'Place of Birth - Province': emp.placeOfBirth?.provinceNameKh || '',
+      'Place of Birth - District': emp.placeOfBirth?.districtNameKh || '',
+      'Place of Birth - Commune': emp.placeOfBirth?.communeNameKh || '',
+      'Place of Birth - Village': emp.placeOfBirth?.villageNameKh || '',
+      'Place of Living - Province': emp.placeOfLiving?.provinceNameKh || '',
+      'Place of Living - District': emp.placeOfLiving?.districtNameKh || '',
+      'Place of Living - Commune': emp.placeOfLiving?.communeNameKh || '',
+      'Place of Living - Village': emp.placeOfLiving?.villageNameKh || '',
+      'Remark': emp.remark,
+      'Created At': formatDate(emp.createdAt),
+      'Updated At': formatDate(emp.updatedAt)
+    }))
+
+  const worksheet = XLSX.utils.json_to_sheet(exportData)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Employees')
+  XLSX.writeFile(workbook, 'Employees.xlsx')
+}
+
+
 
 
 const updateNote = emp => console.log('Update note for', emp)
@@ -324,9 +429,6 @@ const cancelForm = () => {
   isEditMode.value = false
 }
 
-
-
-const formatDate = val => (val ? dayjs(val).format('YYYY-MM-DD') : '')
 
 onMounted(async () => {
   if (!hasLoaded.value) {
