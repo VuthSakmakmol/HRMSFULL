@@ -34,6 +34,16 @@
         @update:modelValue="handleCompanyChange"
       />
     </template>
+    <v-select
+      v-model="selectedLanguage"
+      :items="languages"
+      density="compact"
+      variant="outlined"
+      hide-details
+      style="max-width: 120px"
+      class="mr-2"
+      @update:modelValue="changeLanguage"
+    />
 
     <!-- Role Display -->
     <v-chip color="primary" variant="flat" class="mr-2">{{ role }}</v-chip>
@@ -46,10 +56,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Swal from 'sweetalert2'
-
+import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
 const role = localStorage.getItem('role') || 'Unknown'
@@ -79,6 +89,28 @@ const logout = async () => {
     router.push('/login')
   }
 }
+
+//====== make change languages ========
+const { locale } = useI18n()
+
+const languages = [
+  { title: 'English', value: 'en' },
+  { title: 'Thai', value: 'th' },
+  { title: 'Khmer', value: 'kh' },
+  
+]
+
+const selectedLanguage = ref(localStorage.getItem('lang') || 'en')
+
+// Watch for changes and apply language
+const changeLanguage = (lang) => {
+  locale.value = lang
+  localStorage.setItem('lang', lang)
+}
+
+//========== End change language =============
+
+
 
 </script>
 

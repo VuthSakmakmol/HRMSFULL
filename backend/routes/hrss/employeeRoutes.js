@@ -35,14 +35,14 @@ router.put('/:id', authenticate, updateEmployee);
 router.delete('/:id', authenticate, deleteEmployee);
 
 // ─── Image Upload Route ────────────────────────────────────────────────────────
-router.post('/upload', upload.single('image'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: 'No file uploaded' });
-  }
+// router.post('/upload', upload.single('image'), (req, res) => {
+//   if (!req.file) {
+//     return res.status(400).json({ message: 'No file uploaded' });
+//   }
 
-  const imageUrl = `/upload/employeeImages/${req.file.filename}`;
-  res.json({ imageUrl });
-});
+//   const imageUrl = `/upload/employeeImages/${req.file.filename}`;
+//   res.json({ imageUrl });
+// });
 
 
 //======= Import data ================

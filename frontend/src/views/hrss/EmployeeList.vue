@@ -1,12 +1,13 @@
 <template>
   <v-container fluid class="pa-4">
-    <h2 class="text-h6 font-weight-bold mb-4">Employee Management</h2>
+    <h2 class="text-h6 font-weight-bold mb-4">{{ $t('employeeManagement') }}</h2>
+
 
     <!-- Top Bar -->
     <v-row class="mb-4" align-center justify="space-between">
       <v-col cols="auto">
         <v-btn color="primary" @click="goToAddEmployee">
-          <v-icon start>mdi-plus</v-icon> Add Employee
+          <v-icon start>mdi-plus</v-icon> {{ $t('addEmployee') }}
         </v-btn>
       </v-col>
       
@@ -19,7 +20,7 @@
               :disabled="selected.length !== 1"
               @click="editSelectedEmployee"
             >
-              <v-icon start>mdi-pencil</v-icon> Edit
+              <v-icon start>mdi-pencil</v-icon> {{ $t('edit') }}
             </v-btn>
           </v-col>
 
@@ -30,7 +31,7 @@
               :disabled="!selected.length"
               @click="deleteSelected"
             >
-              <v-icon start>mdi-delete</v-icon> Delete
+              <v-icon start>mdi-delete</v-icon> {{$t('delete')}}
             </v-btn>
           </v-col>
 
@@ -40,7 +41,7 @@
               variant="flat"
               @click="triggerImportFile"
             >
-              <v-icon start>mdi-file-import"></v-icon> Import
+              <v-icon start>mdi-file-import"></v-icon> {{$t('import')}}
             </v-btn>
             <input
               ref="fileInput"
@@ -58,7 +59,8 @@
               :disabled="!selected.length"
               @click="exportToExcel"
             >
-              <v-icon start>mdi-file-excel"></v-icon> Export
+              <v-icon start>mdi-file-excel"></v-icon> {{ $t('export') }}
+              
             </v-btn>
           </v-col>
         </v-row>

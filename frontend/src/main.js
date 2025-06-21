@@ -11,7 +11,15 @@ import { createApp } from 'vue'
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { fas } from '@fortawesome/free-solid-svg-icons'
+
+// Charts
 import VueApexCharts from 'vue3-apexcharts'
+
+// I18n
+import { createI18n } from 'vue-i18n'
+import en from '@/locales/en'
+import kh from '@/locales/kh'
+import th from '@/locales/th'
 
 // Styles
 import 'unfonts.css'
@@ -19,21 +27,35 @@ import 'unfonts.css'
 // Register Font Awesome icons
 library.add(fas)
 
+// 🏁 Create app instance
 const app = createApp(App)
 
-// ✅ ApexCharts
+// ✅ Register charts
 app.component('apexchart', VueApexCharts)
 
-// ✅ Font Awesome
+// ✅ Register font awesome
 app.component('font-awesome-icon', FontAwesomeIcon)
 
-// ✅ Plugins like Vuetify
+// ✅ Register Vuetify and other plugins
 registerPlugins(app)
 
-// ✅ Register Socket.IO globally
+// ✅ Socket.IO globally
 import socket from '@/socket'
 app.config.globalProperties.$socket = socket
 app.provide('$socket', socket)
 
-// ✅ Mount App
+// ✅ I18n setup
+const i18n = createI18n({
+  legacy: false,
+  locale: localStorage.getItem('lang') || 'en', // Default or saved
+  fallbackLocale: 'en',
+  messages: {
+    en,
+    kh,
+    th
+  }
+})
+app.use(i18n)
+
+// ✅ Mount app
 app.mount('#app')

@@ -2,6 +2,7 @@
 import { io } from 'socket.io-client'
 
 const socket = io('http://localhost:4700', {
+  // const socket = io('http://157.245.59.122:4700', {
   autoConnect: false
 })
 
