@@ -47,6 +47,7 @@
               ref="fileInput"
               type="file"
               accept=".xlsx"
+              multiple
               @change="handleImportExcel"
               style="display: none"
             />
@@ -379,38 +380,53 @@ const triggerImportFile = () => {
 }
 
 const handleImportExcel = async (event) => {
-  const file = event.target.files[0]
-  if (!file) return
+  const file = event.target.files[0];
+  if (!file) return;
 
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet);
+
+  const company = localStorage.getItem('company') || 'DEFAULT';
+  const payload = rows.map(r => ({ ...r, company }));
+
+  console.log('📥 Sending for preview...');
+  const previewRes = await axios.post('/employees/import-preview', payload);
+  const { toImport, duplicates } = previewRes.data;
+
+  console.log('🧮 Preview:', { toImport, duplicates });
+
+  const confirm = await Swal.fire({
+    icon: 'info',
+    title: `${toImport.length} new, ${duplicates.length} duplicate(s). Proceed?`,
+    showCancelButton: true,
+    confirmButtonText: 'Yes, import',
+    cancelButtonText: 'Cancel'
+  });
+
+  if (!confirm.isConfirmed) return;
+
+  const final = await axios.post('/employees/import-confirmed', { toImport });
+  Swal.fire({
+    icon: 'success',
+    title: final.data.message,
+    text: `Failed: ${final.data.failedCount}`
+  });
+
+  fetchEmployees();
+};
+
+
+const updateNote = async (emp) => {
   try {
-    const data = await file.arrayBuffer()
-    const workbook = XLSX.read(data, { type: 'array' })
-    const sheet = workbook.Sheets[workbook.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(sheet)
-
-    // Optional: Add company if not in file
-    const company = localStorage.getItem('company') || 'DEFAULT'
-
-    const payload = rows.map(row => ({
-      ...row,
-      company // attach default company if needed
-    }))
-
-    await axios.post('/employees/import', payload) // your backend endpoint
-    Swal.fire({ icon: 'success', title: '✅ Imported successfully!' })
-    fetchEmployees()
+    await axios.put(`/employees/${emp._id}`, { note: emp.note });
+    console.log(`📝 Note saved for ${emp.employeeId}`);
   } catch (err) {
-    console.error('❌ Import error:', err)
-    Swal.fire({ icon: 'error', title: 'Import failed', text: err.message })
-  } finally {
-    event.target.value = '' // clear file input
+    console.error('❌ Failed to save note:', err.message);
   }
-}
+};
 
-
-
-
-const updateNote = emp => console.log('Update note for', emp)
 
 const getCompletionRate = emp => {
   const values = Object.values(emp).flatMap(v =>

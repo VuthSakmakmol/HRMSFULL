@@ -9,7 +9,9 @@ const {
   getEmployeeById,
   createEmployee,
   updateEmployee,
-  deleteEmployee
+  deleteEmployee,
+  previewImport,
+  confirmImport 
 } = require('../../controllers/hrss/employeeController');
 
 const { authenticate } = require('../../middlewares/authMiddleware');
@@ -34,31 +36,12 @@ router.post('/', authenticate, createEmployee);
 router.put('/:id', authenticate, updateEmployee);
 router.delete('/:id', authenticate, deleteEmployee);
 
-// ─── Image Upload Route ────────────────────────────────────────────────────────
-// router.post('/upload', upload.single('image'), (req, res) => {
-//   if (!req.file) {
-//     return res.status(400).json({ message: 'No file uploaded' });
-//   }
 
-//   const imageUrl = `/upload/employeeImages/${req.file.filename}`;
-//   res.json({ imageUrl });
-// });
+// ========== import ===========
+router.post('/import-preview', authenticate, previewImport);
+router.post('/import-confirmed', authenticate, confirmImport);
 
 
-//======= Import data ================
-router.post('/import', async (req, res) => {
-  try {
-    const data = req.body
-    if (!Array.isArray(data)) {
-      return res.status(400).json({ message: 'Invalid format' })
-    }
-
-    await Employee.insertMany(data)
-    res.status(200).json({ message: 'Import success' })
-  } catch (err) {
-    res.status(500).json({ message: 'Import failed', error: err.message })
-  }
-})
 
 
 module.exports = router;
