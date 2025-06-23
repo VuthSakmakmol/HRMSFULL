@@ -32,13 +32,26 @@ const routes = [
     ]
   },
   {
-    path: '/hrss',
-    component: DefaultLayout,
-    children: [
-      { path: 'employees', name: 'EmployeeList', component: () => import('@/views/hrss/EmployeeList.vue') },
-      { path: 'addemployee', component: () => import('@/views/hrss/AddEmployee.vue') }
-    ]
-  },
+  path: '/hrss',
+  component: DefaultLayout,
+  children: [
+    { path: 'employees', component: () => import('@/views/hrss/EmployeeList.vue') },
+    { path: 'addemployee', component: () => import('@/views/hrss/AddEmployee.vue') },
+    { path: 'attendance', component: () => import('@/views/hrss/EmployeeAttendance.vue') },
+
+    // Main Employee Dashboard
+    { path: 'dashboard', component: () => import('@/views/hrss/dashboard/employees/EmployeeDashboard.vue') },
+
+    // Chart components for optional direct view
+    { path: 'dashboard/charts/gender', component: () => import('@/views/hrss/dashboard/employees/charts/GenderBreakdown.vue') },
+    { path: 'dashboard/charts/monthly-join', component: () => import('@/views/hrss/dashboard/employees/charts/MonthlyJoinChart.vue') },
+    { path: 'dashboard/charts/total', component: () => import('@/views/hrss/dashboard/employees/charts/TotalEmployeesCard.vue') },
+
+    // Attendance Dashboard
+    { path: 'dashboard/attendance', component: () => import('@/views/hrss/dashboard/attendance/AttendanceDashboard.vue') },
+  ]
+}
+,
 
 
   // Default and fallback

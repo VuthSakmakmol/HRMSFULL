@@ -92,6 +92,23 @@
             </div>
           </template>
         </v-list-item>
+
+        <v-list-item :to="{ path: '/hrss/attendance' }">
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
+              Attendance
+            </div>
+          </template>
+        </v-list-item>
+        <v-list-item :to="{ path: '/hrss/dashboard' }">
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
+              Dashboard
+            </div>
+          </template>
+        </v-list-item>
       </v-list-group>
 
 
