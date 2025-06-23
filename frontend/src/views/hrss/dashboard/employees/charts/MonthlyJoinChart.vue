@@ -1,109 +1,66 @@
 <template>
-  <v-card class="pa-4" height="360">
-    <h4 class="text-subtitle-1 font-weight-bold mb-2">
-      📉 Monthly Employee Joins
-    </h4>
-    <Line v-if="chartData" :data="chartData" :options="options" class="chart-height" />
+  <v-card flat class="pa-2 rounded-lg elevation-1" height="100%" style="background-color: #f5f7fa">
+    <v-card-title class="text-subtitle-2 font-weight-medium d-flex align-center mb-2">
+      <v-icon start color="pink" size="20">mdi-calendar-month</v-icon>
+      Monthly Employee Joins
+    </v-card-title>
+
+    <div v-if="chartData.counts.length">
+      <apexchart
+        type="bar"
+        height="220"
+        :options="chartOptions"
+        :series="chartSeries"
+      />
+    </div>
+
+    <v-container v-else class="text-center">
+      <v-icon size="36">mdi-chart-bar</v-icon>
+      <p class="text-caption text-grey">No monthly data available</p>
+    </v-container>
   </v-card>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import axios from '@/utils/axios'
-import { Line } from 'vue-chartjs'
-import {
-  Chart as ChartJS,
-  Title,
-  Tooltip,
-  Legend,
-  LineElement,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-} from 'chart.js'
+import { computed } from 'vue'
 
-// Register chart components
-ChartJS.register(
-  Title,
-  Tooltip,
-  Legend,
-  LineElement,
-  CategoryScale,
-  LinearScale,
-  PointElement
-)
-
-// Chart options
-const options = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { position: 'top' },
-  },
-  scales: {
-    y: {
-      beginAtZero: true,
-      ticks: {
-        precision: 0,
-        stepSize: 1,
-      },
-    }
-  }
-}
-
-const chartData = ref(null)
-
-onMounted(async () => {
-  try {
-    const currentYear = new Date().getFullYear()
-
-    // 📡 Fetch data from your real backend
-    const res = await axios.get('/api/hrss/employees')
-
-    // ✅ Safe extract employees
-    const employees = Array.isArray(res.data)
-      ? res.data
-      : res.data.employees || []
-
-    // 🧠 Filter only employees joined this year
-    const thisYearEmployees = employees.filter(emp => {
-      const date = new Date(emp.createdAt)
-      return date.getFullYear() === currentYear
-    })
-
-    // 📊 Count monthly joins
-    const monthlyCounts = Array(12).fill(0)
-    for (const emp of thisYearEmployees) {
-      const date = new Date(emp.createdAt)
-      const month = date.getMonth()
-      monthlyCounts[month]++
-    }
-
-    // 📈 Prepare chart data
-    chartData.value = {
-      labels: [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-      ],
-      datasets: [
-        {
-          label: `Employees Joined in ${currentYear}`,
-          data: monthlyCounts,
-          borderColor: '#4CAF50',
-          backgroundColor: '#C8E6C9',
-          tension: 0.3,
-          fill: true,
-        }
-      ]
-    }
-  } catch (err) {
-    console.error('❌ Failed to fetch monthly data:', err.message)
+const props = defineProps({
+  chartData: {
+    type: Object,
+    default: () => ({ labels: [], counts: [] })
   }
 })
-</script>
 
-<style scoped>
-.chart-height {
-  height: 260px;
-}
-</style>
+const chartSeries = computed(() => [
+  {
+    name: 'Joins',
+    data: props.chartData.counts
+  }
+])
+
+const chartOptions = computed(() => ({
+  chart: {
+    type: 'bar',
+    toolbar: { show: false }
+  },
+  xaxis: {
+    categories: props.chartData.labels,
+    labels: { rotate: -45, style: { fontSize: '11px' } }
+  },
+  yaxis: {
+    title: { text: 'Employees' },
+    labels: { style: { fontSize: '11px' } }
+  },
+  plotOptions: {
+    bar: {
+      borderRadius: 4,
+      columnWidth: '45%'
+    }
+  },
+  dataLabels: {
+    enabled: true,
+    style: { fontSize: '11px' }
+  },
+  colors: ['#FF4081']
+}))
+</script>

@@ -66,7 +66,8 @@ app.use('/api/meta', require('./routes/hrss/metaRoutes'))
 app.use('/api/attendance', require('./routes/hrss/attendanceRoutes'))
 
 // HRSS Dashboard
-app.use('/api/hrss/dashboard', require('./routes/hrss/dashboardRoutes'))
+app.use('/api/hrss/dashboard', require('./routes/hrss/dashboardRoutes'));
+
 
 // 🔗 Serve uploaded profile images
 app.use('/upload', express.static(path.join(__dirname, 'upload'))) // ✅ required

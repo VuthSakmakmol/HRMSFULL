@@ -1,44 +1,59 @@
-const Employee = require('../../models/hrss/employee');
-const Department = require('../../models/ta/Department');
+const Employee = require('../../models/hrss/employee')
 
-// 🧠 Dashboard Summary for Employees
-exports.getEmployeeDashboard = async (req, res) => {
+// ─── Total Employees, Male, Female ──────────────────────────────
+exports.getEmployeeSummary = async (req, res) => {
   try {
-    const employees = await Employee.find();
-    const departments = await Department.find();
-
-    const summary = {
-      total: employees.length,
-      active: employees.filter(e => e.status === 'Active').length,
-      inactive: employees.filter(e => e.status !== 'Active').length,
-      departments: departments.length
-    };
-
-    // Gender Breakdown: [Male, Female, Other]
-    const genderCounts = ['Male', 'Female', 'Other'].map(gender =>
-      employees.filter(e => e.gender === gender).length
-    );
-
-    // Monthly Join Stats
-    const monthCounts = Array(12).fill(0);
-    employees.forEach(e => {
-      if (e.joinDate) {
-        const month = new Date(e.joinDate).getMonth(); // 0-11
-        monthCounts[month]++;
-      }
-    });
-
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    res.json({
-      summary,
-      genderCounts,
-      months,
-      monthCounts
-    });
-
+    const total = await Employee.countDocuments()
+    const male = await Employee.countDocuments({ gender: 'Male' })
+    const female = await Employee.countDocuments({ gender: 'Female' })
+    res.json({ total, male, female })
   } catch (err) {
-    console.error('❌ Dashboard fetch error:', err);
-    res.status(500).json({ message: 'Failed to load employee dashboard', error: err.message });
+    console.error('❌ Error fetching employee summary:', err.message)
+    res.status(400).json({ error: 'Failed to fetch employee summary' })
   }
-};
+}
+
+// ─── Monthly Joined Chart ───────────────────────────────────────
+
+  exports.getMonthlyJoinChart = async (req, res) => {
+  try {
+    const data = await Employee.aggregate([
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ])
+    res.json(data)
+  } catch (err) {
+    console.error('❌ Error fetching monthly joins:', err.message)
+    res.status(500).json({ error: 'Failed to fetch monthly join data' })
+  }
+}
+
+
+// ─── Gender Breakdown ───────────────────────────────────────────
+// controllers/dashboardController.js
+exports.getGenderBreakdown = async (req, res) => {
+  try {
+    const company = req.user?.company || req.query.company // if needed
+    const query = company ? { company } : {}
+
+    const result = await Employee.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: { $ifNull: ['$gender', 'Other'] },
+          count: { $sum: 1 }
+        }
+      }
+    ])
+
+    res.json(result)
+  } catch (err) {
+    console.error('❌ Failed to fetch gender breakdown:', err.message)
+    res.status(500).json({ error: 'Server error' })
+  }
+}

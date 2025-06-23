@@ -1,55 +1,15 @@
-const express = require('express')
-const router = express.Router()
-const Employee = require('../../models/hrss/employee')
+const express = require('express');
+const router = express.Router();
+const dashboardController = require('../../controllers/hrss/dashboardController');
+const { authenticate } = require('../../middlewares/authMiddleware');
 
-// ─── Get Total, Male, Female Employees ────────────────────────
-router.get('/employees', async (req, res) => {
-  try {
-    const total = await Employee.countDocuments()
-    const male = await Employee.countDocuments({ gender: 'Male' })
-    const female = await Employee.countDocuments({ gender: 'Female' })
-    res.json({ total, male, female })
-  } catch (err) {
-    console.error('❌ Error fetching employee summary:', err.message)
-    res.status(400).json({ error: 'Failed to fetch employee summary' })
-  }
-})
+// 🧑‍🤝‍🧑 Total Employees
+router.get('/employees', authenticate, dashboardController.getEmployeeSummary);
 
-// ─── Get Monthly Join Counts ──────────────────────────────────
-router.get('/employees/monthly', async (req, res) => {
-  try {
-    const data = await Employee.aggregate([
-      {
-        $group: {
-          _id: { $substr: ['$createdAt', 0, 7] }, // 'YYYY-MM'
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ])
-    res.json(data)
-  } catch (err) {
-    console.error('❌ Error fetching monthly joins:', err.message)
-    res.status(400).json({ error: 'Failed to fetch monthly join data' })
-  }
-})
+// 👥 Gender Breakdown
+router.get('/employees/gender', authenticate, dashboardController.getGenderBreakdown);
 
-// ─── Get Gender Breakdown ─────────────────────────────────────
-router.get('/employees/gender', async (req, res) => {
-  try {
-    const data = await Employee.aggregate([
-      {
-        $group: {
-          _id: '$gender',
-          count: { $sum: 1 }
-        }
-      }
-    ])
-    res.json(data)
-  } catch (err) {
-    console.error('❌ Error fetching gender breakdown:', err.message)
-    res.status(400).json({ error: 'Failed to fetch gender breakdown' })
-  }
-})
+// 📈 Monthly Joins
+router.get('/employees/monthly', authenticate, dashboardController.getMonthlyJoinChart);
 
-module.exports = router
+module.exports = router;
