@@ -1,6 +1,6 @@
 <template>
   <v-card flat class="pa-4 mb-6 rounded-xl elevation-1">
-    <h3 class="text-h6 font-weight-bold mb-6"> Step 2: Family & Identity</h3>
+    <h3 class="text-h6 font-weight-bold mb-6">Step 2: Family & Identity</h3>
 
     <v-row dense>
       <!-- Married Status -->
@@ -11,8 +11,6 @@
           label="Married Status"
           variant="outlined"
           density="comfortable"
-          autocomplete="off"
-          name="married-status"
         />
       </v-col>
 
@@ -23,8 +21,6 @@
           label="Spouse Name"
           variant="outlined"
           density="comfortable"
-          autocomplete="off"
-          name="spouse-name"
         />
       </v-col>
       <v-col cols="12" sm="2">
@@ -33,8 +29,6 @@
           label="Spouse Contact"
           variant="outlined"
           density="comfortable"
-          autocomplete="off"
-          name="spouse-contact"
         />
       </v-col>
 
@@ -46,8 +40,6 @@
           label="Nationality"
           variant="outlined"
           density="comfortable"
-          autocomplete="off"
-          name="nationality"
         />
       </v-col>
       <v-col cols="12" sm="2">
@@ -57,8 +49,6 @@
           label="Religion"
           variant="outlined"
           density="comfortable"
-          autocomplete="off"
-          name="religion"
         />
       </v-col>
 
@@ -69,12 +59,10 @@
           label="Introducer ID"
           variant="outlined"
           density="comfortable"
-          autocomplete="off"
-          name="introducer-id"
         />
       </v-col>
 
-      <!-- Job Info -->
+      <!-- Join Date -->
       <v-col cols="12" sm="2">
         <v-text-field
           v-model="form.joinDate"
@@ -82,30 +70,36 @@
           type="date"
           variant="outlined"
           density="comfortable"
-          autocomplete="off"
-          name="join-date"
         />
       </v-col>
+
+      <!-- Department -->
       <v-col cols="12" sm="2">
-        <v-text-field
-          v-model="form.department"
+        <v-autocomplete
+          v-model="selectedDepartment"
+          :items="departments"
+          item-title="name"
+          item-value="name"
+          return-object
           label="Department"
           variant="outlined"
           density="comfortable"
-          autocomplete="off"
-          name="department"
+          @update:modelValue="onDepartmentChange"
         />
       </v-col>
+
+      <!-- Position -->
       <v-col cols="12" sm="2">
-        <v-text-field
+        <v-autocomplete
           v-model="form.position"
+          :items="jobTitles"
           label="Position"
           variant="outlined"
           density="comfortable"
-          autocomplete="off"
-          name="position"
         />
       </v-col>
+
+      <!-- Employee Type -->
       <v-col cols="12" sm="2">
         <v-select
           v-model="form.employeeType"
@@ -113,20 +107,18 @@
           label="Employee Type"
           variant="outlined"
           density="comfortable"
-          autocomplete="off"
-          name="employee-type"
         />
       </v-col>
     </v-row>
   </v-card>
 </template>
 
-
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from '@/utils/axios'
 
-defineProps({ form: Object })
+const { form } = defineProps({ form: Object })
+
 
 const enumOptions = ref({
   marriedStatusOptions: [],
@@ -135,12 +127,33 @@ const enumOptions = ref({
   employeeTypeOptions: []
 })
 
+const departments = ref([])
+const selectedDepartment = ref(null)
+const jobTitles = ref([])
+
+const role = localStorage.getItem('role') || ''
+const company = localStorage.getItem('company') || ''
+
+const onDepartmentChange = (deptObj) => {
+  if (deptObj) {
+    form.department = deptObj.name
+    jobTitles.value = deptObj.jobTitles || []
+  } else {
+    form.department = ''
+    jobTitles.value = []
+  }
+}
+
 onMounted(async () => {
   try {
-    const { data } = await axios.get('/meta/enums')
-    enumOptions.value = data
+    const enumsRes = await axios.get('/meta/enums')
+    enumOptions.value = enumsRes.data
+
+    const query = role === 'GeneralManager' ? `?company=${company}` : ''
+    const res = await axios.get(`/departments${query}`)
+    departments.value = res.data
   } catch (err) {
-    console.error('❌ Failed to load enums in Step 2:', err)
+    console.error('❌ Failed to load departments or enums:', err)
   }
 })
 </script>

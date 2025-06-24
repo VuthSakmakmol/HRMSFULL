@@ -15,23 +15,34 @@ exports.getEmployeeSummary = async (req, res) => {
 
 // ─── Monthly Joined Chart ───────────────────────────────────────
 
-  exports.getMonthlyJoinChart = async (req, res) => {
+exports.getMonthlyJoinChart = async (req, res) => {
   try {
     const data = await Employee.aggregate([
       {
+        $match: {
+          joinDate: { $exists: true, $ne: null }
+        }
+      },
+      {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+          _id: {
+            $dateToString: { format: "%Y-%m", date: "$joinDate" }
+          },
           count: { $sum: 1 }
         }
       },
-      { $sort: { _id: 1 } }
+      {
+        $sort: { _id: 1 }
+      }
     ])
+
     res.json(data)
   } catch (err) {
     console.error('❌ Error fetching monthly joins:', err.message)
     res.status(500).json({ error: 'Failed to fetch monthly join data' })
   }
 }
+
 
 
 // ─── Gender Breakdown ───────────────────────────────────────────

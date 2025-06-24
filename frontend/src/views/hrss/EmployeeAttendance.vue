@@ -48,18 +48,25 @@
         <v-text-field v-model="searchText" label="Search employee" append-inner-icon="mdi-magnify" density="compact" variant="outlined" />
       </v-col>
       <v-col cols="12" sm="3">
-        <v-text-field
-          v-model="formattedDate"
-          label="Filter by Date"
-          readonly
-          append-inner-icon="mdi-calendar"
-          density="compact"
-          variant="outlined"
-          @click="datePicker = true"
-        />
-        <v-menu v-model="datePicker" activator="parent" width="auto">
-          <v-date-picker v-model="selectedDate" @update:modelValue="datePicker = false" />
+        <v-menu v-model="datePicker" :close-on-content-click="false" transition="scale-transition" offset-y>
+          <template #activator="{ props }">
+            <v-text-field
+              v-bind="props"
+              v-model="formattedDate"
+              label="Filter by Date"
+              density="compact"
+              variant="outlined"
+              append-inner-icon="mdi-calendar"
+              readonly
+            />
+          </template>
+
+          <v-date-picker
+            v-model="selectedDate"
+            @update:modelValue="datePicker = false"
+          />
         </v-menu>
+
       </v-col>
     </v-row>
 

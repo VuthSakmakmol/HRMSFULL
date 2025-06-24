@@ -1,6 +1,6 @@
 <template>
   <v-container fluid class="pa-4">
-    <h2 class="text-h6 font-weight-bold mb-4">📊 Employee Dashboard</h2>
+    <h2 class="text-h6 font-weight-bold mb-4">📊 ManPower</h2>
 
     <v-row dense>
       <!-- 🔢 Total Employees -->

@@ -14,6 +14,17 @@
       <strong>{{ completionPercentage }}%</strong>
     </v-progress-linear>
 
+    <v-btn
+  color="secondary"
+  class="mb-4"
+  variant="outlined"
+  @click="router.push('/hrss/employees')"
+>
+  <v-icon start>mdi-arrow-left</v-icon>
+  Back to Employee List
+</v-btn>
+
+
     <!-- Dynamic Step Component -->
     <component
       :is="stepComponents[step - 1]"
@@ -145,15 +156,21 @@ const startNewEmployee = async () => {
     )
 
     if (hasData && !employeeId.value) {
-      const res = await axios.post('/employees', form.value)
+      // ⛔ Remove _id before creating new record
+      const payload = { ...form.value }
+      delete payload._id
+
+      const res = await axios.post('/employees', payload)
       if (res.data?._id) Swal.fire({ icon: 'success', title: 'Saved before reset' })
     } else if (employeeId.value) {
       await axios.put(`/employees/${employeeId.value}`, form.value)
       Swal.fire({ icon: 'success', title: 'Updated before reset' })
     }
 
+    // ✅ Reset form without _id
     Object.assign(form.value, {
       ...form.value,
+      _id: undefined, // ← important
       profileImage: '', profileImageFile: null,
       employeeId: '', khmerFirstName: '', khmerLastName: '',
       englishFirstName: '', englishLastName: '', gender: '', dob: '', age: null,
@@ -183,4 +200,5 @@ const startNewEmployee = async () => {
     Swal.fire({ icon: 'error', title: 'Reset failed', text: err.message })
   }
 }
+
 </script>
