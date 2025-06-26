@@ -7,24 +7,29 @@ const {
   getNightShiftAttendance,
   getPaginatedAttendance,
   importAttendance,
-  updateAttendance 
+  updateAttendance,
+  updateLeavePermission
 } = require('../../controllers/hrss/attendanceController');
 
-// 📥 Import attendance (protected)
+// 📥 Daily Attendance Import
 router.post('/import', authenticate, importAttendance);
 
-// 📄 Fetch all
+// ✅ Match frontend: /update-leave
+router.post('/update-leave', authenticate, updateLeavePermission);
+
+// 📄 Fetch All
 router.get('/', authenticate, getAllAttendance);
 
-// ☀️ Fetch Day Shift
+// ☀️ Day Shift
 router.get('/day', authenticate, getDayShiftAttendance);
 
-// 🌙 Fetch Night Shift
+// 🌙 Night Shift
 router.get('/night', authenticate, getNightShiftAttendance);
 
-// 📃 Pagination: ?page=1&limit=10
+// 📃 Paginated
 router.get('/paginate', authenticate, getPaginatedAttendance);
 
-
+// ✏️ Update Attendance Row (edit)
 router.put('/:id', authenticate, updateAttendance);
+
 module.exports = router;

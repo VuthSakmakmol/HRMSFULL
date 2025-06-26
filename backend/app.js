@@ -5,7 +5,7 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
-
+const bodyParser = require('body-parser');
 
 dotenv.config();
 const app = express();
@@ -90,6 +90,11 @@ app.get(/.*/, (req, res) => {
 app.get('/api/health', (req, res) => {
   res.send('✅ HRMS API is running...');
 });
+
+// Large data import
+app.use(bodyParser.json({ limit: '100mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '100mb' }));
+
 
 // ─── MONGODB CONNECTION ────────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI, {

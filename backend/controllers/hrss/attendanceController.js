@@ -1,38 +1,55 @@
 const Attendance = require('../../models/hrss/attendances');
 const Employee = require('../../models/hrss/employee');
+const XLSX = require('xlsx');
 
-// Helper: Convert "HH:mm" string to minutes
+// ───────────────────────────────────────────────
+// Utilities
 function toMinutes(time) {
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
 }
 
-// Helper: Determine status based on time
+function parseTimeToDate(baseDate, timeStr) {
+  if (!timeStr) return null;
+  const [h, m] = timeStr.split(':').map(Number);
+  const date = new Date(baseDate);
+  date.setHours(h, m, 0);
+  return date;
+}
+
+function formatExcelDate(value) {
+  if (typeof value === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed) {
+      const { y, m, d } = parsed;
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  return null;
+}
+
 function evaluateStatus(startTime, endTime, shiftType) {
   if (!startTime || !endTime) return 'Absent';
-
   let startMin = toMinutes(startTime);
   let endMin = toMinutes(endTime);
 
   if (shiftType === 'Day Shift') {
     const expectedStart = toMinutes('07:00');
     const expectedEnd = toMinutes('16:00');
-    const lateThreshold = expectedStart + 15;
-
-    if (startMin > lateThreshold) return 'Late';
+    if (startMin > expectedStart + 15) return 'Late';
     if (endMin > expectedEnd + 1) return 'Overtime';
     return 'OnTime';
+  }
 
-  } else if (shiftType === 'Night Shift') {
+  if (shiftType === 'Night Shift') {
     const expectedStart = toMinutes('18:00');
     const expectedEnd = toMinutes('03:00') + 1440;
-
     if (startMin < expectedStart) startMin += 1440;
     if (endMin < expectedStart) endMin += 1440;
-
-    const lateThreshold = expectedStart + 15;
-
-    if (startMin > lateThreshold) return 'Late';
+    if (startMin > expectedStart + 15) return 'Late';
     if (endMin > expectedEnd + 1) return 'Overtime';
     return 'OnTime';
   }
@@ -40,162 +57,171 @@ function evaluateStatus(startTime, endTime, shiftType) {
   return 'Absent';
 }
 
-// Helper: Convert "HH:mm" to JS Date using baseDate
-function parseTimeToDate(baseDate, timeStr) {
-  if (!timeStr) return null;
-  const [h, m] = timeStr.split(':').map(Number);
-  const dateObj = new Date(baseDate);
-  dateObj.setHours(h);
-  dateObj.setMinutes(m);
-  dateObj.setSeconds(0);
-  return dateObj;
-}
-
-// ===================== Import Attendance ======================
+// ───────────────────────────────────────────────
+// Import Attendance
 exports.importAttendance = async (req, res) => {
   try {
     const { shiftType, rows } = req.body;
-    const user = req.user;
+    const company = req.user.company;
 
-    if (!user || !user.company) {
-      return res.status(401).json({ message: 'Unauthorized: No company context' });
+    if (!company || !rows?.length) {
+      return res.status(400).json({ message: 'Missing data' });
     }
 
-    if (!rows || !Array.isArray(rows) || rows.length === 0) {
-      return res.status(400).json({ message: 'No data provided' });
-    }
-
-    const company = user.company;
-    const rawDate = rows[0].date || new Date().toISOString().split('T')[0];
-    const baseDate = new Date(rawDate);
     const summary = [];
-
-    // Optional: clear old data for the same shift + date + company
-    await Attendance.deleteMany({ date: baseDate, shiftType, company });
 
     for (const row of rows) {
       const employeeId = row.employeeId?.trim();
-      const startTimeStr = row.startTime?.trim();
-      const endTimeStr = row.endTime?.trim();
+      const formattedDateStr = formatExcelDate(row.date);
+      if (!employeeId || !formattedDateStr) continue;
 
-      if (!employeeId) continue;
+      const date = new Date(formattedDateStr);
+      const startTime = row.startTime?.trim();
+      const endTime = row.endTime?.trim();
+      const timeIn = parseTimeToDate(date, startTime);
+      const timeOut = parseTimeToDate(date, endTime);
+      const status = evaluateStatus(startTime, endTime, shiftType);
 
       const emp = await Employee.findOne({ employeeId, company });
       const fullName = emp ? `${emp.englishFirstName} ${emp.englishLastName}` : 'Unknown';
 
-      const timeIn = parseTimeToDate(baseDate, startTimeStr);
-      const timeOut = parseTimeToDate(baseDate, endTimeStr);
-      const status = evaluateStatus(startTimeStr, endTimeStr, shiftType);
+      await Attendance.findOneAndUpdate(
+        { employeeId, date, company },
+        {
+          employeeId,
+          date,
+          shiftType,
+          timeIn,
+          timeOut,
+          status,
+          fullName,
+          company,
+          note: row.note || ''
+        },
+        { upsert: true, new: true }
+      );
 
-      await Attendance.create({
-        employeeId,
-        date: baseDate,
-        shiftType,
-        timeIn,
-        timeOut,
-        status,
-        fullName,
-        company,
-      });
-
-      summary.push({
-        employeeId,
-        fullName,
-        shiftType,
-        status,
-        date: baseDate.toISOString().split('T')[0]
-      });
+      summary.push({ employeeId, date: formattedDateStr, status });
     }
 
-    res.json({
-      message: '✅ Attendance imported successfully!',
-      summary
-    });
-
+    res.json({ message: `✅ Imported ${summary.length} attendance records.`, summary });
   } catch (err) {
-    console.error('❌ Attendance import error:', err.message);
-    res.status(500).json({ message: 'Failed to import attendance', error: err.message });
+    console.error('❌ Import error:', err.message);
+    res.status(500).json({ message: 'Import failed', error: err.message });
   }
 };
 
-// ===================== Get All Attendance ======================
+// ───────────────────────────────────────────────
+// Update Leave (Permission)
+exports.updateLeavePermission = async (req, res) => {
+  try {
+    const { rows } = req.body;
+    const company = req.user.company;
+    if (!company || !Array.isArray(rows)) {
+      return res.status(400).json({ message: 'Invalid input' });
+    }
+
+    const result = [];
+
+    for (const row of rows) {
+      const employeeId = row.employeeId?.trim();
+      const shiftType = row.shiftType?.trim();
+      const leaveType = row.leaveType?.trim();
+      const formattedDateStr = formatExcelDate(row.date);
+      if (!employeeId || !leaveType || !formattedDateStr) continue;
+
+      const date = new Date(formattedDateStr);
+      const existing = await Attendance.findOne({
+        employeeId,
+        company,
+        date,
+        shiftType,
+        status: 'Absent',
+      });
+
+      if (existing) {
+        existing.status = 'Leave';
+        existing.leaveType = leaveType;
+        await existing.save();
+        result.push({ employeeId, date: formattedDateStr, updated: true });
+      }
+    }
+
+    res.json({ message: `✅ Leave updated: ${result.length}`, result });
+  } catch (err) {
+    console.error('❌ Leave update error:', err.message);
+    res.status(500).json({ message: 'Leave update failed', error: err.message });
+  }
+};
+
+// ───────────────────────────────────────────────
+// Get All Attendance
 exports.getAllAttendance = async (req, res) => {
   try {
-    const user = req.user;
-    if (!user || !user.company) {
-      return res.status(401).json({ message: 'Unauthorized' });
-    }
-
-    const attendance = await Attendance.find({ company: user.company }).sort({ date: -1 });
-
-    if (!attendance || attendance.length === 0) {
-      console.log('\x1b[33m⚠️ No attendance records found.\x1b[0m');
-    } else {
-      console.log(`\x1b[32m✅ Attendance records fetched: ${attendance.length}\x1b[0m`);
-      console.log('🧾 Sample record:', attendance[0]);
-    }
-
-    res.json(attendance);
+    const company = req.user.company;
+    const records = await Attendance.find({ company }).sort({ date: -1 });
+    res.json(records);
   } catch (err) {
-    console.error('\x1b[31m❌ Error fetching attendance:\x1b[0m', err.message);
-    res.status(500).json({ message: 'Failed to fetch attendance', error: err.message });
+    res.status(500).json({ message: 'Fetch failed', error: err.message });
   }
 };
 
-// ===================== Shift Attendance ======================
+// ───────────────────────────────────────────────
+// Get Day Shift
 exports.getDayShiftAttendance = async (req, res) => {
   try {
-    const records = await Attendance.find({ shiftType: 'Day Shift', company: req.user.company }).sort({ date: -1 });
+    const company = req.user.company;
+    const records = await Attendance.find({ shiftType: 'Day Shift', company }).sort({ date: -1 });
     res.json(records);
   } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch day shift attendance', error: err.message });
+    res.status(500).json({ message: 'Fetch failed', error: err.message });
   }
 };
 
+// ───────────────────────────────────────────────
+// Get Night Shift
 exports.getNightShiftAttendance = async (req, res) => {
   try {
-    const records = await Attendance.find({ shiftType: 'Night Shift', company: req.user.company }).sort({ date: -1 });
+    const company = req.user.company;
+    const records = await Attendance.find({ shiftType: 'Night Shift', company }).sort({ date: -1 });
     res.json(records);
   } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch night shift attendance', error: err.message });
+    res.status(500).json({ message: 'Fetch failed', error: err.message });
   }
 };
 
-// ===================== Pagination ======================
+// ───────────────────────────────────────────────
+// Pagination
 exports.getPaginatedAttendance = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const { page = 1, limit = 10 } = req.query;
     const company = req.user.company;
+    const skip = (page - 1) * limit;
 
     const [records, total] = await Promise.all([
       Attendance.find({ company }).sort({ date: -1 }).skip(skip).limit(limit),
-      Attendance.countDocuments({ company })
+      Attendance.countDocuments({ company }),
     ]);
 
-    res.json({ records, total, page, limit });
+    res.json({ records, total, page: Number(page), limit: Number(limit) });
   } catch (err) {
     res.status(500).json({ message: 'Pagination failed', error: err.message });
   }
 };
 
-// ===================== Update Attendance ======================
+// ───────────────────────────────────────────────
+// Update Attendance
 exports.updateAttendance = async (req, res) => {
   try {
-    const { id } = req.params;
-    const update = req.body;
     const company = req.user.company;
-
-    const updated = await Attendance.findOneAndUpdate({ _id: id, company }, update, { new: true });
-
-    if (!updated) {
-      return res.status(404).json({ message: 'Attendance record not found or unauthorized' });
-    }
-
-    res.json({ message: '✅ Attendance updated successfully', data: updated });
+    const updated = await Attendance.findOneAndUpdate(
+      { _id: req.params.id, company },
+      req.body,
+      { new: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    res.json({ message: '✅ Updated', data: updated });
   } catch (err) {
-    console.error('❌ Update error:', err.message);
-    res.status(500).json({ message: 'Failed to update attendance', error: err.message });
+    res.status(500).json({ message: 'Update failed', error: err.message });
   }
 };

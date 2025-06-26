@@ -18,18 +18,21 @@ const attendanceSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ['OnTime', 'Late', 'Permission', 'Absent', 'NearlyAbandon', 'Abandon', 'Overtime'],
+    enum: ['OnTime', 'Late', 'Absent', 'NearlyAbandon', 'Abandon', 'Overtime', 'Leave'], 
     default: 'Absent'
   },
 
-  permission: { type: Boolean, default: false },
+  leaveType: {
+    type: String,
+    enum: ['Sick Leave', 'Annual Leave', 'Maternity Leave', 'Unpaid Leave', 'Specail Leave'],
+    default: null
+  },
+
   note: { type: String, default: '' },
 
-  // ✅ Company field for multi-tenant separation
   company: { type: String, required: true }
 }, { timestamps: true });
 
-// Ensure uniqueness per employee per date per company
 attendanceSchema.index({ employeeId: 1, date: 1, company: 1 }, { unique: true });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

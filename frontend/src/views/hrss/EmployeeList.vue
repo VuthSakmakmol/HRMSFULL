@@ -182,6 +182,9 @@ const getRowNumber = index => {
 }
 
 
+
+
+
 const fetchEmployees = async () => {
   const params = {}
 
@@ -342,36 +345,54 @@ const triggerImportFile = () => {
 }
 
 const handleImportExcel = async (event) => {
-  const file = event.target.files[0]
-  if (!file) return
+  const file = event.target.files[0];
+  if (!file) return;
 
-  const buffer = await file.arrayBuffer()
-  const workbook = XLSX.read(buffer, { type: 'array' })
-  const sheet = workbook.Sheets[workbook.SheetNames[0]]
-  const rows = XLSX.utils.sheet_to_json(sheet)
+  const form = new FormData();
+  form.append('file', file);
 
-  const previewRes = await axios.post('/employees/import-preview', rows)
-  const { toImport, duplicates } = previewRes.data
+  try {
+    const previewRes = await axios.post('/employees/import-excel', form);
+    const { toImport, duplicates } = previewRes.data;
 
-  const confirm = await Swal.fire({
-    icon: 'info',
-    title: `${toImport.length} new, ${duplicates.length} duplicate(s). Proceed?`,
-    showCancelButton: true,
-    confirmButtonText: 'Yes, import',
-    cancelButtonText: 'Cancel'
-  })
+    if (!toImport.length) {
+      return Swal.fire({
+        icon: 'info',
+        title: 'No new data found',
+        text: `${duplicates.length} duplicates skipped.`
+      });
+    }
 
-  if (!confirm.isConfirmed) return
+    const confirm = await Swal.fire({
+      icon: 'question',
+      title: `Import ${toImport.length} new employees?`,
+      text: `${duplicates.length} duplicate(s) will be ignored.`,
+      showCancelButton: true,
+      confirmButtonText: 'Yes, import',
+      cancelButtonText: 'Cancel'
+    });
 
-  const final = await axios.post('/employees/import-confirmed', { toImport })
-  Swal.fire({
-    icon: 'success',
-    title: final.data.message,
-    text: `Failed: ${final.data.failedCount}`
-  })
+    if (!confirm.isConfirmed) return;
 
-  await fetchEmployees()
-}
+    const importRes = await axios.post('/api/employees/import-confirmed', { toImport });
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Import Complete',
+      text: `✅ ${importRes.data.message} ❌ Failed: ${importRes.data.failedCount}`
+    });
+
+    await fetchEmployees();
+  } catch (err) {
+    console.error('❌ Import failed:', err);
+    Swal.fire({
+      icon: 'error',
+      title: 'Import Failed',
+      text: err.response?.data?.message || err.message
+    });
+  }
+};
+
 
 
 const updateNote = async (emp) => {
