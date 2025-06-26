@@ -14,12 +14,14 @@ function isValidDate(value) {
 exports.previewImport = async (req, res) => {
   try {
     const data = req.body;
+    const company = req.user.company;
+    if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
     if (!Array.isArray(data) || data.length === 0) {
       return res.status(400).json({ message: 'No data received' });
     }
 
     const incomingIds = data.map(d => d.employeeId?.trim()).filter(Boolean);
-    const existingIds = await Employee.find({ employeeId: { $in: incomingIds } }).distinct('employeeId');
+    const existingIds = await Employee.find({ company, employeeId: { $in: incomingIds } }).distinct('employeeId');
 
     const duplicates = [];
     const toImport = [];
@@ -52,6 +54,8 @@ exports.previewImport = async (req, res) => {
 exports.confirmImport = async (req, res) => {
   try {
     const { toImport } = req.body;
+    const company = req.user.company;
+    if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
     if (!Array.isArray(toImport) || toImport.length === 0) {
       return res.status(400).json({ message: 'No data to import' });
     }
@@ -77,7 +81,11 @@ exports.confirmImport = async (req, res) => {
           }
         });
 
-        const emp = new Employee(item);
+        const emp = new Employee({
+          ...item,
+          company, // ✅ override with secure value
+        });
+
         await emp.validate();
         await emp.save();
         inserted.push(emp);
@@ -99,10 +107,18 @@ exports.confirmImport = async (req, res) => {
 };
 
 // ────────────────────────────────────────────────────────────────────────────────
-// Basic CRUD remains the same
+// Create new employee
 exports.createEmployee = async (req, res) => {
   try {
-    const newEmp = await Employee.create(req.body);
+    const company = req.user.company;
+    if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
+
+    const newEmp = new Employee({
+      ...req.body,
+      company // ✅ enforce trusted value
+    });
+
+    await newEmp.save();
     res.status(201).json(newEmp);
   } catch (err) {
     console.error('[CREATE ERROR]', err);
@@ -110,36 +126,51 @@ exports.createEmployee = async (req, res) => {
   }
 };
 
+// ────────────────────────────────────────────────────────────────────────────────
+// Get employees by company with pagination
+// Get employees by company with pagination
 exports.getAllEmployees = async (req, res) => {
   try {
-    const { company, page = 1, limit = 10 } = req.query;
-    if (!company) return res.status(400).json({ message: 'Company is required' });
-
-    const pageInt = parseInt(page);
-    const limitInt = Math.max(parseInt(limit), 1);
-    const skip = (pageInt - 1) * limitInt;
+    const { page = 1, limit = 10 } = req.query;
+    const company = req.user.company;
+    if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
 
     const query = { company };
 
-    const [employees, total] = await Promise.all([
-      Employee.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitInt),
-      Employee.countDocuments(query),
-    ]);
+    let employees;
+    let total;
+
+    total = await Employee.countDocuments(query);
+
+    if (limit === 'all') {
+      employees = await Employee.find(query).sort({ createdAt: -1 });
+    } else {
+      const pageInt = parseInt(page);
+      const limitInt = Math.max(parseInt(limit), 1);
+      const skip = (pageInt - 1) * limitInt;
+
+      employees = await Employee.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitInt);
+    }
 
     res.json({
       employees,
       total,
-      currentPage: pageInt,
-      totalPages: Math.ceil(total / limitInt),
+      currentPage: page === 'all' ? 1 : parseInt(page),
+      totalPages: limit === 'all' ? 1 : Math.ceil(total / parseInt(limit)),
     });
   } catch (err) {
     res.status(500).json({ message: 'Failed to get employees', error: err.message });
   }
 };
 
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Get single employee by ID
 exports.getEmployeeById = async (req, res) => {
   try {
-    const employee = await Employee.findById(req.params.id);
+    const company = req.user.company;
+    const employee = await Employee.findOne({ _id: req.params.id, company });
+
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
     res.json(employee);
   } catch (err) {
@@ -147,33 +178,47 @@ exports.getEmployeeById = async (req, res) => {
   }
 };
 
+// ────────────────────────────────────────────────────────────────────────────────
+// Update employee
 exports.updateEmployee = async (req, res) => {
   try {
-    const updated = await Employee.findByIdAndUpdate(
-      req.params.id,
+    const company = req.user.company;
+    const updated = await Employee.findOneAndUpdate(
+      { _id: req.params.id, company },
       { $set: req.body },
       { new: true }
     );
+
+    if (!updated) return res.status(404).json({ message: 'Employee not found or unauthorized' });
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update employee', details: err });
   }
 };
 
+// ────────────────────────────────────────────────────────────────────────────────
+// Delete employee
 exports.deleteEmployee = async (req, res) => {
   try {
-    await Employee.findByIdAndDelete(req.params.id);
+    const company = req.user.company;
+    const deleted = await Employee.findOneAndDelete({ _id: req.params.id, company });
+
+    if (!deleted) return res.status(404).json({ message: 'Employee not found or unauthorized' });
     res.json({ message: 'Employee deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete employee' });
   }
 };
 
+// ────────────────────────────────────────────────────────────────────────────────
+// Delete multiple employees
 exports.deleteMultipleEmployees = async (req, res) => {
   try {
+    const company = req.user.company;
     const { ids } = req.body;
-    await Employee.deleteMany({ _id: { $in: ids } });
-    res.json({ message: 'Selected employees deleted' });
+
+    const result = await Employee.deleteMany({ _id: { $in: ids }, company });
+    res.json({ message: 'Selected employees deleted', deletedCount: result.deletedCount });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete multiple employees' });
   }

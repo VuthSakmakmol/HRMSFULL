@@ -1,13 +1,13 @@
 const Attendance = require('../../models/hrss/attendances');
 const Employee = require('../../models/hrss/employee');
 
-// Convert "HH:mm" string to minutes
+// Helper: Convert "HH:mm" string to minutes
 function toMinutes(time) {
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
 }
 
-// Determine status based on time
+// Helper: Determine status based on time
 function evaluateStatus(startTime, endTime, shiftType) {
   if (!startTime || !endTime) return 'Absent';
 
@@ -34,13 +34,13 @@ function evaluateStatus(startTime, endTime, shiftType) {
 
     if (startMin > lateThreshold) return 'Late';
     if (endMin > expectedEnd + 1) return 'Overtime';
-    return 'On Time';
+    return 'OnTime';
   }
 
   return 'Absent';
 }
 
-// Convert "HH:mm" to Date based on baseDate
+// Helper: Convert "HH:mm" to JS Date using baseDate
 function parseTimeToDate(baseDate, timeStr) {
   if (!timeStr) return null;
   const [h, m] = timeStr.split(':').map(Number);
@@ -51,20 +51,27 @@ function parseTimeToDate(baseDate, timeStr) {
   return dateObj;
 }
 
+// ===================== Import Attendance ======================
 exports.importAttendance = async (req, res) => {
   try {
     const { shiftType, rows } = req.body;
+    const user = req.user;
+
+    if (!user || !user.company) {
+      return res.status(401).json({ message: 'Unauthorized: No company context' });
+    }
 
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ message: 'No data provided' });
     }
 
+    const company = user.company;
     const rawDate = rows[0].date || new Date().toISOString().split('T')[0];
     const baseDate = new Date(rawDate);
     const summary = [];
 
-    // Optional: clear old data for the same shift + date
-    await Attendance.deleteMany({ date: baseDate, shiftType });
+    // Optional: clear old data for the same shift + date + company
+    await Attendance.deleteMany({ date: baseDate, shiftType, company });
 
     for (const row of rows) {
       const employeeId = row.employeeId?.trim();
@@ -73,7 +80,7 @@ exports.importAttendance = async (req, res) => {
 
       if (!employeeId) continue;
 
-      const emp = await Employee.findOne({ employeeId });
+      const emp = await Employee.findOne({ employeeId, company });
       const fullName = emp ? `${emp.englishFirstName} ${emp.englishLastName}` : 'Unknown';
 
       const timeIn = parseTimeToDate(baseDate, startTimeStr);
@@ -87,7 +94,8 @@ exports.importAttendance = async (req, res) => {
         timeIn,
         timeOut,
         status,
-        fullName 
+        fullName,
+        company,
       });
 
       summary.push({
@@ -110,9 +118,15 @@ exports.importAttendance = async (req, res) => {
   }
 };
 
+// ===================== Get All Attendance ======================
 exports.getAllAttendance = async (req, res) => {
   try {
-    const attendance = await Attendance.find().sort({ date: -1 });
+    const user = req.user;
+    if (!user || !user.company) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const attendance = await Attendance.find({ company: user.company }).sort({ date: -1 });
 
     if (!attendance || attendance.length === 0) {
       console.log('\x1b[33m⚠️ No attendance records found.\x1b[0m');
@@ -128,10 +142,10 @@ exports.getAllAttendance = async (req, res) => {
   }
 };
 
-
+// ===================== Shift Attendance ======================
 exports.getDayShiftAttendance = async (req, res) => {
   try {
-    const records = await Attendance.find({ shiftType: 'Day Shift' }).sort({ date: -1 });
+    const records = await Attendance.find({ shiftType: 'Day Shift', company: req.user.company }).sort({ date: -1 });
     res.json(records);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch day shift attendance', error: err.message });
@@ -140,22 +154,24 @@ exports.getDayShiftAttendance = async (req, res) => {
 
 exports.getNightShiftAttendance = async (req, res) => {
   try {
-    const records = await Attendance.find({ shiftType: 'Night Shift' }).sort({ date: -1 });
+    const records = await Attendance.find({ shiftType: 'Night Shift', company: req.user.company }).sort({ date: -1 });
     res.json(records);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch night shift attendance', error: err.message });
   }
 };
 
+// ===================== Pagination ======================
 exports.getPaginatedAttendance = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+    const company = req.user.company;
 
     const [records, total] = await Promise.all([
-      Attendance.find().sort({ date: -1 }).skip(skip).limit(limit),
-      Attendance.countDocuments()
+      Attendance.find({ company }).sort({ date: -1 }).skip(skip).limit(limit),
+      Attendance.countDocuments({ company })
     ]);
 
     res.json({ records, total, page, limit });
@@ -164,16 +180,17 @@ exports.getPaginatedAttendance = async (req, res) => {
   }
 };
 
-
+// ===================== Update Attendance ======================
 exports.updateAttendance = async (req, res) => {
   try {
     const { id } = req.params;
     const update = req.body;
+    const company = req.user.company;
 
-    const updated = await Attendance.findByIdAndUpdate(id, update, { new: true });
+    const updated = await Attendance.findOneAndUpdate({ _id: id, company }, update, { new: true });
 
     if (!updated) {
-      return res.status(404).json({ message: 'Attendance record not found' });
+      return res.status(404).json({ message: 'Attendance record not found or unauthorized' });
     }
 
     res.json({ message: '✅ Attendance updated successfully', data: updated });
@@ -182,5 +199,3 @@ exports.updateAttendance = async (req, res) => {
     res.status(500).json({ message: 'Failed to update attendance', error: err.message });
   }
 };
-
-

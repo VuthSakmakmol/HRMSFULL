@@ -1,12 +1,12 @@
 // utils/constants.js
 module.exports = {
-  genderOptions: ['Male', 'Female', 'Other'],
-  marriedStatusOptions: ['Single', 'Married'],
-  educationOptions: ['High School', 'Bachelor', 'Master', 'PhD'],
-  religionOptions: ['Islam', 'Buddhism', 'Christian'],
-  nationalityOptions: ['Khmer', 'Thai', 'Vietnamese', 'Indonesian', 'Sri Lankan', 'Indian'],
+  genderOptions: ['Male', 'Female',],
+  marriedStatusOptions: ['Single', 'Married', 'Divorced'],
+  educationOptions: ['Primary School','Secondary School','High School', 'Bacherlor Degree', 'Master', 'Doctor'],
+  religionOptions: ['Buddhism', 'Islam' ,'Christianity', 'Hinduism'],
+  nationalityOptions: ['Khmer', 'Thai', 'Vietnamese', 'Filipino', 'Sri Lankan', 'Bangladehi', 'Indian'],
   shiftOptions: ['Day Shift', 'Night Shift'],
   statusOptions: ['Working', 'Resign', 'Terminate', 'Abandon', 'Pass Away', 'Retirement'],
-  sourceOfHiringOptions: ['Online', 'Called', 'Walk-in', 'Referral'],
+  sourceOfHiringOptions: ['Agency', 'Banner / Job Announcement Board', 'Brochure', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'LinkedIn','Telegram', 'Other', ],
   employeeTypeOptions: ['Admin', 'Indirect', 'Operator']
 }

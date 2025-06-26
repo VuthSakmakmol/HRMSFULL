@@ -11,28 +11,36 @@
           label="Married Status"
           variant="outlined"
           density="comfortable"
+          :ref="el => inputRefs[0] = el"
+          @keydown.enter="focusNext(0)"
         />
       </v-col>
 
-      <!-- Spouse Info -->
-      <v-col cols="12" sm="2">
-        <v-text-field
-          v-model="form.spouseName"
-          label="Spouse Name"
-          variant="outlined"
-          density="comfortable"
-        />
-      </v-col>
-      <v-col cols="12" sm="2">
-        <v-text-field
-          v-model="form.spouseContactNumber"
-          label="Spouse Contact"
-          variant="outlined"
-          density="comfortable"
-        />
-      </v-col>
+      <!-- Spouse Info (only when Married) -->
+      <template v-if="showSpouseFields">
+        <v-col cols="12" sm="2">
+          <v-text-field
+            v-model="form.spouseName"
+            label="Spouse Name"
+            variant="outlined"
+            density="comfortable"
+            :ref="el => inputRefs[1] = el"
+            @keydown.enter="focusNext(1)"
+          />
+        </v-col>
+        <v-col cols="12" sm="2">
+          <v-text-field
+            v-model="form.spouseContactNumber"
+            label="Spouse Contact"
+            variant="outlined"
+            density="comfortable"
+            :ref="el => inputRefs[2] = el"
+            @keydown.enter="focusNext(2)"
+          />
+        </v-col>
+      </template>
 
-      <!-- Nationality & Religion -->
+      <!-- Nationality -->
       <v-col cols="12" sm="2">
         <v-select
           v-model="form.nationality"
@@ -40,8 +48,12 @@
           label="Nationality"
           variant="outlined"
           density="comfortable"
+          :ref="el => inputRefs[3] = el"
+          @keydown.enter="focusNext(3)"
         />
       </v-col>
+
+      <!-- Religion -->
       <v-col cols="12" sm="2">
         <v-select
           v-model="form.religion"
@@ -49,6 +61,8 @@
           label="Religion"
           variant="outlined"
           density="comfortable"
+          :ref="el => inputRefs[4] = el"
+          @keydown.enter="focusNext(4)"
         />
       </v-col>
 
@@ -59,6 +73,8 @@
           label="Introducer ID"
           variant="outlined"
           density="comfortable"
+          :ref="el => inputRefs[5] = el"
+          @keydown.enter="focusNext(5)"
         />
       </v-col>
 
@@ -70,6 +86,8 @@
           type="date"
           variant="outlined"
           density="comfortable"
+          :ref="el => inputRefs[6] = el"
+          @keydown.enter="focusNext(6)"
         />
       </v-col>
 
@@ -84,7 +102,10 @@
           label="Department"
           variant="outlined"
           density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[7] = el"
           @update:modelValue="onDepartmentChange"
+          @keydown.enter="focusNext(7)"
         />
       </v-col>
 
@@ -96,6 +117,9 @@
           label="Position"
           variant="outlined"
           density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[8] = el"
+          @keydown.enter="focusNext(8)"
         />
       </v-col>
 
@@ -107,6 +131,8 @@
           label="Employee Type"
           variant="outlined"
           density="comfortable"
+          :ref="el => inputRefs[9] = el"
+          @keydown.enter="focusNext(9)"
         />
       </v-col>
     </v-row>
@@ -114,11 +140,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import axios from '@/utils/axios'
 
 const { form } = defineProps({ form: Object })
 
+const showSpouseFields = computed(() => form.marriedStatus?.toLowerCase() === 'married')
 
 const enumOptions = ref({
   marriedStatusOptions: [],
@@ -156,4 +183,11 @@ onMounted(async () => {
     console.error('❌ Failed to load departments or enums:', err)
   }
 })
+
+// Enter to next input
+const inputRefs = []
+const focusNext = (index) => {
+  const next = inputRefs[index + 1]
+  if (next?.focus) next.focus()
+}
 </script>

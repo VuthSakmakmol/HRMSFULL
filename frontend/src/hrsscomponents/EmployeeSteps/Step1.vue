@@ -59,19 +59,59 @@
     <!-- Personal Info Fields -->
     <v-row dense>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.employeeId" label="Employee ID *" variant="outlined" density="comfortable" autocomplete="off" />
+        <v-text-field
+          v-model="form.employeeId"
+          label="Employee ID *"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[0] = el"
+          @keydown.enter="focusNext(0)"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.khmerFirstName" label="Khmer First Name *" variant="outlined" density="comfortable" autocomplete="off"/>
+        <v-text-field
+          v-model="form.khmerFirstName"
+          label="Khmer First Name *"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[1] = el"
+          @keydown.enter="focusNext(1)"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.khmerLastName" label="Khmer Last Name *" variant="outlined" density="comfortable" autocomplete="off"/>
+        <v-text-field
+          v-model="form.khmerLastName"
+          label="Khmer Last Name *"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[2] = el"
+          @keydown.enter="focusNext(2)"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.englishFirstName" label="English First Name *" variant="outlined" density="comfortable" autocomplete="off"/>
+        <v-text-field
+          v-model="form.englishFirstName"
+          label="English First Name *"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[3] = el"
+          @keydown.enter="focusNext(3)"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.englishLastName" label="English Last Name *" variant="outlined" density="comfortable" autocomplete="off"/>
+        <v-text-field
+          v-model="form.englishLastName"
+          label="English Last Name *"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[4] = el"
+          @keydown.enter="focusNext(4)"
+        />
       </v-col>
       <v-col cols="12" sm="2">
         <v-select
@@ -80,27 +120,79 @@
           label="Gender *"
           variant="outlined"
           density="comfortable"
+          :ref="el => inputRefs[5] = el"
+          @keydown.enter="focusNext(5)"
         />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.dob" label="Date of Birth *" type="date" variant="outlined" density="comfortable" autocomplete="off"/>
+        <v-text-field
+          v-model="form.dob"
+          label="Date of Birth *"
+          type="date"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[6] = el"
+          @keydown.enter="focusNext(6)"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.age" label="Age" type="number" variant="outlined" density="comfortable" autocomplete="off"/>
+        <v-text-field
+          v-model="form.age"
+          label="Age"
+          type="number"
+          readonly
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.email" label="Email" variant="outlined" density="comfortable" autocomplete="off"/>
+        <v-text-field
+          v-model="form.email"
+          label="Email"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[7] = el"
+          @keydown.enter="focusNext(7)"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.phoneNumber" label="Phone Number" variant="outlined" density="comfortable" autocomplete="off"/>
+        <v-text-field
+          v-model="form.phoneNumber"
+          label="Phone Number"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[8] = el"
+          @keydown.enter="focusNext(8)"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.agentPhoneNumber" label="Agent Phone" variant="outlined" density="comfortable" autocomplete="off"/>
+        <v-text-field
+          v-model="form.agentPhoneNumber"
+          label="Agent Phone"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[9] = el"
+          @keydown.enter="focusNext(9)"
+        />
       </v-col>
       <v-col cols="12" sm="2">
-        <v-text-field v-model="form.agentPerson" label="Agent Person" variant="outlined" density="comfortable" autocomplete="off"/>
+        <v-text-field
+          v-model="form.agentPerson"
+          label="Agent Person"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="el => inputRefs[10] = el"
+          @keydown.enter="focusNext(10)"
+        />
       </v-col>
     </v-row>
+
 
     <!-- Action Buttons -->
     <v-row justify="end" class="mt-6" v-if="isEditMode && step === 1">
@@ -141,6 +233,15 @@ const enumOptions = ref({ genderOptions: [] })
 const imageMode = ref('upload')
 const previewUrl = ref('')
 const defaultImage = '/default_images/default_profile.jpg'
+
+
+const inputRefs = []
+const focusNext = (index) => {
+  const next = inputRefs[index + 1]
+  if (next?.focus) next.focus()
+}
+
+
 
 watch(() => props.form.profileImage, (val) => {
   if (imageMode.value === 'link') previewUrl.value = val
@@ -189,6 +290,21 @@ const handleSubmitEdit = async () => {
   await handleFileUpload()
   emit('submitEdit')
 }
+
+watch(() => props.form.dob, (dob) => {
+  if (!dob) return
+
+  const birthDate = new Date(dob)
+  const today = new Date()
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const m = today.getMonth() - birthDate.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--
+  }
+
+  props.form.age = age
+})
+
 
 onMounted(async () => {
   try {

@@ -1,17 +1,11 @@
 <template>
-  <v-app-bar
-  app
-  flat
-  elevation="2"
-  class="app-bar-shadow"
->
-
+  <v-app-bar app flat elevation="2" class="app-bar-shadow">
     <!-- ☰ Menu Button -->
     <v-btn icon @click="$emit('toggle-sidebar')">
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <!-- Logo -->
+    <!-- Logo Based on Token-Company -->
     <img
       :src="`/logos/${selectedCompany}.jpg`"
       alt="Company Logo"
@@ -21,19 +15,21 @@
 
     <v-spacer />
 
-    <!-- Company Selector (GM only) -->
+    <!-- Company Selector (Optional: GM/Manager only) -->
     <template v-if="role === 'GeneralManager' || role === 'Manager'">
       <v-select
-        v-model="selectedCompany"
+        v-model="dummyCompany"
         :items="companies"
         density="compact"
         variant="outlined"
         hide-details
         style="max-width: 220px"
         class="mr-4"
-        @update:modelValue="handleCompanyChange"
+        @update:modelValue="alertImmutable"
       />
     </template>
+
+    <!-- Language Selector -->
     <v-select
       v-model="selectedLanguage"
       :items="languages"
@@ -56,21 +52,39 @@
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
+import { ref } from 'vue'
 import Swal from 'sweetalert2'
-import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
-const router = useRouter()
-const role = localStorage.getItem('role') || 'Unknown'
-const companies = ['TH-ROI', 'TH-CYP', 'VN-A1A', 'VN-TRANS', 'CAM-TAC']
-const selectedCompany = ref(localStorage.getItem('company') || companies[0])
+// Decode token
+const token = localStorage.getItem('token')
+let decoded = { role: 'Unknown', company: 'Unknown' }
 
-const handleCompanyChange = () => {
-  localStorage.setItem('company', selectedCompany.value)
-  window.location.reload()
+try {
+  decoded = JSON.parse(atob(token.split('.')[1]))
+} catch (e) {
+  console.warn('Invalid token:', e)
 }
 
+const role = decoded.role
+const selectedCompany = ref(decoded.company)
+const companies = ['TH-ROI', 'TH-CYP', 'VN-A1A', 'VN-TRANS', 'CAM-TAC']
+
+// Dummy for GM UI (doesn't affect backend)
+const dummyCompany = ref(decoded.company)
+const alertImmutable = () => {
+  Swal.fire({
+    icon: 'info',
+    title: 'Company switch is display-only',
+    text: 'This does not affect backend access.',
+    confirmButtonText: 'OK',
+    allowEnterKey: true,
+  })
+}
+
+// Logout
+const router = useRouter()
 const logout = async () => {
   const result = await Swal.fire({
     title: 'Are you sure?',
@@ -81,7 +95,7 @@ const logout = async () => {
     cancelButtonColor: '#3085d6',
     confirmButtonText: 'Yes, logout',
     cancelButtonText: 'Cancel',
-    allowEnterKey: true
+    allowEnterKey: true,
   })
 
   if (result.isConfirmed) {
@@ -90,28 +104,19 @@ const logout = async () => {
   }
 }
 
-//====== make change languages ========
+// i18n Language Support
 const { locale } = useI18n()
-
+const selectedLanguage = ref(localStorage.getItem('lang') || 'en')
 const languages = [
   { title: 'English', value: 'en' },
   { title: 'Thai', value: 'th' },
   { title: 'Khmer', value: 'kh' },
-  
 ]
 
-const selectedLanguage = ref(localStorage.getItem('lang') || 'en')
-
-// Watch for changes and apply language
 const changeLanguage = (lang) => {
   locale.value = lang
   localStorage.setItem('lang', lang)
 }
-
-//========== End change language =============
-
-
-
 </script>
 
 <style scoped>
@@ -122,12 +127,10 @@ const changeLanguage = (lang) => {
   background-color: #ffffff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
-
 .v-main {
   background-color: #f4f6f9;
   flex-grow: 1;
   padding-top: 0 !important;
   margin-top: 0 !important;
 }
-
 </style>

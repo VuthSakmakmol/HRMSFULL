@@ -117,35 +117,29 @@
           </tbody>
         </table>
       </div>
+      <!-- Pagination Footer -->
+      <v-sheet elevation="2" class="d-flex justify-end align-center mt-4 pa-4">
+        <span class="me-2">Rows per page:</span>
+        <v-select
+          v-model="itemsPerPage"
+          :items="[10, 50, 100, 1000, 'all']"
+          style="width: 100px"
+          density="compact"
+          variant="outlined"
+          hide-details
+          max-width="120px"
+        />
+        <v-btn icon :disabled="page === 1" @click="page--">
+          <v-icon>mdi-chevron-left</v-icon>
+        </v-btn>
+        <span class="mx-2">{{ page }} / {{ totalPages }}</span>
+        <v-btn icon :disabled="page === totalPages" @click="page++">
+          <v-icon>mdi-chevron-right</v-icon>
+        </v-btn>
+      </v-sheet>
     </v-card>
-
-    <!-- Pagination Footer -->
-    <v-sheet elevation="3" class="position-sticky bottom-0 bg-white px-4 py-2" style="z-index: 10;">
-      <v-row align-center justify="space-between">
-        <v-col cols="auto">
-          <v-select
-            v-model="itemsPerPage"
-            :items="['10', '30', '60', '100', '300', 'all']"
-            label="Rows per page"
-            density="compact"
-            hide-details
-            style="width: 130px"
-          />
-        </v-col>
-        <v-col cols="auto">
-          <v-pagination
-            v-if="itemsPerPage !== 'all'"
-            v-model="page"
-            :length="totalEmployees > 0 ? Math.ceil(totalEmployees / parseInt(itemsPerPage)) : 1"
-            rounded
-            color="primary"
-          />
-        </v-col>
-      </v-row>
-    </v-sheet>
   </v-container>
 </template>
-
 
 <script setup>
 import { ref, watch, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
@@ -154,98 +148,69 @@ import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
-const formatDate = val => (val ? dayjs(val).format('YYYY-MM-DD') : '')
-
-
-
-
-const getImageUrl = (url) => {
-  const backendBase = axios.defaults.baseURL?.replace(/\/api$/, '') || ''
-  if (!url || url === '') return defaultImage
-  if (url.startsWith('/upload')) return `${backendBase}${url}`
-  if (url.startsWith('http')) return url
-  return defaultImage
-}
-
-const goToAddEmployee = () => {
-  router.push('/hrss/addemployee')
-}
-
 
 defineOptions({ name: 'EmployeeList' })
 
-const showForm = ref(false)
-const isEditMode = ref(false)
-const form = ref({})
+const router = useRouter()
 
-
-// ============= Pagination ==============
-const page = ref(parseInt(sessionStorage.getItem('employeePage')) || 1)
-const itemsPerPage = ref('10')
+const employees = ref([])
+const selected = ref([])
+const selectAll = ref(false)
 const totalEmployees = ref(0)
+const scrollWrapper = ref(null)
+const defaultImage = '/default_images/girl_default_pf.jpg'
+const hasLoaded = ref(false)
+
+const fileInput = ref(null)
+
+// pagination
+const page = ref(1)
+const itemsPerPage = ref(10) // number or "all"
+const totalPages = ref(1)
+
+
+onMounted(async () => {
+  if (!hasLoaded.value) {
+    await fetchEmployees()
+    hasLoaded.value = true
+  }
+})
+
 const getRowNumber = index => {
   const perPage = itemsPerPage.value === 'all' ? totalEmployees.value : parseInt(itemsPerPage.value)
   return (page.value - 1) * perPage + index + 1
 }
 
-watch([page, itemsPerPage], () => {
-  sessionStorage.setItem('employeePage', page.value)
-  fetchEmployees()
-})
-watch(itemsPerPage, () => page.value = 1)
-// ============= End Pagination ==============
 
-// ============= Fetch Employees =============
-const employees = ref([])
-const hasLoaded = ref(false)
 const fetchEmployees = async () => {
-  const params = {
-    company: localStorage.getItem('company'),
-  }
+  const params = {}
 
   if (itemsPerPage.value !== 'all') {
     params.page = page.value
     params.limit = itemsPerPage.value
+  } else {
+    params.limit = 'all'
   }
 
-  const res = await axios.get('/employees', { params })
+  try {
+    const res = await axios.get('/employees', { params })
+    employees.value = res.data.employees
+    totalEmployees.value = res.data.total || res.data.employees.length
+    totalPages.value = res.data.totalPages || 1
 
-  console.log('✅ Response:', res.data)
-
-  employees.value = res.data.employees
-  totalEmployees.value = res.data.total || res.data.employees?.length || 0
+    if (!res.data.employees.length && page.value > 1) {
+      page.value = Math.max(1, page.value - 1)
+      fetchEmployees() // refetch
+    }
+  } catch (err) {
+    console.error('❌ Failed to fetch employees:', err.message)
+  }
 }
-
-
-// ============= End Fetch Employees =============
-
-const router = useRouter()
-const selected = ref([])
-const selectAll = ref(false)
-const scrollWrapper = ref(null)
-const defaultImage = '/default_images/girl_default_pf.jpg'
-
-// Save scroll position before leave
-onDeactivated(() => {
-  const wrapper = scrollWrapper.value
-  if (wrapper) {
-    sessionStorage.setItem('employeeScrollTop', wrapper.scrollTop)
-    sessionStorage.setItem('employeePage', page.value)
-  }
+watch([page, itemsPerPage], () => {
+  fetchEmployees()
 })
 
-// Restore scroll on return
-onActivated(() => {
-  nextTick(() => {
-    const wrapper = scrollWrapper.value
-    const savedScroll = parseInt(sessionStorage.getItem('employeeScrollTop') || '0')
-    const savedPage = parseInt(sessionStorage.getItem('employeePage') || '1')
-    if (wrapper) wrapper.scrollTop = savedScroll
-    page.value = savedPage
-  })
-})
 
-// const goToAddEmployee = () => router.push('/hrss/addemployee')
 const toggleSelectAll = () => {
   const currentPageIds = employees.value.map(emp => emp._id)
   if (selectAll.value) {
@@ -259,6 +224,22 @@ watch([selected, employees], () => {
   const currentPageIds = employees.value.map(emp => emp._id)
   selectAll.value = currentPageIds.every(id => selected.value.includes(id))
 })
+
+const goToAddEmployee = () => {
+  router.push('/hrss/addemployee')
+}
+
+const editSelectedEmployee = () => {
+  if (selected.value.length !== 1) {
+    return Swal.fire({ icon: 'warning', title: 'Please select exactly 1 employee to edit.' })
+  }
+
+  const employeeIdToEdit = selected.value[0]
+  router.push({
+    path: '/hrss/addemployee',
+    query: { id: employeeIdToEdit }
+  })
+}
 
 const deleteSelected = async () => {
   if (!selected.value.length) {
@@ -278,31 +259,16 @@ const deleteSelected = async () => {
   if (confirm.isConfirmed) {
     try {
       await Promise.all(selected.value.map(id => axios.delete(`/employees/${id}`)))
-      employees.value = employees.value.filter(e => !selected.value.includes(e._id))
       selected.value = []
       selectAll.value = false
       Swal.fire({ icon: 'success', title: 'Deleted successfully' })
-      fetchEmployees()
+      await fetchEmployees()
     } catch (err) {
       console.error('❌ Deletion failed:', err)
       Swal.fire({ icon: 'error', title: 'Failed to delete', text: err.message })
     }
   }
 }
-
-
-const editSelectedEmployee = () => {
-  if (selected.value.length !== 1) {
-    return Swal.fire({ icon: 'warning', title: 'Please select exactly 1 employee to edit.' })
-  }
-
-  const employeeIdToEdit = selected.value[0]
-  router.push({
-    path: '/hrss/addemployee',
-    query: { id: employeeIdToEdit }
-  })
-}
-
 
 const exportToExcel = () => {
   if (!selected.value.length) {
@@ -371,31 +337,21 @@ const exportToExcel = () => {
   XLSX.writeFile(workbook, 'Employees.xlsx')
 }
 
-
-// import data to employee list
-const fileInput = ref(null)
-
 const triggerImportFile = () => {
   fileInput.value?.click()
 }
 
 const handleImportExcel = async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
+  const file = event.target.files[0]
+  if (!file) return
 
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array' });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet);
+  const buffer = await file.arrayBuffer()
+  const workbook = XLSX.read(buffer, { type: 'array' })
+  const sheet = workbook.Sheets[workbook.SheetNames[0]]
+  const rows = XLSX.utils.sheet_to_json(sheet)
 
-  const company = localStorage.getItem('company') || 'DEFAULT';
-  const payload = rows.map(r => ({ ...r, company }));
-
-  console.log('📥 Sending for preview...');
-  const previewRes = await axios.post('/employees/import-preview', payload);
-  const { toImport, duplicates } = previewRes.data;
-
-  console.log('🧮 Preview:', { toImport, duplicates });
+  const previewRes = await axios.post('/employees/import-preview', rows)
+  const { toImport, duplicates } = previewRes.data
 
   const confirm = await Swal.fire({
     icon: 'info',
@@ -403,37 +359,38 @@ const handleImportExcel = async (event) => {
     showCancelButton: true,
     confirmButtonText: 'Yes, import',
     cancelButtonText: 'Cancel'
-  });
+  })
 
-  if (!confirm.isConfirmed) return;
+  if (!confirm.isConfirmed) return
 
-  const final = await axios.post('/employees/import-confirmed', { toImport });
+  const final = await axios.post('/employees/import-confirmed', { toImport })
   Swal.fire({
     icon: 'success',
     title: final.data.message,
     text: `Failed: ${final.data.failedCount}`
-  });
+  })
 
-  fetchEmployees();
-};
+  await fetchEmployees()
+}
 
 
 const updateNote = async (emp) => {
   try {
-    await axios.put(`/employees/${emp._id}`, { note: emp.note });
-    console.log(`📝 Note saved for ${emp.employeeId}`);
+    await axios.put(`/employees/${emp._id}`, { note: emp.note })
+    console.log(`📝 Note saved for ${emp.employeeId}`)
   } catch (err) {
-    console.error('❌ Failed to save note:', err.message);
+    console.error('❌ Failed to save note:', err.message)
   }
-};
+}
 
+const formatDate = val => (val ? dayjs(val).format('YYYY-MM-DD') : '')
 
-const getCompletionRate = emp => {
-  const values = Object.values(emp).flatMap(v =>
-    typeof v === 'object' && v !== null ? Object.values(v) : [v]
-  )
-  const filled = values.filter(v => v !== '' && v !== null && v !== undefined)
-  return Math.min(Math.round((filled.length / 48) * 100), 100)
+const getImageUrl = (url) => {
+  const backendBase = axios.defaults.baseURL?.replace(/\/api$/, '') || ''
+  if (!url || url === '') return defaultImage
+  if (url.startsWith('/upload')) return `${backendBase}${url}`
+  if (url.startsWith('http')) return url
+  return defaultImage
 }
 
 const employeeFields = emp => [
@@ -458,8 +415,7 @@ const employeeFields = emp => [
   { label: 'Position', value: emp.position },
   { label: 'Employee Type', value: emp.employeeType },
   { label: 'Line', value: emp.line },
-  { label: 'Team', value: emp.team },
-  { label: 'Section', value: emp.section },
+  { label: 'ABA', value: emp.team },
   { label: 'Shift', value: emp.shift },
   { label: 'Status', value: emp.status },
   { label: 'Source of Hiring', value: emp.sourceOfHiring },
@@ -496,41 +452,15 @@ const chunkedEmployeeInfo = emp => {
   return chunked
 }
 
-const submitForm = async () => {
-  // If image file selected but not uploaded yet
-  if (form.value.profileImageFile && !form.value.profileImage?.startsWith('/upload')) {
-    const formData = new FormData()
-    formData.append('image', form.value.profileImageFile)
-
-    try {
-      const { data } = await axios.post('/api/upload/hrss/profile-image', formData)
-      form.value.profileImage = data.imageUrl
-    } catch (err) {
-      console.error('❌ Image upload failed:', err)
-      return Swal.fire({ icon: 'error', title: 'Image upload failed' })
-    }
-  }
-
-  // Now send the full form
-  await axios.post('/api/employees', form.value)
-  Swal.fire({ icon: 'success', title: 'Employee added' })
+const getCompletionRate = emp => {
+  const values = Object.values(emp).flatMap(v =>
+    typeof v === 'object' && v !== null ? Object.values(v) : [v]
+  )
+  const filled = values.filter(v => v !== '' && v !== null && v !== undefined)
+  return Math.min(Math.round((filled.length / 48) * 100), 100)
 }
-
-
-const cancelForm = () => {
-  showForm.value = false
-  form.value = {}
-  isEditMode.value = false
-}
-
-
-onMounted(async () => {
-  if (!hasLoaded.value) {
-    await fetchEmployees()
-    hasLoaded.value = true
-  }
-})
 </script>
+
 
 
 

@@ -1,16 +1,14 @@
 const mongoose = require('mongoose');
 
 const attendanceSchema = new mongoose.Schema({
-  employeeId: { type: String, required: true },       // Must match an existing employee
-  date: { type: Date, required: true },               // Date of attendance
+  employeeId: { type: String, required: true },
+  date: { type: Date, required: true },
   shiftType: {
     type: String,
-    enum: ['Day Shift', 'Night Shift'], // <- match this exactly
+    enum: ['Day Shift', 'Night Shift'],
     required: true
   },
   fullName: { type: String, default: '' },
-
-
 
   timeIn: { type: Date, default: null },
   timeOut: { type: Date, default: null },
@@ -25,9 +23,13 @@ const attendanceSchema = new mongoose.Schema({
   },
 
   permission: { type: Boolean, default: false },
-  note: { type: String, default: '' }
+  note: { type: String, default: '' },
+
+  // ✅ Company field for multi-tenant separation
+  company: { type: String, required: true }
 }, { timestamps: true });
 
-attendanceSchema.index({ employeeId: 1, date: 1 }, { unique: true }); // prevent duplicates
+// Ensure uniqueness per employee per date per company
+attendanceSchema.index({ employeeId: 1, date: 1, company: 1 }, { unique: true });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

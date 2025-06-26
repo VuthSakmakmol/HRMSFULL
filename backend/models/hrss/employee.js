@@ -20,7 +20,7 @@ const employeeSchema = new mongoose.Schema({
   khmerLastName: { type: String, default: '' },
   englishFirstName: { type: String, default: '' },
   englishLastName: { type: String, default: '' },
-  gender: { type: String, enum: ['Male', 'Female', 'Other', ''], default: '' },
+  gender: { type: String, enum: ['Male', 'Female', ''], default: '' },
   dob: { type: Date, default: null },
   age: { type: Number, default: null },
   email: { type: String, default: '' },
@@ -31,14 +31,14 @@ const employeeSchema = new mongoose.Schema({
 
 
   // 👪 Family
-  marriedStatus: { type: String, enum: ['Single', 'Married', ''], default: '' },
+  marriedStatus: { type: String, enum: ['Single', 'Married', 'Divorced', ''], default: '' },
   spouseName: { type: String, default: '' },
   spouseContactNumber: { type: String, default: '' },
 
   // 📚 Education & Religion
-  education: { type: String, enum: ['High School', 'Bachelor', 'Master', 'PhD', ''], default: '' },
-  religion: { type: String, enum: ['Islam', 'Buddhism', 'Christian', ''], default: '' },
-  nationality: { type: String, enum: ['Khmer', 'Thai', 'Vietnamese', 'Indonesian', 'Sri Lankan', 'Indian', ''], default: '' },
+  education: { type: String, enum: ['Primary School','Secondary School','High School', 'Bacherlor Degree', 'Master', 'Doctor', ''], default: '' },
+  religion: { type: String, enum: [ 'Buddhism', 'Islam' ,'Christianity', 'Hinduism', ''], default: '' },
+  nationality: { type: String, enum: ['Khmer', 'Thai', 'Vietnamese', 'Filipino', 'Sri Lankan', 'Bangladehi', 'Indian', ''], default: '' },
 
   // 📍 Address
   placeOfBirth: { type: addressSchema, default: () => ({}) },
@@ -67,7 +67,7 @@ const employeeSchema = new mongoose.Schema({
   workingBook: { type: String, default: '' },
 
   // 📥 Source & Skills
-  sourceOfHiring: { type: String, enum: ['Online', 'Called', 'Walk-in', 'Referral', ''], default: '' },
+  sourceOfHiring: { type: String, enum: ['Agency', 'Banner / Job Announcement Board', 'Brochure', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'LinkedIn','Telegram', 'Other',  ''], default: '' },
   introducerId: { type: String, default: '' },
   employeeType: { type: String, enum: ['Admin', 'Indirect', 'Operator', ''], default: '' },
   singleNeedle: { type: String, default: '' },
