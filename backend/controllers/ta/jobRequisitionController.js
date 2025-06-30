@@ -48,7 +48,7 @@ exports.createJobRequisition = async (req, res) => {
     const dept = await Department.findById(departmentId);
     if (!dept) return res.status(400).json({ message: 'Invalid department ID' });
 
-    const company = req.company; // ✅ use authorized company
+    const company = req.company;
     const resolvedSubType = type === 'Blue Collar' ? (subType || 'Non-Sewer') : undefined;
     const prefix = type === 'Blue Collar' ? 'BJR' : 'WJR';
 
@@ -87,6 +87,10 @@ exports.createJobRequisition = async (req, res) => {
       company
     });
 
+    // ✅ Emit real-time event
+    const io = req.app.get('io');
+    io.emit('jobAdded', newRequisition);
+
     res.status(201).json({
       message: 'Job requisition created successfully.',
       requisition: newRequisition
@@ -96,6 +100,7 @@ exports.createJobRequisition = async (req, res) => {
     res.status(500).json({ message: 'Failed to create job requisition', error: err.message });
   }
 };
+
 
 // 📝 Update a requisition
 exports.updateJobRequisition = async (req, res) => {
@@ -118,6 +123,10 @@ exports.updateJobRequisition = async (req, res) => {
       company
     });
 
+    // ✅ Emit real-time update event
+    const io = req.app.get('io');
+    io.emit('jobUpdated', updated);
+
     res.json({ message: 'Job requisition updated.', requisition: updated });
   } catch (err) {
     console.error('❌ Error updating requisition:', err);
@@ -125,7 +134,6 @@ exports.updateJobRequisition = async (req, res) => {
   }
 };
 
-// 🗑️ Delete a requisition
 exports.deleteJobRequisition = async (req, res) => {
   try {
     const { id } = req.params;
@@ -144,6 +152,11 @@ exports.deleteJobRequisition = async (req, res) => {
     });
 
     await JobRequisition.findByIdAndDelete(id);
+
+    // ✅ Emit real-time delete event
+    const io = req.app.get('io');
+    io.emit('jobDeleted', job._id);
+
     res.json({ message: 'Job requisition deleted successfully.' });
   } catch (err) {
     console.error('❌ Error deleting requisition:', err);
@@ -249,3 +262,4 @@ exports.getVacantRequisitions = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch vacant requisitions', error: err.message });
   }
 };
+

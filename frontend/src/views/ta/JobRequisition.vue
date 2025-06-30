@@ -818,6 +818,24 @@ onMounted(() => {
     alerts.value[key] = localStorage.getItem(`seen_${key}`) !== 'true'
   })
 
+  // 🔄 Listen for new job requisition creation
+  socket.on('jobAdded', (newJob) => {
+    requisitions.value.unshift(newJob); // Add new job at the top
+    recentlyUpdatedJobId.value = newJob._id;
+    setTimeout(() => {
+      recentlyUpdatedJobId.value = null;
+    }, 2000);
+  });
+
+  // 🔄 Listen for job requisition deletion
+  socket.on('jobDeleted', (deletedJobId) => {
+    const index = requisitions.value.findIndex(j => j._id === deletedJobId);
+    if (index !== -1) {
+      requisitions.value.splice(index, 1);
+    }
+  });
+
+
   // 🔄 Listen for job updates
   socket.on('jobUpdated', (updatedJob) => {
     const index = requisitions.value.findIndex(j => j._id === updatedJob._id)
@@ -849,6 +867,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   socket.off('jobUpdated')
   socket.off('jobAvailabilityChanged')
+  socket.off('jobAdded');
+  socket.off('jobDeleted');
+
 })
 
 
