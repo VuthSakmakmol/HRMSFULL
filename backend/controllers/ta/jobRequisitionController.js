@@ -7,22 +7,14 @@ const { logActivity } = require('../../utils/logActivity');
 // 📦 Fetch all job titles with department info
 exports.getAllJobTitles = async (req, res) => {
   try {
-    const role = req.user?.role;
-    const userCompany = req.user?.company;
-    const queryCompany = req.query.company;
-
-    const companyFilter = role === 'GeneralManager' ? queryCompany : userCompany;
-    if (!companyFilter) {
-      return res.status(400).json({ message: 'Company is required' });
-    }
+    const company = req.company; // ✅ set by authorizeCompanyAccess
 
     const departments = await Department.find(
-      { company: companyFilter.trim().toUpperCase() },
+      { company: company.toUpperCase() },
       'name jobTitles type subType company'
     );
 
     const jobTitleList = [];
-
     departments.forEach((dept) => {
       if (Array.isArray(dept.jobTitles)) {
         dept.jobTitles.forEach((title) => {
@@ -45,26 +37,18 @@ exports.getAllJobTitles = async (req, res) => {
   }
 };
 
-// ➕ Create a single job requisition
+// ➕ Create a job requisition
 exports.createJobRequisition = async (req, res) => {
   try {
     const {
-      departmentId,
-      departmentName,
-      jobTitle,
-      recruiter,
-      hiringCost,
-      status,
-      openingDate,
-      startDate,
-      type,
-      subType
+      departmentId, departmentName, jobTitle, recruiter, hiringCost,
+      status, openingDate, startDate, type, subType, targetCandidates
     } = req.body;
 
     const dept = await Department.findById(departmentId);
     if (!dept) return res.status(400).json({ message: 'Invalid department ID' });
 
-    const company = dept.company;
+    const company = req.company; // ✅ use authorized company
     const resolvedSubType = type === 'Blue Collar' ? (subType || 'Non-Sewer') : undefined;
     const prefix = type === 'Blue Collar' ? 'BJR' : 'WJR';
 
@@ -82,7 +66,7 @@ exports.createJobRequisition = async (req, res) => {
       departmentName,
       jobTitle,
       recruiter,
-      targetCandidates: req.body.targetCandidates || 1,
+      targetCandidates: targetCandidates || 1,
       hiringCost,
       status,
       type,
@@ -117,14 +101,10 @@ exports.createJobRequisition = async (req, res) => {
 exports.updateJobRequisition = async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await JobRequisition.findById(id);
-    if (!existing) return res.status(404).json({ message: 'Requisition not found' });
+    const company = req.company;
 
-    const userCompany = req.user?.company;
-    const isGM = req.user?.role === 'GeneralManager';
-    if (!isGM && existing.company !== userCompany) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
+    const existing = await JobRequisition.findOne({ _id: id, company });
+    if (!existing) return res.status(404).json({ message: 'Requisition not found' });
 
     const updated = await JobRequisition.findByIdAndUpdate(id, req.body, { new: true });
 
@@ -135,11 +115,12 @@ exports.updateJobRequisition = async (req, res) => {
       previousData: existing,
       newData: updated,
       performedBy: req.user.email,
-      company: existing.company
+      company
     });
 
     res.json({ message: 'Job requisition updated.', requisition: updated });
   } catch (err) {
+    console.error('❌ Error updating requisition:', err);
     res.status(500).json({ message: 'Failed to update requisition', error: err.message });
   }
 };
@@ -148,14 +129,10 @@ exports.updateJobRequisition = async (req, res) => {
 exports.deleteJobRequisition = async (req, res) => {
   try {
     const { id } = req.params;
-    const job = await JobRequisition.findById(id);
-    if (!job) return res.status(404).json({ message: 'Requisition not found' });
+    const company = req.company;
 
-    const userCompany = req.user?.company;
-    const isGM = req.user?.role === 'GeneralManager';
-    if (!isGM && job.company !== userCompany) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
+    const job = await JobRequisition.findOne({ _id: id, company });
+    if (!job) return res.status(404).json({ message: 'Requisition not found' });
 
     await logActivity({
       actionType: 'DELETE',
@@ -163,12 +140,13 @@ exports.deleteJobRequisition = async (req, res) => {
       documentId: job._id,
       previousData: job,
       performedBy: req.user.email,
-      company: job.company
+      company
     });
 
     await JobRequisition.findByIdAndDelete(id);
     res.json({ message: 'Job requisition deleted successfully.' });
   } catch (err) {
+    console.error('❌ Error deleting requisition:', err);
     res.status(500).json({ message: 'Failed to delete requisition', error: err.message });
   }
 };
@@ -176,35 +154,19 @@ exports.deleteJobRequisition = async (req, res) => {
 // 📋 Get job requisitions with pagination + filters
 exports.getJobRequisitions = async (req, res) => {
   try {
-    const role = req.user?.role;
-    const userCompany = req.user?.company;
-    const queryCompany = req.query.company;
-    const company = role === 'GeneralManager' ? queryCompany : userCompany;
-
-    if (!company) {
-      return res.status(400).json({ message: 'Company is required' });
-    }
+    const company = req.company;
 
     // Pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 25;
     const skip = (page - 1) * limit;
 
-    // Filters
     const {
-      jobId,
-      department,
-      jobTitle,
-      openingDate,
-      recruiter,
-      status,
-      startDate,
-      hiringCost,
-      type,
-      subType
+      jobId, department, jobTitle, openingDate, recruiter,
+      status, startDate, hiringCost, type, subType
     } = req.query;
 
-    const filter = { company: company.trim().toUpperCase() };
+    const filter = { company: company.toUpperCase() };
 
     if (jobId) filter.jobRequisitionId = { $regex: jobId, $options: 'i' };
     if (department) filter.departmentName = { $regex: department, $options: 'i' };
@@ -213,11 +175,10 @@ exports.getJobRequisitions = async (req, res) => {
     if (recruiter) filter.recruiter = { $regex: recruiter, $options: 'i' };
     if (status) filter.status = status;
     if (startDate) filter.startDate = { $regex: startDate, $options: 'i' };
-    if (hiringCost) filter.hiringCost = Number(hiringCost); // optional: support exact number filter
+    if (hiringCost) filter.hiringCost = Number(hiringCost);
     if (type) filter.type = type;
     if (subType) filter.subType = subType;
 
-    // Total count for pagination
     const total = await JobRequisition.countDocuments(filter);
 
     const jobList = await JobRequisition.find(filter)
@@ -226,7 +187,6 @@ exports.getJobRequisitions = async (req, res) => {
       .limit(limit)
       .lean();
 
-    // Count onboard + offer by progress stage
     const jobIds = jobList.map(j => j._id);
     const counts = await Candidate.aggregate([
       {
@@ -250,11 +210,7 @@ exports.getJobRequisitions = async (req, res) => {
     counts.forEach(({ _id, count }) => {
       const jobId = _id.jobRequisitionId.toString();
       const progress = _id.progress;
-
-      if (!countMap[jobId]) {
-        countMap[jobId] = { offerCount: 0, onboardCount: 0 };
-      }
-
+      if (!countMap[jobId]) countMap[jobId] = { offerCount: 0, onboardCount: 0 };
       if (progress === 'Onboard') {
         countMap[jobId].onboardCount += count;
         countMap[jobId].offerCount += count;
@@ -267,11 +223,7 @@ exports.getJobRequisitions = async (req, res) => {
       const jobId = job._id.toString();
       const onboardCount = countMap[jobId]?.onboardCount || 0;
       const offerCount = countMap[jobId]?.offerCount || 0;
-      return {
-        ...job,
-        onboardCount,
-        offerCount
-      };
+      return { ...job, onboardCount, offerCount };
     });
 
     res.json({ requisitions: jobsWithCounts, total });
@@ -281,24 +233,19 @@ exports.getJobRequisitions = async (req, res) => {
   }
 };
 
-
-// GET /ta/job-requisitions/vacant
+// 🟢 GET /ta/job-requisitions/vacant
 exports.getVacantRequisitions = async (req, res) => {
   try {
-    const role = req.user?.role;
-    const userCompany = req.user?.company;
-    const queryCompany = req.query.company;
-
-    const company = role === 'GeneralManager' ? queryCompany : userCompany;
-    if (!company) return res.status(400).json({ message: 'Company is required' });
+    const company = req.company;
 
     const vacant = await JobRequisition.find({
-      company: company.trim().toUpperCase(),
+      company: company.toUpperCase(),
       status: 'Vacant'
     }).sort({ createdAt: -1 });
 
     res.json(vacant);
   } catch (err) {
+    console.error('❌ Error fetching vacant requisitions:', err);
     res.status(500).json({ message: 'Failed to fetch vacant requisitions', error: err.message });
   }
 };

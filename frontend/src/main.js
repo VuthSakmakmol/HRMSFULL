@@ -39,8 +39,8 @@ app.component('font-awesome-icon', FontAwesomeIcon)
 // ✅ Register Vuetify and other plugins
 registerPlugins(app)
 
-// ✅ Socket.IO globally
-import socket from '@/socket'
+// ✅ Socket.IO globally (correct path)
+import socket, { joinSocketRoom } from '@/utils/socket'
 app.config.globalProperties.$socket = socket
 app.provide('$socket', socket)
 
@@ -59,3 +59,6 @@ app.use(i18n)
 
 // ✅ Mount app
 app.mount('#app')
+
+// ✅ Optional: Join socket room immediately if user is logged in
+joinSocketRoom()

@@ -6,18 +6,59 @@ const {
   createJobRequisition,
   deleteJobRequisition,
   updateJobRequisition,
-  getAllJobTitles
+  getAllJobTitles,
+  getVacantRequisitions
 } = require('../../controllers/ta/jobRequisitionController');
 
-const { authenticate } = require('../../middlewares/authMiddleware'); // ✅ correct path
+const { authenticate } = require('../../middlewares/authMiddleware');
+const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware');
+const { enforceCrudPermissions } = require('../../middlewares/crudPermissionMiddleware'); // ✅ IMPORTED
 
-// ─── Job Requisition CRUD ─────────────────────────────────────────────
-router.get('/job-requisitions', authenticate, getJobRequisitions);              // ✅ Read all
-router.post('/job-requisitions', authenticate, createJobRequisition);           // ✅ Create
-router.put('/job-requisitions/:id', authenticate, updateJobRequisition);        // ✅ Update
-router.delete('/job-requisitions/:id', authenticate, deleteJobRequisition);     // ✅ Delete
+// ─── Job Requisition CRUD ────────────────────────────────
+router.get(
+  '/job-requisitions',
+  authenticate,
+  authorizeCompanyAccess,
+  getJobRequisitions
+);
 
-// ─── Helper Endpoint ──────────────────────────────────────────────────
-router.get('/job-requisitions/job-titles', authenticate, getAllJobTitles);      // ✅ For dropdown
+router.post(
+  '/job-requisitions',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions, // ✅ Enforce role-based CRUD permissions
+  createJobRequisition
+);
+
+router.put(
+  '/job-requisitions/:id',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions, // ✅ Enforce CRUD permissions
+  updateJobRequisition
+);
+
+router.delete(
+  '/job-requisitions/:id',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions, // ✅ Enforce CRUD permissions
+  deleteJobRequisition
+);
+
+// ─── Helper Endpoints ────────────────────────────────────
+router.get(
+  '/job-requisitions/job-titles',
+  authenticate,
+  authorizeCompanyAccess,
+  getAllJobTitles
+);
+
+router.get(
+  '/job-requisitions/vacant',
+  authenticate,
+  authorizeCompanyAccess,
+  getVacantRequisitions
+);
 
 module.exports = router;

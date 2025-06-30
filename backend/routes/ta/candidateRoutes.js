@@ -5,7 +5,9 @@ const path = require('path');
 const fs = require('fs');
 
 const candidateController = require('../../controllers/ta/candidateController');
-const { authenticate } = require('../../middlewares/authMiddleware'); // ✅ adjust path if needed
+const { authenticate } = require('../../middlewares/authMiddleware');
+const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware');
+const { enforceCrudPermissions } = require('../../middlewares/crudPermissionMiddleware');
 
 // ─── Multer Config for Document Upload ───────────────────────────────
 const storage = multer.diskStorage({
@@ -23,30 +25,85 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// ─── Candidate Routes ────────────────────────────────────────────────
+// ─── Candidate CRUD Routes ────────────────────────────────────────────
 
 // Create new candidate
-router.post('/', authenticate, candidateController.create);
+router.post(
+  '/',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions,
+  candidateController.create
+);
 
 // Get all candidates
-router.get('/', authenticate, candidateController.getAll);
+router.get(
+  '/',
+  authenticate,
+  authorizeCompanyAccess,
+  candidateController.getAll
+);
 
 // Get one candidate by ID
-router.get('/:id', authenticate, candidateController.getOne);
+router.get(
+  '/:id',
+  authenticate,
+  authorizeCompanyAccess,
+  candidateController.getOne
+);
 
-// Update basic info (name, recruiter, etc.)
-router.put('/:id', authenticate, candidateController.update);
+// Update basic info
+router.put(
+  '/:id',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions,
+  candidateController.update
+);
 
 // Delete a candidate
-router.delete('/:id', authenticate, candidateController.remove);
+router.delete(
+  '/:id',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions,
+  candidateController.remove
+);
 
-// Update stage (progress like Interview, JobOffer, etc.)
-router.put('/:id/stage', authenticate, candidateController.updateStage);
+// Update stage (progress)
+router.put(
+  '/:id/stage',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions,
+  candidateController.updateStage
+);
 
-// Upload documents (CVs, PDFs, etc.)
-router.post('/:id/documents', authenticate, upload.array('documents'), candidateController.uploadDocument);
+// Upload candidate documents
+router.post(
+  '/:id/documents',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions,
+  upload.array('documents'),
+  candidateController.uploadDocument
+);
 
-// Delete a specific document
-router.delete('/:id/documents', authenticate, candidateController.deleteDocument);
+// Delete specific document
+router.delete(
+  '/:id/documents',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions,
+  candidateController.deleteDocument
+);
+
+// Get job requisition availability for a candidate's job
+router.get(
+  '/:id/availability',
+  authenticate,
+  authorizeCompanyAccess,
+  candidateController.getAvailability
+);
 
 module.exports = router;

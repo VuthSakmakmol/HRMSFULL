@@ -61,6 +61,7 @@ html, body, .v-application {
   height: 91vh;
   display: flex;
   overflow: hidden;
+  margin-top: 100px;
 }
 
 .main-content {
@@ -81,5 +82,6 @@ html, body, .v-application {
   border-right: 1px solid #ccc;
   background-color: #e9f8f8;
   max-width: 260px;
+  
 }
 </style>

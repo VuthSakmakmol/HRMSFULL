@@ -468,10 +468,10 @@ const goToCandidates = (job) => {
   })
 }
 
+
 const paginatedRequisitions = computed(() => {
   const start = (page.value - 1) * itemsPerPage.value
-  const end = start + itemsPerPage.value
-  return filteredRequisitions.value.slice(start, end)
+  return filteredRequisitions.value.slice(start, start + itemsPerPage.value)
 })
 
 
@@ -488,13 +488,12 @@ const getSuspendedPercent = (job) => {
 
 const fetchRecruiters = async () => {
   try {
-    const res = await api.get(`/recruiters?company=${company}`)
+    const res = await api.get('/recruiters', { params: { company } })
     recruiterList.value = res.data.map(r => r.name)
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Recruiter Load Failed', text: err?.response?.data?.message || 'Error fetching recruiters' })
+    Swal.fire({ icon: 'error', title: 'Load Recruiters Failed', text: err?.response?.data?.message || 'Error fetching recruiters' })
   }
 }
-
 const showCreateForm = ref(false)
 const showFilterForm = ref(false)
 
@@ -578,23 +577,15 @@ const activeTab = ref('White Collar')
 
 const fetchJobTitles = async () => {
   try {
-    const company = localStorage.getItem('company');
-    const res = await api.get(`/job-requisitions/job-titles?company=${company}`);
-    jobTitles.value = res.data.jobTitles;
+    const res = await api.get('/job-requisitions/job-titles', { params: { company } })
+    jobTitles.value = res.data.jobTitles
   } catch (err) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Failed to Load Job Titles',
-      text: err?.response?.data?.message || 'Error loading job titles'
-    });
+    Swal.fire({ icon: 'error', title: 'Load Job Titles Failed', text: err?.response?.data?.message || 'Error loading job titles' })
   }
 }
 
 const fetchRequisitions = async () => {
   try {
-    const user = JSON.parse(localStorage.getItem('user'))
-    const company = user.role === 'GeneralManager' ? localStorage.getItem('company') : user.company
-
     const res = await api.get('/job-requisitions', {
       params: {
         page: page.value,
@@ -604,14 +595,13 @@ const fetchRequisitions = async () => {
         subType: getSubTypeFromTab(activeTab.value)
       }
     })
-
-
     requisitions.value = res.data.requisitions
     total.value = res.data.total
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+    Swal.fire({ icon: 'error', title: 'Fetch Requisitions Failed', text: err?.response?.data?.message || err.message })
   }
 }
+
 
 watch(itemsPerPage, () => {
   page.value = 1
@@ -633,27 +623,23 @@ const getSubTypeFromTab = (tab) => {
 const submitRequisition = async () => {
   try {
     const payload = { ...form.value }
-    await api.post('/job-requisitions', payload)
-    await fetchJobTitles(); // refresh dropdown
-
+    await api.post(`/job-requisitions${company ? `?company=${company}` : ''}`, payload)
     alerts.value[getAlertKey(payload)] = true
     localStorage.setItem(`seen_${getAlertKey(payload)}`, 'false')
-
     await Swal.fire({ icon: 'success', title: 'Created', text: 'Job requisition created' })
-
     form.value = { jobTitle: '', recruiter: '', targetCandidates: 1, openingDate: '' }
     fetchRequisitions()
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Error', text: err?.response?.data?.message || 'Failed to create requisition' })
+    Swal.fire({ icon: 'error', title: 'Create Failed', text: err?.response?.data?.message || 'Failed to create requisition' })
   }
 }
 
-const setActive = (tab) => {
+const setActive = tab => {
   activeTab.value = tab
   alerts.value[tab] = false
   localStorage.setItem(`seen_${tab}`, 'true')
   page.value = 1
-  fetchRequisitions()  // ✅ refresh with new tab's filter
+  fetchRequisitions()
 }
 
 
@@ -689,61 +675,26 @@ const getAlertKey = (entry) => {
 const isEditing = ref(false)
 const editId = ref(null)
 const editDateMenu = ref(false)
-const editJob = (job) => {
+const editJob = job => {
   isEditing.value = true
   showCreateForm.value = true
-
-  // ✅ Reset form first
   form.value = {
-    jobTitle: '',
-    recruiter: '',
-    targetCandidates: 1,
-    openingDate: '',
-    hiringCost: '',
-    startDate: '',
-    status: 'Vacant',
-    departmentId: '',
-    departmentName: '',
-    type: '',
-    subType: ''
-  }
-
-  // ✅ Now assign new values from selected job
-  editId.value = job._id
-  form.value = {
-    jobTitle: job.jobTitle,
-    recruiter: job.recruiter,
-    targetCandidates: job.targetCandidates,
-    openingDate: dayjs(job.openingDate).format('YYYY-MM-DD'),
-    hiringCost: job.hiringCost,
+    jobTitle: job.jobTitle, recruiter: job.recruiter, targetCandidates: job.targetCandidates,
+    openingDate: dayjs(job.openingDate).format('YYYY-MM-DD'), hiringCost: job.hiringCost,
     startDate: job.startDate ? dayjs(job.startDate).format('YYYY-MM-DD') : '',
-    departmentId: job.departmentId,
-    departmentName: job.departmentName,
-    type: job.type,
-    subType: job.subType,
+    departmentId: job.departmentId, departmentName: job.departmentName, type: job.type, subType: job.subType,
     status: job.status
   }
+  editId.value = job._id
 }
-
 
 const updateRequisition = async () => {
   try {
-    await api.put(`/job-requisitions/${editId.value}`, form.value)
+    await api.put(`/job-requisitions/${editId.value}${company ? `?company=${company}` : ''}`, form.value)
     await Swal.fire({ icon: 'success', title: 'Updated', text: 'Requisition updated' })
-
-    // ✅ Reset state after update
     isEditing.value = false
-    showCreateForm.value = false  // optional: hide form after update
-    form.value = {
-      jobTitle: '',
-      recruiter: '',
-      targetCandidates: 1,
-      openingDate: '',
-      hiringCost: '',
-      startDate: '',
-      status: 'Vacant'
-    }
-
+    showCreateForm.value = false
+    form.value = { jobTitle: '', recruiter: '', targetCandidates: 1, openingDate: '', hiringCost: '', startDate: '', status: 'Vacant' }
     fetchRequisitions()
   } catch (err) {
     Swal.fire({ icon: 'error', title: 'Update Failed', text: err?.response?.data?.message || 'Error updating requisition' })
@@ -751,30 +702,18 @@ const updateRequisition = async () => {
 }
 
 
-const deleteJob = async (job) => {
-  const confirm = await Swal.fire({
-    icon: 'warning',
-    title: 'Confirm Deletion',
-    text: `Are you sure you want to delete ${job.jobRequisitionId}?`,
-    showCancelButton: true,
-    confirmButtonText: 'Yes, delete it',
-    cancelButtonText: 'Cancel'
-  });
-
+const deleteJob = async job => {
+  const confirm = await Swal.fire({ icon: 'warning', title: 'Confirm Deletion', text: `Delete ${job.jobRequisitionId}?`, showCancelButton: true })
   if (confirm.isConfirmed) {
     try {
-      await api.delete(`/job-requisitions/${job._id}`);
-      await Swal.fire({ icon: 'success', title: 'Deleted', text: 'Requisition deleted' });
-      fetchRequisitions(); // reload the list
+      await api.delete(`/job-requisitions/${job._id}${company ? `?company=${company}` : ''}`)
+      await Swal.fire({ icon: 'success', title: 'Deleted', text: 'Requisition deleted' })
+      fetchRequisitions()
     } catch (err) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Delete Failed',
-        text: err?.response?.data?.message || 'Error deleting requisition'
-      });
+      Swal.fire({ icon: 'error', title: 'Delete Failed', text: err?.response?.data?.message || 'Error deleting requisition' })
     }
   }
-};
+}
 
 
 const exportToExcel = () => {
@@ -869,24 +808,17 @@ onMounted(() => {
     }
   }, 10)
 
-  socket.on('jobUpdated', (updatedJob) => {
-    const index = requisitions.value.findIndex(j => j._id === updatedJob._id)
-    if (index !== -1) {
-      requisitions.value.splice(index, 1, updatedJob)
-    }
-  })
-
-
   // 🧩 Data fetch
   fetchJobTitles()
   fetchRequisitions()
   fetchRecruiters()
 
   // 🧠 Restore seen alerts
-  for (const key in alerts.value) {
+  Object.keys(alerts.value).forEach(key => {
     alerts.value[key] = localStorage.getItem(`seen_${key}`) !== 'true'
-  }
+  })
 
+  // 🔄 Listen for job updates
   socket.on('jobUpdated', (updatedJob) => {
     const index = requisitions.value.findIndex(j => j._id === updatedJob._id)
     if (index !== -1) {
@@ -899,7 +831,7 @@ onMounted(() => {
     }
   })
 
-
+  // 🔄 Listen for offer/onboard availability changes
   socket.on('jobAvailabilityChanged', (availability) => {
     const i = requisitions.value.findIndex(j => j._id === availability.jobId)
     if (i !== -1) {
@@ -918,7 +850,6 @@ onBeforeUnmount(() => {
   socket.off('jobUpdated')
   socket.off('jobAvailabilityChanged')
 })
-
 
 
 </script>

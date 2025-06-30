@@ -569,7 +569,6 @@ const fetchCandidates = async () => {
     }
 
     const res = await axios.get('/candidates', { params })
-
     candidates.value = res.data.candidates
     totalCandidates.value = res.data.total
     updateJobLockedMap()
@@ -729,90 +728,71 @@ onBeforeUnmount(() => {
   }
 })
 
-
-
 onMounted(async () => {
   await fetchJobRequisitions()
-  console.log('✅ jobRequisitions:', jobRequisitions.value)
   await fetchCandidates()
-
-  const jobRequisitionId = route.query.jobRequisitionId
-  if (jobRequisitionId) {
-    const job = jobRequisitions.value.find(j => j._id === jobRequisitionId)
-    if (job) {
-      if (job.type === 'White Collar') activeTab.value = 'White Collar'
-      else if (job.subType === 'Sewer') activeTab.value = 'Blue Collar Sewer'
-      else activeTab.value = 'Blue Collar Non-Sewer'
-
-      selectedRequisition.value = job
-      showForm.value = true
-      form.value.department = job.departmentName
-      form.value.recruiter = job.recruiter
-      form.value.jobRequisitionCode = job.jobRequisitionId
-      form.value.type = job.type
-      form.value.subType = job.subType
-    }
-  }
 
   const tabToRoom = {
     'White Collar': 'white-collar',
     'Blue Collar Sewer': 'blue-collar-sewer',
     'Blue Collar Non-Sewer': 'blue-collar-nonsewer'
   }
-  socket.emit('joinRoom', tabToRoom[activeTab.value])
-
-  if (!socketListenerAdded.value) {
-    socket.on('candidateAdded', (candidate) => {
-      console.log('📥 New candidate received via WebSocket:', candidate)
-      if (candidatePage.value === 1) {
-        candidates.value.unshift(candidate)
-        if (candidates.value.length > candidatePerPage.value) {
-          candidates.value.pop()
-        }
-      } else {
-        Swal.fire({
-          icon: 'info',
-          title: 'New Candidate Added',
-          text: 'Click to refresh and see the update.',
-          confirmButtonText: 'Refresh Now',
-          allowEnterKey: true
-        }).then(result => {
-          if (result.isConfirmed) fetchCandidates()
-        })
-      }
-    })
-
-    socket.on('candidateUpdated', (updated) => {
-      const index = candidates.value.findIndex(c => c._id === updated._id)
-      if (index !== -1) {
-        candidates.value[index] = updated
-      }
-    })
-
-    socket.on('candidateDeleted', (deletedId) => {
-      candidates.value = candidates.value.filter(c => c._id !== deletedId)
-    })
-
-    socket.on('jobUpdated', (updatedJob) => {
-      const i = jobRequisitions.value.findIndex(j => j._id === updatedJob._id)
-      if (i !== -1) jobRequisitions.value[i] = updatedJob
-    })
-
-    // ✅ NEW: real-time availability update
-    socket.on('jobAvailabilityChanged', (availability) => {
-      const index = jobRequisitions.value.findIndex(j => j._id === availability.jobId)
-      if (index !== -1) {
-        jobRequisitions.value[index].offerFull = availability.offerFull
-        jobRequisitions.value[index].onboardFull = availability.onboardFull
-        jobRequisitions.value[index].offerCount = availability.offerCount
-        jobRequisitions.value[index].onboardCount = availability.onboardCount
-      }
-    })
-
-
-    socketListenerAdded.value = true
-  }
+  socket.emit('join-room', tabToRoom[activeTab.value])
+  console.log('✅ Joined socket room:', tabToRoom[activeTab.value])
+  
+  setupSocketListeners()
 })
+
+
+const setupSocketListeners = () => {
+  if (socketListenerAdded.value) return // avoid duplicate listeners
+
+  socket.on('candidateAdded', (candidate) => {
+    console.log('📥 Candidate added via WebSocket:', candidate)
+    if (candidatePage.value === 1) {
+      candidates.value.unshift(candidate)
+      if (candidates.value.length > candidatePerPage.value) candidates.value.pop()
+    } else {
+      Swal.fire({
+        icon: 'info',
+        title: 'New Candidate Added',
+        text: 'Click to refresh and see the update.',
+        confirmButtonText: 'Refresh Now',
+        allowEnterKey: true
+      }).then((result) => result.isConfirmed && fetchCandidates())
+    }
+  })
+
+  socket.on('candidateUpdated', (updated) => {
+    console.log('📥 Candidate updated via WebSocket:', updated)
+    const idx = candidates.value.findIndex(c => c._id === updated._id)
+    if (idx !== -1) candidates.value[idx] = updated
+  })
+
+  socket.on('candidateDeleted', (deletedId) => {
+    console.log('📥 Candidate deleted via WebSocket:', deletedId)
+    candidates.value = candidates.value.filter(c => c._id !== deletedId)
+  })
+
+  socket.on('jobUpdated', (updatedJob) => {
+    console.log('📥 Job updated via WebSocket:', updatedJob)
+    const idx = jobRequisitions.value.findIndex(j => j._id === updatedJob._id)
+    if (idx !== -1) jobRequisitions.value[idx] = updatedJob
+  })
+
+  socket.on('jobAvailabilityChanged', (availability) => {
+    console.log('📥 Job availability changed via WebSocket:', availability)
+    const idx = jobRequisitions.value.findIndex(j => j._id === availability.jobId)
+    if (idx !== -1) {
+      jobRequisitions.value[idx].offerFull = availability.offerFull
+      jobRequisitions.value[idx].onboardFull = availability.onboardFull
+      jobRequisitions.value[idx].offerCount = availability.offerCount
+      jobRequisitions.value[idx].onboardCount = availability.onboardCount
+    }
+  })
+
+  socketListenerAdded.value = true
+}
 
 
 onBeforeUnmount(() => {
@@ -821,7 +801,7 @@ onBeforeUnmount(() => {
     socket.off('candidateUpdated')
     socket.off('candidateDeleted')
     socket.off('jobUpdated')
-    socket.off('jobAvailabilityChanged') // ✅ cleanup new listener
+    socket.off('jobAvailabilityChanged')
     socketListenerAdded.value = false
   }
 })
@@ -839,7 +819,16 @@ watch([filters, activeTab], () => {
 watch([activeTab], async () => {
   await fetchJobRequisitions()
   await fetchCandidates()
+
+  const tabToRoom = {
+    'White Collar': 'white-collar',
+    'Blue Collar Sewer': 'blue-collar-sewer',
+    'Blue Collar Non-Sewer': 'blue-collar-nonsewer'
+  }
+  socket.emit('join-room', tabToRoom[activeTab.value])
+  console.log('🔄 Re-joined socket room:', tabToRoom[activeTab.value])
 })
+
 
 </script>
 
