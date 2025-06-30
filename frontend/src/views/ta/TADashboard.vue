@@ -140,6 +140,7 @@
 import { ref, onMounted, watch } from 'vue'
 import axios from '@/utils/axios'
 import dayjs from 'dayjs'
+import io from 'socket.io-client'
 
 // Components
 import RecruitmentPipelineChart from '@/tacomponents/RecruitmentPipelineChart.vue'
@@ -223,11 +224,12 @@ const fetchDashboardStats = async () => {
       company: userCompany.value
     })
 
-    sourceData.value = res.data.sources || { labels: [], counts: [] }
-    decisionData.value = res.data.decisions || { labels: [], counts: [] }
-    pipelineData.value = res.data.pipeline || {}
-    kpiData.value = res.data.kpi || {}
-    roadmapData.value = res.data.roadmap || {
+    const data = res.data || {}
+    sourceData.value = data.sources || { labels: [], counts: [] }
+    decisionData.value = data.decisions || { labels: [], counts: [] }
+    pipelineData.value = data.pipeline || {}
+    kpiData.value = data.kpi || {}
+    roadmapData.value = data.roadmap || {
       roadmapHC: Array(12).fill(0),
       actualHC: Array(12).fill(0),
       hiringTargetHC: Array(12).fill(0)
@@ -263,9 +265,29 @@ onMounted(() => {
   fetchDashboardStats()
   fetchDepartments()
   fetchRecruiters()
+
+  // 🔹 Setup real-time updates
+  const socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, { transports: ['websocket'] })
+  socket.on('connect', () => console.log('🔌 Connected to dashboard socket'))
+
+  socket.on('dashboardUpdate', (payload) => {
+    if (!payload || !payload.company || payload.company !== userCompany.value.toUpperCase()) return
+    console.log('🔄 Real-time dashboard update received:', payload)
+    const data = payload.data || {}
+    sourceData.value = data.sources || { labels: [], counts: [] }
+    decisionData.value = data.decisions || { labels: [], counts: [] }
+    pipelineData.value = data.pipeline || {}
+    kpiData.value = data.kpi || {}
+    roadmapData.value = data.roadmap || {
+      roadmapHC: Array(12).fill(0),
+      actualHC: Array(12).fill(0),
+      hiringTargetHC: Array(12).fill(0)
+    }
+  })
 })
 
 watch([filterType, filterRecruiter, filterDepartment, from, to], fetchDashboardStats)
+
 </script>
 
 

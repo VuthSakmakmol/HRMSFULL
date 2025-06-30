@@ -2,7 +2,6 @@ const Candidate = require('../../models/ta/Candidate');
 const JobRequisition = require('../../models/ta/JobRequisition');
 const Roadmap = require('../../models/ta/Roadmap');
 
-
 exports.getDashboardStats = async (req, res) => {
   try {
     const {
@@ -15,10 +14,7 @@ exports.getDashboardStats = async (req, res) => {
       year
     } = req.body;
 
-    // 👇 Adjust company filter based on role
-    const role = req.user?.role;
-    const userCompany = req.user?.company;
-    const company = role === 'GeneralManager' ? req.body.company : userCompany;
+    const company = req.company; // ✅ company set securely by authorizeCompanyAccess middleware
 
     if (!company) {
       return res.status(400).json({ message: 'Company is required' });
@@ -156,13 +152,6 @@ exports.getDashboardStats = async (req, res) => {
           const days = Math.floor((onboardDate - appDate) / (1000 * 60 * 60 * 24));
           totalDaysToHire += days;
           validCount++;
-
-          // console.log('✅ AvgDaysToHire Track:', {
-          //   name: candidate.fullName,
-          //   application: appDate.toISOString().slice(0, 10),
-          //   onboard: onboardDate.toISOString().slice(0, 10),
-          //   daysBetween: days
-          // });
         } else {
           console.warn('⚠️ Invalid date conversion for:', {
             name: candidate.fullName,
@@ -231,14 +220,24 @@ exports.getDashboardStats = async (req, res) => {
       counts: monthlyCounts
     };
 
-    res.json({
+    const result = {
       pipeline,
       sources,
       decisions,
       kpi,
       monthly,
       roadmap
-    });
+    };
+
+    // ✅ Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('dashboardUpdate', { company: company.trim().toUpperCase(), data: result });
+    } else {
+      console.warn('⚠️ Socket.io instance not attached; dashboard updates not emitted.');
+    }
+
+    res.json(result);
 
   } catch (err) {
     console.error('❌ Dashboard Stats Error:', err);
