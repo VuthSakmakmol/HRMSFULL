@@ -14,7 +14,7 @@ function isValidDate(value) {
 exports.previewImport = async (req, res) => {
   try {
     const data = req.body;
-    const company = req.user.company;
+    const company = req.company;
     if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
     if (!Array.isArray(data) || data.length === 0) {
       return res.status(400).json({ message: 'No data received' });
@@ -36,12 +36,7 @@ exports.previewImport = async (req, res) => {
       }
     }
 
-    console.log('📦 Preview:', {
-      incoming: data.length,
-      toImport: toImport.length,
-      duplicates: duplicates.length
-    });
-
+    console.log('📦 Preview Import:', { incoming: data.length, toImport: toImport.length, duplicates: duplicates.length });
     res.json({ toImport, duplicates });
   } catch (err) {
     console.error('❌ Preview Import Error:', err);
@@ -54,7 +49,7 @@ exports.previewImport = async (req, res) => {
 exports.confirmImport = async (req, res) => {
   try {
     const { toImport } = req.body;
-    const company = req.user.company;
+    const company = req.company;
     if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
     if (!Array.isArray(toImport) || toImport.length === 0) {
       return res.status(400).json({ message: 'No data to import' });
@@ -65,15 +60,7 @@ exports.confirmImport = async (req, res) => {
 
     for (const item of toImport) {
       try {
-        // Clean invalid date fields
-        const keysToCheck = [
-          'idCardExpireDate',
-          'passportExpireDate',
-          'visaExpireDate',
-          'medicalCheckDate',
-          'joinDate',
-        ];
-
+        const keysToCheck = ['idCardExpireDate', 'passportExpireDate', 'visaExpireDate', 'medicalCheckDate', 'joinDate'];
         keysToCheck.forEach(key => {
           if (item[key] && !isValidDate(item[key])) {
             console.warn(`⚠️ Invalid date cleared for ${key}: ${item[key]}`);
@@ -81,11 +68,7 @@ exports.confirmImport = async (req, res) => {
           }
         });
 
-        const emp = new Employee({
-          ...item,
-          company, // ✅ override with secure value
-        });
-
+        const emp = new Employee({ ...item, company });
         await emp.validate();
         await emp.save();
         inserted.push(emp);
@@ -98,7 +81,7 @@ exports.confirmImport = async (req, res) => {
     res.status(200).json({
       message: `Imported ${inserted.length} employees.`,
       failedCount: failed.length,
-      failed
+      failed,
     });
   } catch (err) {
     console.error('❌ Confirm Import Error:', err);
@@ -110,14 +93,10 @@ exports.confirmImport = async (req, res) => {
 // Create new employee
 exports.createEmployee = async (req, res) => {
   try {
-    const company = req.user.company;
+    const company = req.company;
     if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
 
-    const newEmp = new Employee({
-      ...req.body,
-      company // ✅ enforce trusted value
-    });
-
+    const newEmp = new Employee({ ...req.body, company });
     await newEmp.save();
     res.status(201).json(newEmp);
   } catch (err) {
@@ -128,25 +107,21 @@ exports.createEmployee = async (req, res) => {
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Get employees by company with pagination
-// Get employees by company with pagination
 exports.getAllEmployees = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const company = req.user.company;
+    const company = req.company;
     if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
 
     const query = { company };
+    const total = await Employee.countDocuments(query);
 
     let employees;
-    let total;
-
-    total = await Employee.countDocuments(query);
-
     if (limit === 'all') {
       employees = await Employee.find(query).sort({ createdAt: -1 });
     } else {
-      const pageInt = parseInt(page);
-      const limitInt = Math.max(parseInt(limit), 1);
+      const pageInt = parseInt(page) || 1;
+      const limitInt = Math.max(parseInt(limit) || 10, 1);
       const skip = (pageInt - 1) * limitInt;
 
       employees = await Employee.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitInt);
@@ -155,25 +130,26 @@ exports.getAllEmployees = async (req, res) => {
     res.json({
       employees,
       total,
-      currentPage: page === 'all' ? 1 : parseInt(page),
+      currentPage: limit === 'all' ? 1 : parseInt(page),
       totalPages: limit === 'all' ? 1 : Math.ceil(total / parseInt(limit)),
     });
   } catch (err) {
+    console.error('[GET ALL EMPLOYEES ERROR]', err);
     res.status(500).json({ message: 'Failed to get employees', error: err.message });
   }
 };
-
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Get single employee by ID
 exports.getEmployeeById = async (req, res) => {
   try {
-    const company = req.user.company;
+    const company = req.company;
     const employee = await Employee.findOne({ _id: req.params.id, company });
 
     if (!employee) return res.status(404).json({ error: 'Employee not found' });
     res.json(employee);
   } catch (err) {
+    console.error('[GET EMPLOYEE BY ID ERROR]', err);
     res.status(500).json({ error: 'Failed to fetch employee' });
   }
 };
@@ -182,7 +158,7 @@ exports.getEmployeeById = async (req, res) => {
 // Update employee
 exports.updateEmployee = async (req, res) => {
   try {
-    const company = req.user.company;
+    const company = req.company;
     const updated = await Employee.findOneAndUpdate(
       { _id: req.params.id, company },
       { $set: req.body },
@@ -192,7 +168,8 @@ exports.updateEmployee = async (req, res) => {
     if (!updated) return res.status(404).json({ message: 'Employee not found or unauthorized' });
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update employee', details: err });
+    console.error('[UPDATE EMPLOYEE ERROR]', err);
+    res.status(500).json({ error: 'Failed to update employee', details: err.message });
   }
 };
 
@@ -200,12 +177,13 @@ exports.updateEmployee = async (req, res) => {
 // Delete employee
 exports.deleteEmployee = async (req, res) => {
   try {
-    const company = req.user.company;
+    const company = req.company;
     const deleted = await Employee.findOneAndDelete({ _id: req.params.id, company });
 
     if (!deleted) return res.status(404).json({ message: 'Employee not found or unauthorized' });
     res.json({ message: 'Employee deleted' });
   } catch (err) {
+    console.error('[DELETE EMPLOYEE ERROR]', err);
     res.status(500).json({ error: 'Failed to delete employee' });
   }
 };
@@ -214,12 +192,13 @@ exports.deleteEmployee = async (req, res) => {
 // Delete multiple employees
 exports.deleteMultipleEmployees = async (req, res) => {
   try {
-    const company = req.user.company;
+    const company = req.company;
     const { ids } = req.body;
 
     const result = await Employee.deleteMany({ _id: { $in: ids }, company });
     res.json({ message: 'Selected employees deleted', deletedCount: result.deletedCount });
   } catch (err) {
+    console.error('[DELETE MULTIPLE EMPLOYEES ERROR]', err);
     res.status(500).json({ error: 'Failed to delete multiple employees' });
   }
 };

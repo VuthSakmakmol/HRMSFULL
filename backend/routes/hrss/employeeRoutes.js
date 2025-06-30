@@ -4,6 +4,9 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const Employee = require('../../models/hrss/employee');
 const { authenticate } = require('../../middlewares/authMiddleware');
+const { authorize, authorizeCompanyAccess } = require('../../middlewares/roleMiddleware');
+const { enforceCrudPermissions } = require('../../middlewares/crudPermissionMiddleware');
+const userController = require('../../controllers/userController'); // ✅ FIXED
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Controllers
@@ -14,14 +17,14 @@ const {
   updateEmployee,
   deleteEmployee,
   previewImport,
-  confirmImport
+  confirmImport,
 } = require('../../controllers/hrss/employeeController');
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Multer setup for Excel file upload (in-memory)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 } // 100MB max
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -37,9 +40,9 @@ function excelDateToJSDate(serial) {
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Excel Import API — directly save to DB
-router.post('/import-excel', authenticate, upload.single('file'), async (req, res) => {
+router.post('/import-excel', authenticate, authorizeCompanyAccess, enforceCrudPermissions, upload.single('file'), async (req, res) => {
   try {
-    const company = req.user.company;
+    const company = req.company; // ✅ get from middleware, not req.user
     if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
 
     const workbook = XLSX.read(req.file.buffer);
@@ -63,11 +66,11 @@ router.post('/import-excel', authenticate, upload.single('file'), async (req, re
           'medicalCheckDate',
         ];
 
-        dateFields.forEach(field => {
+        dateFields.forEach((field) => {
           if (item[field]) item[field] = excelDateToJSDate(item[field]);
         });
 
-        const emp = new Employee({ ...item, company });
+        const emp = new Employee({ ...item, company }); // ✅ trusted company
         await emp.validate();
         await emp.save();
         inserted.push(emp);
@@ -79,7 +82,7 @@ router.post('/import-excel', authenticate, upload.single('file'), async (req, re
     res.status(200).json({
       message: `✅ Imported ${inserted.length} employees.`,
       failedCount: failed.length,
-      failed
+      failed,
     });
   } catch (err) {
     console.error('❌ Excel import failed:', err.message);
@@ -89,15 +92,17 @@ router.post('/import-excel', authenticate, upload.single('file'), async (req, re
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Employee CRUD
-router.get('/', authenticate, getAllEmployees);
-router.get('/:id', authenticate, getEmployeeById);
-router.post('/', authenticate, createEmployee);
-router.put('/:id', authenticate, updateEmployee);
-router.delete('/:id', authenticate, deleteEmployee);
+router.get('/emails', authenticate, authorize(['GeneralManager', 'Manager']), authorizeCompanyAccess, userController.getUserEmails);
+router.get('/', authenticate, authorizeCompanyAccess, getAllEmployees);
+router.get('/:id', authenticate, authorizeCompanyAccess, getEmployeeById);
+
+router.post('/', authenticate, authorizeCompanyAccess, enforceCrudPermissions, createEmployee);
+router.put('/:id', authenticate, authorizeCompanyAccess, enforceCrudPermissions, updateEmployee);
+router.delete('/:id', authenticate, authorizeCompanyAccess, enforceCrudPermissions, deleteEmployee);
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Optional legacy preview/confirm import endpoints (JSON-based)
-router.post('/import-preview', authenticate, previewImport);
-router.post('/import-confirmed', authenticate, confirmImport);
+router.post('/import-preview', authenticate, authorizeCompanyAccess, enforceCrudPermissions, previewImport);
+router.post('/import-confirmed', authenticate, authorizeCompanyAccess, enforceCrudPermissions, confirmImport);
 
 module.exports = router;

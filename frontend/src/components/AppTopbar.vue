@@ -5,27 +5,27 @@
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <!-- Logo Based on Token-Company -->
+    <!-- Dynamic Company Logo -->
     <img
       :src="`/logos/${selectedCompany}.jpg`"
       alt="Company Logo"
       height="36"
       class="ml-2"
+      @error="setDefaultLogo"
     />
 
     <v-spacer />
 
-    <!-- Company Selector (Optional: GM/Manager only) -->
+    <!-- Company Selector (GM/Manager only) -->
     <template v-if="role === 'GeneralManager' || role === 'Manager'">
       <v-select
-        v-model="dummyCompany"
+        v-model="selectedCompany"
         :items="companies"
         density="compact"
         variant="outlined"
         hide-details
         style="max-width: 220px"
         class="mr-4"
-        @update:modelValue="alertImmutable"
       />
     </template>
 
@@ -51,8 +51,9 @@
   </v-app-bar>
 </template>
 
+
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import Swal from 'sweetalert2'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -60,7 +61,6 @@ import { useI18n } from 'vue-i18n'
 // Decode token
 const token = localStorage.getItem('token')
 let decoded = { role: 'Unknown', company: 'Unknown' }
-
 try {
   decoded = JSON.parse(atob(token.split('.')[1]))
 } catch (e) {
@@ -68,19 +68,27 @@ try {
 }
 
 const role = decoded.role
-const selectedCompany = ref(decoded.company)
 const companies = ['TH-ROI', 'TH-CYP', 'VN-A1A', 'VN-TRANS', 'CAM-TAC']
 
-// Dummy for GM UI (doesn't affect backend)
-const dummyCompany = ref(decoded.company)
-const alertImmutable = () => {
+// Reactive selected company from localStorage
+const storedCompany = localStorage.getItem('company') || decoded.company || 'CAM-TAC'
+const selectedCompany = ref(storedCompany)
+
+// Watch changes to update localStorage and show success alert
+watch(selectedCompany, (newCompany) => {
+  localStorage.setItem('company', newCompany)
   Swal.fire({
-    icon: 'info',
-    title: 'Company switch is display-only',
-    text: 'This does not affect backend access.',
+    icon: 'success',
+    title: `Company switched to ${newCompany}`,
+    text: 'Your API requests will use this company.',
     confirmButtonText: 'OK',
     allowEnterKey: true,
   })
+})
+
+// Handle logo fallback if missing image
+const setDefaultLogo = (e) => {
+  e.target.src = '/default_images/default-logo.jpg' // fallback logo path
 }
 
 // Logout
@@ -119,18 +127,3 @@ const changeLanguage = (lang) => {
 }
 </script>
 
-<style scoped>
-.app-bar-shadow {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 1000;
-  background-color: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-.v-main {
-  background-color: #f4f6f9;
-  flex-grow: 1;
-  padding-top: 0 !important;
-  margin-top: 0 !important;
-}
-</style>

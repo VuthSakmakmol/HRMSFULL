@@ -144,7 +144,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import axios from '@/utils/axios'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
@@ -232,30 +232,40 @@ const getOvertimeHours = (timeOut, shiftType) => {
 
 const handleImport = async () => {
   try {
-    const file = excelFile.value
-    if (!file) return
+    const file = excelFile.value;
+    if (!file) return;
 
-    const reader = new FileReader()
+    const reader = new FileReader();
     reader.onload = async (e) => {
-      const data = new Uint8Array(e.target.result)
-      const workbook = XLSX.read(data, { type: 'array' })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(sheet)
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet);
+
+      // Validate each row includes leaveType or empty string
+      const preparedRows = rows.map(r => ({
+        employeeId: r.employeeId?.trim() || '',
+        date: r.date,
+        startTime: r.startTime?.trim() || '',
+        endTime: r.endTime?.trim() || '',
+        leaveType: r.leaveType?.trim() || '',  // ✅ include leaveType in request
+      }));
 
       const res = await axios.post('/attendance/import', {
         shiftType: selectedShift.value === 'All' ? 'Day Shift' : selectedShift.value,
-        rows
-      })
+        rows: preparedRows,
+      });
 
-      console.log('✅ Import result:', res.data)
-      await fetchData()
-      excelFile.value = null
-    }
-    reader.readAsArrayBuffer(file)
+      console.log('✅ Import result:', res.data);
+      await fetchData();
+      excelFile.value = null;
+    };
+    reader.readAsArrayBuffer(file);
   } catch (err) {
-    console.error('❌ Import failed:', err.message)
+    console.error('❌ Import failed:', err.message);
   }
-}
+};
+
 
 const handleLeaveUpdate = async () => {
   try {
@@ -264,25 +274,43 @@ const handleLeaveUpdate = async () => {
 
     const reader = new FileReader()
     reader.onload = async (e) => {
-      const data = new Uint8Array(e.target.result)
-      const workbook = XLSX.read(data, { type: 'array' })
-      const sheet = workbook.Sheets[workbook.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(sheet)
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet);
 
-      const res = await axios.post('/attendance/update-leave', {
+      console.log('📤 Parsed rows:', rows); // <--- ADD THIS LINE
+
+      const res = await axios.post('/attendance/import', {
+        shiftType: selectedShift.value === 'All' ? 'Day Shift' : selectedShift.value,
         rows
-      })
+      });
 
-      console.log('✅ Leave update result:', res.data)
-      await fetchData()
-      leaveFile.value = null
+      console.log('✅ Import result:', res.data);
+      await fetchData();
+      excelFile.value = null;
     }
     reader.readAsArrayBuffer(file)
   } catch (err) {
     console.error('❌ Leave update failed:', err.message)
   }
 }
+
+// ✅ Auto-reload when company changes
+const onCompanyChange = () => {
+  console.log('🔄 Company changed, reloading attendance data...')
+  fetchData()
+}
+
+onMounted(() => {
+  window.addEventListener('companyChanged', onCompanyChange)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('companyChanged', onCompanyChange)
+})
 </script>
+
 
 <style scoped>
 .table-scroll-wrapper {

@@ -183,8 +183,6 @@ const getRowNumber = index => {
 
 
 
-
-
 const fetchEmployees = async () => {
   const params = {}
 
@@ -209,9 +207,7 @@ const fetchEmployees = async () => {
     console.error('❌ Failed to fetch employees:', err.message)
   }
 }
-watch([page, itemsPerPage], () => {
-  fetchEmployees()
-})
+
 
 
 const toggleSelectAll = () => {

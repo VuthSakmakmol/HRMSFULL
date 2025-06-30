@@ -18,18 +18,25 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: 'Login failed', error: 'Incorrect password' });
     }
 
+    let company;
+    if (user.role === 'GeneralManager') {
+      // GM has access to all companies
+      company = ['CAM-TAC', 'TH-ROI', 'TH-CYP', 'VN-A1A', 'VN-TRANS'];
+    } else {
+      // Other roles: single assigned company
+      company = user.company;
+    }
+
     const token = jwt.sign(
       {
         userId: user._id,
-        email: user.email, // ✅ Add this line
+        email: user.email,
         role: user.role,
-        company: user.role === 'GeneralManager' ? null : user.company
+        company, // ✅ set properly for GM or others
       },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
-
-
 
     res.json({
       message: 'Login successful',
@@ -39,8 +46,8 @@ exports.login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        company: user.company || null
-      }
+        company,
+      },
     });
   } catch (err) {
     res.status(500).json({ message: 'Login failed', error: err.message });

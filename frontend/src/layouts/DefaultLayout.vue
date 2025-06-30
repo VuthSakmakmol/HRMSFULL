@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <AppTopbar @toggle-sidebar="toggleSidebar" />
+    <AppTopbar @toggle-sidebar="toggleSidebar" @company-changed="onCompanyChanged" />
 
     <v-layout class="main-layout">
       <!-- Sidebar -->
@@ -26,7 +26,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, getCurrentInstance } from 'vue'
 import AppTopbar from '@/components/AppTopbar.vue'
 import AppSidebar from '@/components/AppSidebar.vue'
 
@@ -37,6 +37,17 @@ const company = localStorage.getItem('company') || 'No Company'
 const toggleSidebar = () => {
   drawer.value = !drawer.value
 }
+
+// ✅ Listen for company change event from AppTopbar and reload data on active page:
+const { proxy } = getCurrentInstance()
+
+const onCompanyChanged = () => {
+  const currentPage = proxy.$route.matched[0]?.instances.default
+  if (currentPage?.fetchEmployees) {
+    currentPage.fetchEmployees()
+  }
+}
+
 </script>
 
 <style scoped>
