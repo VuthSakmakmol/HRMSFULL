@@ -10,12 +10,12 @@
             type="pie"
             height="300"
             :options="chartOptions"
-            :series="series"
+            :series="orderedSeries"
           />
 
           <!-- ❗ Message when data is zero -->
           <div
-            v-if="series.reduce((a, b) => a + b, 0) === 0"
+            v-if="orderedSeries.reduce((a, b) => a + b, 0) === 0"
             class="empty-overlay"
           >
             No decision data available.
@@ -27,13 +27,13 @@
       <v-col cols="12">
         <div class="legend-wrap">
           <div
-            v-for="(label, index) in labels"
+            v-for="(label, index) in orderedLabels"
             :key="index"
             class="legend-item"
           >
             <span
               class="legend-color"
-              :style="{ backgroundColor: colors[index % colors.length] }"
+              :style="{ backgroundColor: labelColorMap[label] }"
             ></span>
             <span class="legend-label">
               {{ label }} — {{ getPercent(index) }}%
@@ -49,24 +49,36 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-  series: { type: Array, default: () => [] },   // [3, 1, 2, 0]
-  labels: { type: Array, default: () => [] },   // ['Hired', 'Not Hired', 'In Process', 'Candidate Refused']
-  colors: {
-    type: Array,
-    default: () => [
-      '#2979FF', // Hired
-      '#D32F2F', // Not Hired
-      '#9E9E9E', // In Process
-      '#00C853'  // Candidate Refused
-    ]
-  }
+  series: { type: Array, default: () => [] },
+  labels: { type: Array, default: () => [] },
 })
 
+// ✅ Fixed label-to-color mapping in your preferred order
+const labelColorMap = {
+  'Hired': '#2979FF',
+  'Not Hired': '#D32F2F',
+  'Candidate Refusal': '#00C853',
+  'Candidate in Process': '#9E9E9E',
+};
+
+// ✅ Always use these 4 labels in fixed order
+const orderedLabels = computed(() => Object.keys(labelColorMap));
+
+// ✅ Ordered series: match data to ordered labels, filling with 0 if missing
+const orderedSeries = computed(() => {
+  return orderedLabels.value.map(label => {
+    const idx = props.labels.indexOf(label);
+    return idx !== -1 ? props.series[idx] : 0;
+  });
+});
+
+// ✅ Chart options with stable colors and disabled animations
 const chartOptions = computed(() => ({
-  labels: props.labels,
+  labels: orderedLabels.value,
   chart: {
     type: 'pie',
-    toolbar: { show: false }
+    toolbar: { show: false },
+    animations: { enabled: false }
   },
   legend: { show: false },
   dataLabels: {
@@ -74,12 +86,13 @@ const chartOptions = computed(() => ({
     formatter: (val) => `${val.toFixed(0)}%`,
     style: { fontSize: '12px' }
   },
-  colors: props.colors
-}))
+  colors: orderedLabels.value.map(label => labelColorMap[label])
+}));
 
+// ✅ Calculate percent for legend display
 const getPercent = (index) => {
-  const total = props.series.reduce((a, b) => a + b, 0)
-  return total ? ((props.series[index] / total) * 100).toFixed(0) : 0
+  const total = orderedSeries.value.reduce((a, b) => a + b, 0)
+  return total ? ((orderedSeries.value[index] / total) * 100).toFixed(0) : 0
 }
 </script>
 

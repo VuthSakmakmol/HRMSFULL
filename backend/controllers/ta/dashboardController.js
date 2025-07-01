@@ -199,12 +199,12 @@ exports.getDashboardStats = async (req, res) => {
         {
           $match: {
             ...baseFilter,
-            createdAt: { $gte: start, $lte: end }
+            'progressDates.Application': { $gte: start, $lte: end }
           }
         },
         {
           $group: {
-            _id: { $month: '$createdAt' },
+            _id: { $month: '$progressDates.Application' },
             count: { $sum: 1 }
           }
         }

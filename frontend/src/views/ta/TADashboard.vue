@@ -140,7 +140,7 @@
 import { ref, onMounted, watch } from 'vue'
 import axios from '@/utils/axios'
 import dayjs from 'dayjs'
-import io from 'socket.io-client'
+import socket, { joinSocketRoom } from '@/utils/socket'
 
 // Components
 import RecruitmentPipelineChart from '@/tacomponents/RecruitmentPipelineChart.vue'
@@ -166,6 +166,7 @@ const toDisplay = ref(dayjs(to.value).format('DD/MM/YYYY'))
 const fromMenu = ref(false)
 const toMenu = ref(false)
 
+const monthlyData = ref({ labels: [], counts: [] })
 const sourceData = ref({ labels: [], counts: [] })
 const decisionData = ref({ labels: [], counts: [] })
 const pipelineData = ref({})
@@ -234,6 +235,7 @@ const fetchDashboardStats = async () => {
       actualHC: Array(12).fill(0),
       hiringTargetHC: Array(12).fill(0)
     }
+    monthlyData.value = data.monthly || { labels: [], counts: [] }
   } catch (err) {
     console.error('❌ Dashboard stats fetch failed:', err)
   }
@@ -266,14 +268,20 @@ onMounted(() => {
   fetchDepartments()
   fetchRecruiters()
 
-  // 🔹 Setup real-time updates
-  const socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, { transports: ['websocket'] })
+  joinSocketRoom()
+
   socket.on('connect', () => console.log('🔌 Connected to dashboard socket'))
+
+  let dashboardUpdateTimeout = null
 
   socket.on('dashboardUpdate', (payload) => {
     if (!payload || !payload.company || payload.company !== userCompany.value.toUpperCase()) return
-    console.log('🔄 Real-time dashboard update received:', payload)
-    const data = payload.data || {}
+    console.log('🟢 Real-time dashboard update received:', payload)
+
+    const data = payload.data
+    if (!data) return
+
+    // 🔥 Instantly update reactive dashboard data
     sourceData.value = data.sources || { labels: [], counts: [] }
     decisionData.value = data.decisions || { labels: [], counts: [] }
     pipelineData.value = data.pipeline || {}
@@ -283,12 +291,20 @@ onMounted(() => {
       actualHC: Array(12).fill(0),
       hiringTargetHC: Array(12).fill(0)
     }
+    monthlyData.value = data.monthly || { labels: [], counts: [] }  // ✅ Real-time monthly update
+
+    clearTimeout(dashboardUpdateTimeout)
+    dashboardUpdateTimeout = setTimeout(() => {
+      fetchDashboardStats()
+    }, 300)
   })
+
+  socket.on('connect_error', (err) => console.error('🚨 Socket connect error:', err.message))
 })
 
 watch([filterType, filterRecruiter, filterDepartment, from, to], fetchDashboardStats)
-
 </script>
+
 
 
 <style scoped>

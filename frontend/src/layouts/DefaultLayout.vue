@@ -61,7 +61,7 @@ html, body, .v-application {
   height: 91vh;
   display: flex;
   overflow: hidden;
-  margin-top: 100px;
+  margin-top: 65px;
 }
 
 .main-content {
