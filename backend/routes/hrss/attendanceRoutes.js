@@ -29,7 +29,8 @@ router.get('/day', authenticate, authorizeCompanyAccess, getDayShiftAttendance);
 router.get('/night', authenticate, authorizeCompanyAccess, getNightShiftAttendance);
 
 // 📃 Paginated
-router.get('/paginate', authenticate, authorizeCompanyAccess, getPaginatedAttendance);
+router.get('/paginated', authenticate, authorizeCompanyAccess, getPaginatedAttendance);
+
 
 // ✏️ Update Attendance Row (edit)
 router.put('/:id', authenticate, authorizeCompanyAccess, updateAttendance);

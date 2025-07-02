@@ -15,6 +15,9 @@ const attendanceSchema = new mongoose.Schema({
   workedHours: { type: Number, default: 0 },
   overtimeHours: { type: Number, default: 0 },
   lateMinutes: { type: Number, default: 0 },
+  department: { type: String, default: '' }, 
+  position: { type: String, default: '' },   
+  line: { type: String, default: '' },       
 
   status: {
     type: String,

@@ -49,31 +49,32 @@
     </v-row>
 
     
-<!-- Import Leave Permission -->
-      <!-- <v-row class="mb-4" align-center-center justify="space-between">
-        <v-col cols="12" sm="4" md="4">
-          <v-file-input
-            v-model="leaveFile"
-            accept=".xlsx"
-            label="Update Leave File"
-            variant="outlined"
-            prepend-icon="mdi-upload"
-            dense
-            hide-details
-            show-size
-          />
-        </v-col>
-        <v-col cols="12" sm="4" md="3">
-          <v-btn
-            color="info"
-            block
-            :disabled="!leaveFile"
-            @click="handleLeaveUpdate"
-          >
-            <v-icon start>mdi-calendar-check</v-icon> Update Leave
-          </v-btn>
-        </v-col>
-      </v-row> -->
+    <!-- Import Leave Permission -->
+    <v-row class="mb-4" align-center justify="space-between">
+      <v-col cols="12" sm="4" md="4">
+        <v-file-input
+          v-model="leaveFile"
+          accept=".xlsx"
+          label="Update Leave File"
+          variant="outlined"
+          prepend-icon="mdi-upload"
+          dense
+          hide-details
+          show-size
+        />
+      </v-col>
+      <v-col cols="12" sm="4" md="3">
+        <v-btn
+          color="info"
+          block
+          :disabled="!leaveFile"
+          @click="handleLeaveUpdate"
+        >
+          <v-icon start>mdi-calendar-check</v-icon> Update Leave
+        </v-btn>
+      </v-col>
+    </v-row>
+
     <!-- Filters -->
     <v-row class="mb-4" dense>
       <v-col cols="12" sm="3">
@@ -95,7 +96,12 @@
         />
       </v-col>
       <v-col cols="12" sm="3">
-        <v-menu v-model="datePicker" :close-on-content-click="false" transition="scale-transition" offset-y>
+        <v-menu
+          v-model="datePicker"
+          :close-on-content-click="false"
+          transition="scale-transition"
+          offset-y
+        >
           <template #activator="{ props }">
             <v-text-field
               v-bind="props"
@@ -107,7 +113,10 @@
               readonly
             />
           </template>
-          <v-date-picker v-model="selectedDate" @update:modelValue="datePicker = false" />
+          <v-date-picker
+            v-model="selectedDate"
+            @update:modelValue="onDateChange"
+          />
         </v-menu>
       </v-col>
     </v-row>
@@ -140,14 +149,7 @@
 
     <!-- Attendance Table -->
     <v-card>
-      <div v-if="isLoading" class="d-flex justify-center pa-8">
-        <DotLottieVue
-          style="height: 200px; width: 200px;"
-          autoplay
-          loop
-          src="https://lottie.host/b3e4008f-9dbd-4b76-b13e-e1cdb52f6190/3JhAvD9aX1.json" />
-      </div>
-
+      
       <div class="table-scroll-wrapper">
         <table class="scrollable-table">
           <thead>
@@ -205,10 +207,40 @@
               </td>
             </tr>
           </tbody>
+          <div v-if="isLoading" class="d-flex justify-center pa-8">
+            <DotLottieVue
+              style="height: 200px; width: 200px;"
+              autoplay
+              loop
+              src="https://lottie.host/b3e4008f-9dbd-4b76-b13e-e1cdb52f6190/3JhAvD9aX1.json" />
+          </div>
         </table>
-      </div>
-      
+      </div> 
     </v-card>
+    <v-row align="center" justify="space-between" class="mt-2">
+      <v-col cols="12" sm="6">
+        <v-select
+          v-model="pageSize"
+          :items="['20', '50', '100', 'All']"
+          label="Rows per page"
+          variant="outlined"
+          density="compact"
+          hide-details
+          @update:model-value="onPageSizeChange"
+        />
+      </v-col>
+      <v-col cols="12" sm="6" class="text-right">
+        <v-pagination
+          v-if="totalPages > 1"
+          v-model="currentPage"
+          :length="totalPages"
+          density="comfortable"
+          total-visible="5"
+          @update:model-value="onPageChange"
+        />
+      </v-col>
+    </v-row>
+
   </v-container>
 </template>
 
@@ -218,17 +250,17 @@ import axios from '@/utils/axios'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { DotLottieVue } from '@lottiefiles/dotlottie-vue'
+import Swal from 'sweetalert2'
 
 const excelFile = ref(null)
 const attendance = ref([])
 const searchText = ref('')
 const selectedShift = ref('All')
-const selectedDate = ref(null)
 const datePicker = ref(false)
 const selectedRows = ref([]);
 const isLoading = ref(true)
-
 const editDialog = ref(false);
+const selectedDate = ref(dayjs().format('YYYY-MM-DD')); // default to today
 const editForm = ref({
   _id: '',
   employeeId: '',
@@ -238,29 +270,56 @@ const editForm = ref({
   leaveType: '',
   note: ''
 });
-
+const currentPage = ref(1);
+const totalPages = ref(1);
+const pageSize = ref('50');
 
 // leave
 const leaveFile = ref(null)
 
 const formattedDate = computed(() =>
   selectedDate.value ? dayjs(selectedDate.value).format('YYYY-MM-DD') : ''
-)
+);
 
 const fetchData = async () => {
   try {
-    isLoading.value = true; // start loading
-    const res = await axios.get('/attendance');
-    attendance.value = Array.isArray(res.data) ? res.data : [];
-    console.log(`✅ Attendance loaded: ${attendance.value.length} records`);
+    isLoading.value = true;
+    const res = await axios.get('/attendance/paginated', {
+      params: {
+        page: currentPage.value,
+        limit: pageSize.value,
+        date: selectedDate.value ? dayjs(selectedDate.value).format('YYYY-MM-DD') : undefined,
+      },
+    });
+    attendance.value = Array.isArray(res.data.records) ? res.data.records : [];
+    totalPages.value = res.data.totalPages || 1;
+    console.log(`✅ Attendance loaded: ${attendance.value.length} records (Page ${currentPage.value}/${totalPages.value})`);
   } catch (err) {
     console.error('❌ Fetch error:', err.message);
     attendance.value = [];
+    totalPages.value = 1;
   } finally {
-    isLoading.value = false; // end loading
+    isLoading.value = false;
   }
 };
 
+
+
+const onPageChange = (newPage) => {
+  currentPage.value = newPage;
+  fetchData();
+};
+
+const onPageSizeChange = (newSize) => {
+  currentPage.value = 1; // reset to first page
+  fetchData();
+};
+
+const onDateChange = () => {
+  datePicker.value = false; // close the menu
+  console.log(`📅 Date filter changed: ${selectedDate.value}`);
+  fetchData(); // reload attendance for the new date
+};
 
 
 onMounted(() => {
@@ -334,59 +393,186 @@ const handleImport = async () => {
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet);
 
-      // Validate each row includes leaveType or empty string
+      if (rows.length === 0) {
+        console.warn('⚠️ Import file is empty.');
+        isLoading.value = false;
+        return;
+      }
+
+      // 🟢 Auto-select date from first row of the Excel file
+      if (rows[0].date) {
+      let firstDateParsed;
+
+      // Check if date is a number (Excel serial date)
+      if (!isNaN(rows[0].date)) {
+        firstDateParsed = dayjs(new Date(Math.round((rows[0].date - 25569) * 86400 * 1000))); 
+      } else {
+        firstDateParsed = dayjs(rows[0].date);
+      }
+
+      if (firstDateParsed.isValid()) {
+        const firstDate = firstDateParsed.format('YYYY-MM-DD');
+        selectedDate.value = firstDate;
+        console.log(`📅 Auto-set filter date to imported date: ${firstDate}`);
+      } else {
+        console.warn('⚠️ First row date invalid or missing, falling back to today.');
+        selectedDate.value = dayjs().format('YYYY-MM-DD'); // fallback to today
+      }
+    } else {
+      console.warn('⚠️ First row date missing, falling back to today.');
+      selectedDate.value = dayjs().format('YYYY-MM-DD'); // fallback to today
+    }
+
+
+      // Prepare data rows for API
       const preparedRows = rows.map(r => ({
         employeeId: r.employeeId?.trim() || '',
         date: r.date,
         startTime: r.startTime?.trim() || '',
         endTime: r.endTime?.trim() || '',
-        leaveType: r.leaveType?.trim() || '',  // ✅ include leaveType in request
+        leaveType: r.leaveType?.trim() || '',
       }));
 
-      const res = await axios.post('/attendance/import', {
-        shiftType: selectedShift.value === 'All' ? 'Day Shift' : selectedShift.value,
-        rows: preparedRows,
-      });
+      // Chunk rows: 500 rows per request
+      const chunkArray = (array, size) => {
+        const result = [];
+        for (let i = 0; i < array.length; i += size) {
+          result.push(array.slice(i, i + size));
+        }
+        return result;
+      };
 
-      console.log('✅ Import result:', res.data);
+      const chunks = chunkArray(preparedRows, 500);
+
+      let totalImported = 0;
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        console.log(`🚚 Sending chunk ${i + 1}/${chunks.length} (${chunk.length} rows)`);
+
+        try {
+          const res = await axios.post('/attendance/import', {
+            shiftType: selectedShift.value === 'All' ? 'Day Shift' : selectedShift.value,
+            rows: chunk,
+          });
+          console.log(`✅ Chunk ${i + 1} imported:`, res.data);
+          totalImported += res.data.summary.length;
+        } catch (err) {
+          console.error(`❌ Chunk ${i + 1} failed:`, err.message);
+        }
+      }
+
+      console.log(`✅ Total attendance records imported: ${totalImported}`);
       await fetchData();
       excelFile.value = null;
     };
+
     reader.readAsArrayBuffer(file);
   } catch (err) {
     console.error('❌ Import failed:', err.message);
+  } finally {
+    isLoading.value = false;
   }
 };
 
 
+
 const handleLeaveUpdate = async () => {
   try {
-    const file = leaveFile.value
-    if (!file) return
+    const file = leaveFile.value;
+    if (!file) return;
 
-    const reader = new FileReader()
+    isLoading.value = true;
+
+    const reader = new FileReader();
     reader.onload = async (e) => {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet);
 
-      console.log('📤 Parsed rows:', rows); // <--- ADD THIS LINE
+      if (rows.length === 0) {
+        console.warn('⚠️ Leave file is empty.');
+        isLoading.value = false;
+        return;
+      }
 
-      const res = await axios.post('/attendance/import', {
-        shiftType: selectedShift.value === 'All' ? 'Day Shift' : selectedShift.value,
-        rows
-      });
+      // 🟢 Prepare rows with expected fields
+      const preparedRows = rows.map(r => ({
+        employeeId: r.employeeId?.trim() || '',
+        date: r.date,
+        shiftType: r.shiftType?.trim() || '',
+        leaveType: r.leaveType?.trim() || '',
+      }));
 
-      console.log('✅ Import result:', res.data);
+      // 🟢 Extract unique dates & employees
+      const uniqueDates = [...new Set(preparedRows.map(r => dayjs(r.date).format('YYYY-MM-DD')))];
+      const uniqueEmployees = [...new Set(preparedRows.map(r => r.employeeId))];
+
+      if (uniqueDates.length > 1) {
+        const confirmMsg = `⚠️ You are updating leave for multiple dates:\n\nDates: ${uniqueDates.join(', ')}\nEmployees: ${uniqueEmployees.join(', ')}\n\nAre you sure you want to overwrite existing leave records?`;
+        const { isConfirmed } = await Swal.fire({
+          title: 'Are you sure?',
+          html: `<pre style="text-align:left;">${confirmMsg.replace(/\n/g, '<br>')}</pre>`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Yes, update',
+          cancelButtonText: 'Cancel',
+          customClass: { popup: 'swal2-overflow' },
+          allowOutsideClick: false,
+          allowEnterKey: true
+        })
+
+        if (!isConfirmed) {
+          console.log('❌ Leave update cancelled by user.');
+          leaveFile.value = null;
+          isLoading.value = false;
+          return;
+        }
+      }
+
+      // 🟢 Chunk rows: 500 per request
+      const chunkArray = (array, size) => {
+        const result = [];
+        for (let i = 0; i < array.length; i += size) {
+          result.push(array.slice(i, i + size));
+        }
+        return result;
+      };
+
+      const chunks = chunkArray(preparedRows, 500);
+
+      let totalProcessed = 0;
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        console.log(`🚚 Sending leave chunk ${i + 1}/${chunks.length} (${chunk.length} rows)`);
+
+        try {
+          const res = await axios.post('/attendance/update-leave', {
+            rows: chunk,
+          });
+          console.log(`✅ Leave chunk ${i + 1} processed:`, res.data);
+          totalProcessed += res.data.result.length;
+        } catch (err) {
+          console.error(`❌ Leave chunk ${i + 1} failed:`, err.message);
+        }
+      }
+
+      console.log(`✅ Total leave records processed: ${totalProcessed}`);
       await fetchData();
-      excelFile.value = null;
-    }
-    reader.readAsArrayBuffer(file)
+      leaveFile.value = null;
+    };
+
+    reader.readAsArrayBuffer(file);
   } catch (err) {
-    console.error('❌ Leave update failed:', err.message)
+    console.error('❌ Leave update failed:', err.message);
+  } finally {
+    isLoading.value = false;
   }
-}
+};
+
+
 
 const allSelected = computed({
   get: () => selectedRows.value.length === filteredAttendance.value.length && filteredAttendance.value.length > 0,

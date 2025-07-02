@@ -66,59 +66,81 @@ exports.importAttendance = async (req, res) => {
     const company = req.company;
     console.log('📦 Import Attendance for company:', company);
 
-    if (!company || !rows?.length) {
+    if (!company || !Array.isArray(rows) || rows.length === 0) {
       console.error('❌ Missing company or empty rows');
       return res.status(400).json({ message: 'Missing company or empty rows' });
     }
 
     const summary = [];
 
-    for (const row of rows) {
-      const employeeId = row.employeeId?.trim();
-      const formattedDateStr = formatExcelDate(row.date);
-      if (!employeeId || !formattedDateStr) continue;
+    // Helper: chunk rows into groups of 500 (adjust as needed)
+    const chunkArray = (array, size) => {
+      const result = [];
+      for (let i = 0; i < array.length; i += size) {
+        result.push(array.slice(i, i + size));
+      }
+      return result;
+    };
 
-      const date = new Date(formattedDateStr);
-      const startTime = row.startTime?.trim();
-      const endTime = row.endTime?.trim();
-      const timeIn = parseTimeToDate(date, startTime);
-      const timeOut = parseTimeToDate(date, endTime);
-      const leaveType = row.leaveType?.trim() || null;
-      const status = evaluateStatus(startTime, endTime, shiftType);
+    const chunks = chunkArray(rows, 500);
 
-      const foundEmp = await Employee.findOne({ employeeId, company });
+    for (const chunk of chunks) {
+      const chunkResults = await Promise.all(chunk.map(async (row) => {
+        try {
+          const employeeId = row.employeeId?.trim();
+          const formattedDateStr = formatExcelDate(row.date);
+          if (!employeeId || !formattedDateStr) return null;
 
-      const empCompany = foundEmp ? foundEmp.company : company;
-      const fullName = foundEmp
-        ? `${foundEmp.englishFirstName} ${foundEmp.englishLastName}`
-        : 'Unknown';
+          const date = new Date(formattedDateStr);
+          const startTime = row.startTime?.trim();
+          const endTime = row.endTime?.trim();
+          const timeIn = parseTimeToDate(date, startTime);
+          const timeOut = parseTimeToDate(date, endTime);
+          const leaveType = row.leaveType?.trim() || null;
+          const status = evaluateStatus(startTime, endTime, shiftType);
 
-      const finalStatus = (!startTime && !endTime && leaveType) ? 'Leave' : status;
+          const foundEmp = await Employee.findOne({ employeeId, company });
+          const empCompany = foundEmp ? foundEmp.company : company;
+          const fullName = foundEmp
+            ? `${foundEmp.englishFirstName} ${foundEmp.englishLastName}`
+            : 'Unknown';
 
-      const updated = await Attendance.findOneAndUpdate(
-        { employeeId, date, company: empCompany },
-        {
-          employeeId,
-          date,
-          shiftType,
-          timeIn,
-          timeOut,
-          status: finalStatus,
-          leaveType: finalStatus === 'Leave' ? leaveType : null,
-          fullName,
-          company: empCompany,
-          note: row.note || '',
-        },
-        { upsert: true, new: true }
-      );
+          const finalStatus = (!startTime && !endTime && leaveType) ? 'Leave' : status;
 
-      summary.push({
-        employeeId,
-        date: formattedDateStr,
-        status: updated.status,
-        leaveType: updated.leaveType,
-        company: empCompany,
-      });
+          const updated = await Attendance.findOneAndUpdate(
+            { employeeId, date, company: empCompany },
+            {
+              employeeId,
+              date,
+              shiftType,
+              timeIn,
+              timeOut,
+              status: finalStatus,
+              leaveType: finalStatus === 'Leave' ? leaveType : null,
+              fullName,
+              company: empCompany,
+              department: foundEmp?.department || '', // ✅ add this
+              position: foundEmp?.position || '',     // ✅ add this
+              line: foundEmp?.line || '',             // ✅ add this
+              note: row.note || '',
+            },
+            { upsert: true, new: true }
+          );
+
+          return {
+            employeeId,
+            date: formattedDateStr,
+            status: updated.status,
+            leaveType: updated.leaveType,
+            company: empCompany,
+          };
+        } catch (err) {
+          console.error(`❌ Error processing row for employeeId=${row.employeeId}:`, err.message);
+          return { employeeId: row.employeeId || 'N/A', error: err.message };
+        }
+      }));
+
+      summary.push(...chunkResults.filter(Boolean));
     }
 
     res.json({
@@ -130,6 +152,7 @@ exports.importAttendance = async (req, res) => {
     res.status(500).json({ message: 'Import failed', error: err.message });
   }
 };
+
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Update leave permission
@@ -332,42 +355,56 @@ exports.getNightShiftAttendance = async (req, res) => {
 
 exports.getPaginatedAttendance = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
+    const { page = 1, limit = 50, date } = req.query; // include date from query params
     const company = req.company;
     console.log('📃 Fetch Paginated Attendance with employee details for company:', company);
 
-    const skip = (page - 1) * limit;
+    const parsedLimit = limit === 'All' ? 0 : Number(limit);
+    const skip = (page - 1) * parsedLimit;
 
-    // Fetch paginated attendance records
+    // Build base query
+    const query = { company };
+    if (date) {
+      const start = new Date(date);
+      const end = new Date(date);
+      end.setDate(end.getDate() + 1); // include full day range
+      query.date = { $gte: start, $lt: end };
+    }
+
+    const attendanceQuery = Attendance.find(query).sort({ date: -1 });
+    if (parsedLimit > 0) attendanceQuery.skip(skip).limit(parsedLimit);
+
     const [records, total] = await Promise.all([
-      Attendance.find({ company }).sort({ date: -1 }).skip(skip).limit(limit),
-      Attendance.countDocuments({ company }),
+      attendanceQuery.exec(),
+      Attendance.countDocuments(query),
     ]);
 
-    // Extract unique employee IDs from the paginated records
-    const employeeIds = [...new Set(records.map(r => r.employeeId))];
+    const employeeIds = [
+      ...new Set(records.map(r => r.employeeId?.trim().toUpperCase()).filter(Boolean))
+    ];
 
-    // Fetch matching employees
     const employees = await Employee.find({
       employeeId: { $in: employeeIds },
       company,
-    }).select('employeeId department position line');
+    }).select('employeeId englishFirstName englishLastName department position line');
 
-    // Create lookup map
     const employeeMap = {};
     employees.forEach(emp => {
-      employeeMap[emp.employeeId] = {
+      const key = emp.employeeId.trim().toUpperCase();
+      employeeMap[key] = {
+        fullName: `${emp.englishFirstName} ${emp.englishLastName}`,
         department: emp.department || '',
         position: emp.position || '',
         line: emp.line || '',
       };
     });
 
-    // Enrich records with employee info
     const enrichedRecords = records.map(record => {
-      const empInfo = employeeMap[record.employeeId] || {};
+      const key = record.employeeId?.trim().toUpperCase();
+      const empInfo = employeeMap[key] || {};
       return {
         ...record.toObject(),
+        fullName: empInfo.fullName || 'Unknown',
         department: empInfo.department || '-',
         position: empInfo.position || '-',
         line: empInfo.line || '-',
@@ -378,13 +415,15 @@ exports.getPaginatedAttendance = async (req, res) => {
       records: enrichedRecords,
       total,
       page: Number(page),
-      limit: Number(limit),
+      limit: limit === 'All' ? 'All' : Number(limit),
+      totalPages: limit === 'All' ? 1 : Math.ceil(total / parsedLimit),
     });
   } catch (err) {
     console.error('❌ Pagination fetch error:', err.message);
     res.status(500).json({ message: 'Pagination failed', error: err.message });
   }
 };
+
 
 
 // ────────────────────────────────────────────────────────────────────────────────
