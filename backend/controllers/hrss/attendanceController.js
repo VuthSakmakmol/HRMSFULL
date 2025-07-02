@@ -73,7 +73,6 @@ exports.importAttendance = async (req, res) => {
 
     const summary = [];
 
-    // Helper: chunk rows into groups of 500 (adjust as needed)
     const chunkArray = (array, size) => {
       const result = [];
       for (let i = 0; i < array.length; i += size) {
@@ -119,13 +118,126 @@ exports.importAttendance = async (req, res) => {
               leaveType: finalStatus === 'Leave' ? leaveType : null,
               fullName,
               company: empCompany,
-              department: foundEmp?.department || '', // ✅ add this
-              position: foundEmp?.position || '',     // ✅ add this
-              line: foundEmp?.line || '',             // ✅ add this
+              department: foundEmp?.department || '',
+              position: foundEmp?.position || '',
+              line: foundEmp?.line || '',
               note: row.note || '',
             },
             { upsert: true, new: true }
           );
+
+          // ──────────────────────────────
+          // 🚨 Consecutive absence check
+          if (updated.status === 'Absent') {
+            const currentDate = new Date(updated.date);
+            let consecutiveAbsent = 1;
+
+            for (let i = 1; i <= 5; i++) {
+              const prevDate = new Date(currentDate);
+              prevDate.setDate(prevDate.getDate() - i);
+
+              const prevAttendance = await Attendance.findOne({
+                employeeId,
+                company,
+                date: {
+                  $gte: new Date(prevDate.setHours(0, 0, 0, 0)),
+                  $lt: new Date(prevDate.setHours(23, 59, 59, 999)),
+                },
+              });
+
+              if (prevAttendance?.status === 'Absent') {
+                consecutiveAbsent++;
+              } else {
+                break;
+              }
+            }
+
+            console.log(`🔎 ${employeeId} absent ${consecutiveAbsent} days in a row`);
+
+            if (consecutiveAbsent >= 6) {
+              const abandonStart = new Date(currentDate);
+              abandonStart.setDate(currentDate.getDate() - 5);
+              await Attendance.updateMany(
+                {
+                  employeeId,
+                  company,
+                  date: { $gte: abandonStart, $lte: currentDate },
+                  status: 'Absent',
+                },
+                { status: 'Abandon' }
+              );
+              console.log(`🚨 ${employeeId} marked as Abandon`);
+            } else if (consecutiveAbsent >= 3) {
+              const nearlyStart = new Date(currentDate);
+              nearlyStart.setDate(currentDate.getDate() - (consecutiveAbsent - 1));
+              await Attendance.updateMany(
+                {
+                  employeeId,
+                  company,
+                  date: { $gte: nearlyStart, $lte: currentDate },
+                  status: 'Absent',
+                },
+                { status: 'NearlyAbandon' }
+              );
+              console.log(`⚠️ ${employeeId} marked as Nearly Abandon`);
+            }
+          }
+
+          // ──────────────────────────────
+          // ✅ Handle comeback reset logic
+          if (['OnTime', 'Late', 'Overtime'].includes(updated.status)) {
+            const currentDate = new Date(updated.date);
+            let streakDays = [];
+            let wasInRisk = false; // detect if they were NearlyAbandon or Abandon before comeback
+
+            // walk backward up to 30 days to find the last non-absent day
+            for (let i = 1; i <= 30; i++) {
+              const prevDate = new Date(currentDate);
+              prevDate.setDate(currentDate.getDate() - i);
+
+              const prevAttendance = await Attendance.findOne({
+                employeeId,
+                company,
+                date: {
+                  $gte: new Date(prevDate.setHours(0, 0, 0, 0)),
+                  $lt: new Date(prevDate.setHours(23, 59, 59, 999)),
+                },
+              });
+
+              if (prevAttendance?.status === 'NearlyAbandon' || prevAttendance?.status === 'Abandon') {
+                wasInRisk = true;
+                streakDays.push(prevAttendance.date);
+              } else if (prevAttendance?.status === 'Absent') {
+                streakDays.push(prevAttendance.date);
+              } else {
+                break; // streak ends at first day that is not Absent/NearlyAbandon/Abandon
+              }
+            }
+
+            if (streakDays.length > 0) {
+              const earliest = new Date(streakDays[streakDays.length - 1]);
+              const resetResult = await Attendance.updateMany(
+                {
+                  employeeId,
+                  company,
+                  date: { $gte: earliest, $lte: currentDate },
+                  status: { $in: ['NearlyAbandon', 'Abandon'] },
+                },
+                { status: updated.status }
+              );
+              console.log(`✅ Cleared ${resetResult.modifiedCount} NearlyAbandon/Abandon records for ${employeeId} from ${earliest.toDateString()} to ${currentDate.toDateString()}`);
+            }
+
+            // ✅ If employee was in risk streak, mark current day as Risk so manager sees it
+            if (wasInRisk) {
+              updated.status = 'Risk';
+              await updated.save();
+              console.log(`⚠️ Marked ${employeeId} as Risk on comeback date ${updated.date.toDateString()}`);
+            }
+          }
+
+
+          // ──────────────────────────────
 
           return {
             employeeId,
@@ -152,6 +264,7 @@ exports.importAttendance = async (req, res) => {
     res.status(500).json({ message: 'Import failed', error: err.message });
   }
 };
+
 
 
 // ────────────────────────────────────────────────────────────────────────────────

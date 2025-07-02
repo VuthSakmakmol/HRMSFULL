@@ -179,7 +179,8 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(item, index) in filteredAttendance" :key="item._id">
+            <tr v-for="(item, index) in filteredAttendance" :key="item._id" :class="animateRow(item.status)">
+
               <td>
                 <v-checkbox
                   v-model="selectedRows"
@@ -273,6 +274,11 @@ const editForm = ref({
 const currentPage = ref(1);
 const totalPages = ref(1);
 const pageSize = ref('50');
+
+// animation
+const animateRow = (status) => {
+  return status === 'NearlyAbandon' ? 'shake-animation' : '';
+};
 
 // leave
 const leaveFile = ref(null)
@@ -696,4 +702,17 @@ setTimeout(() => {
   background-color: #dfedfc;
   cursor: pointer;
 }
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-4px); }
+}
+
+.shake-animation {
+  animation: shake 0.6s ease-in-out infinite;
+  background-color: #fff3cd; /* subtle yellow highlight */
+}
+
 </style>
