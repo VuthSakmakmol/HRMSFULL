@@ -74,6 +74,13 @@
     <!-- Employee Table -->
     <v-card>
       <div class="table-scroll-wrapper" ref="scrollWrapper">
+        <div v-if="isLoading" class="d-flex justify-center pa-8">
+        <DotLottieVue
+          style="height: 200px; width: 200px;"
+          autoplay
+          loop
+          src="https://lottie.host/b3e4008f-9dbd-4b76-b13e-e1cdb52f6190/3JhAvD9aX1.json" />
+      </div>
         <table class="scrollable-table">
           <thead>
             <tr>
@@ -148,6 +155,7 @@ import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
+import { DotLottieVue } from '@lottiefiles/dotlottie-vue'
 
 defineOptions({ name: 'EmployeeList' })
 
@@ -160,7 +168,7 @@ const totalEmployees = ref(0)
 const scrollWrapper = ref(null)
 const defaultImage = '/default_images/girl_default_pf.jpg'
 const hasLoaded = ref(false)
-
+const isLoading = ref(true);
 const fileInput = ref(null)
 
 // pagination
@@ -185,6 +193,7 @@ const getRowNumber = index => {
 
 const fetchEmployees = async () => {
   const params = {}
+  isLoading.value = true;
 
   if (itemsPerPage.value !== 'all') {
     params.page = page.value
@@ -205,6 +214,9 @@ const fetchEmployees = async () => {
     }
   } catch (err) {
     console.error('❌ Failed to fetch employees:', err.message)
+  }
+    finally {
+    isLoading.value = false;
   }
 }
 
@@ -241,6 +253,7 @@ const editSelectedEmployee = () => {
 }
 
 const deleteSelected = async () => {
+  isLoading.value = true;
   if (!selected.value.length) {
     return Swal.fire({ icon: 'warning', title: 'No employees selected' })
   }
@@ -265,11 +278,14 @@ const deleteSelected = async () => {
     } catch (err) {
       console.error('❌ Deletion failed:', err)
       Swal.fire({ icon: 'error', title: 'Failed to delete', text: err.message })
+    } finally {
+      isLoading.value = false;
     }
   }
 }
 
 const exportToExcel = () => {
+  isLoading.value = true;
   if (!selected.value.length) {
     return Swal.fire({ icon: 'warning', title: 'Please select at least one employee to export.' })
   }
@@ -334,6 +350,7 @@ const exportToExcel = () => {
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Employees')
   XLSX.writeFile(workbook, 'Employees.xlsx')
+  isLoading.value = false;
 }
 
 const triggerImportFile = () => {
@@ -341,12 +358,13 @@ const triggerImportFile = () => {
 }
 
 const handleImportExcel = async (event) => {
+  
   const file = event.target.files[0];
   if (!file) return;
 
   const form = new FormData();
   form.append('file', file);
-
+  isLoading.value = true;
   try {
     const previewRes = await axios.post('/employees/import-excel', form);
     const { toImport, duplicates } = previewRes.data;
@@ -386,17 +404,24 @@ const handleImportExcel = async (event) => {
       title: 'Import Failed',
       text: err.response?.data?.message || err.message
     });
+  } 
+  finally {
+    isLoading.value = false;
   }
 };
 
 
 
 const updateNote = async (emp) => {
+  isLoading.value = true;
   try {
     await axios.put(`/employees/${emp._id}`, { note: emp.note })
     console.log(`📝 Note saved for ${emp.employeeId}`)
   } catch (err) {
     console.error('❌ Failed to save note:', err.message)
+  }
+  finally {
+    isLoading.value = false;
   }
 }
 
@@ -476,6 +501,12 @@ const getCompletionRate = emp => {
   const filled = values.filter(v => v !== '' && v !== null && v !== undefined)
   return Math.min(Math.round((filled.length / 48) * 100), 100)
 }
+
+watch([page, itemsPerPage], async ([newPage, newLimit], [oldPage, oldLimit]) => {
+  if (newLimit !== oldLimit) page.value = 1;
+  await fetchEmployees();
+});
+
 </script>
 
 

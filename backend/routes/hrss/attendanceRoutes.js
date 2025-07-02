@@ -9,7 +9,8 @@ const {
   getPaginatedAttendance,
   importAttendance,
   updateAttendance,
-  updateLeavePermission
+  updateLeavePermission,
+  deleteAttendance, 
 } = require('../../controllers/hrss/attendanceController');
 
 // 📥 Daily Attendance Import
@@ -32,5 +33,7 @@ router.get('/paginate', authenticate, authorizeCompanyAccess, getPaginatedAttend
 
 // ✏️ Update Attendance Row (edit)
 router.put('/:id', authenticate, authorizeCompanyAccess, updateAttendance);
+
+router.delete('/:id', authenticate, authorizeCompanyAccess, deleteAttendance);
 
 module.exports = router;

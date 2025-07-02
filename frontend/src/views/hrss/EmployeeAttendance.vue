@@ -3,7 +3,7 @@
     <h2 class="text-h6 font-weight-bold mb-4">🗓️ Attendance Record</h2>
 
     <!-- Top Bar -->
-    <v-row class="mb-4" align-center justify="space-between">
+    <v-row class="mb-4" align-center="center" justify="space-between" dense>
       <v-col cols="12" sm="4" md="3">
         <v-btn color="primary" block @click="fetchData">
           <v-icon start>mdi-refresh</v-icon> Refresh Data
@@ -17,7 +17,7 @@
           label="Select Excel File"
           variant="outlined"
           prepend-icon="mdi-upload"
-          dense
+          density="comfortable"
           hide-details
           show-size
         />
@@ -33,8 +33,24 @@
           <v-icon start>mdi-database-import</v-icon> Import Attendance
         </v-btn>
       </v-col>
-      <!-- Import Leave Permission -->
-      <v-row class="mb-4" align-center justify="space-between">
+    </v-row>
+
+    <v-row class="mb-4" align-center="center" justify="start" dense>
+      <v-col cols="auto">
+        <v-btn color="primary" :disabled="selectedRows.length !== 1" @click="editSelected">
+          <v-icon start>mdi-pencil</v-icon> Edit
+        </v-btn>
+      </v-col>
+      <v-col cols="auto">
+        <v-btn color="error" :disabled="selectedRows.length === 0" @click="deleteSelected">
+          <v-icon start>mdi-delete</v-icon> Delete
+        </v-btn>
+      </v-col>
+    </v-row>
+
+    
+<!-- Import Leave Permission -->
+      <!-- <v-row class="mb-4" align-center-center justify="space-between">
         <v-col cols="12" sm="4" md="4">
           <v-file-input
             v-model="leaveFile"
@@ -57,10 +73,7 @@
             <v-icon start>mdi-calendar-check</v-icon> Update Leave
           </v-btn>
         </v-col>
-      </v-row>
-    </v-row>
-    
-
+      </v-row> -->
     <!-- Filters -->
     <v-row class="mb-4" dense>
       <v-col cols="12" sm="3">
@@ -99,12 +112,54 @@
       </v-col>
     </v-row>
 
+    <!-- Edit Attendance Dialog -->
+    <v-dialog v-model="editDialog" max-width="600">
+      <v-card>
+        <v-card-title class="text-h6 font-weight-bold">
+          ✏️ Edit Attendance
+        </v-card-title>
+        <v-card-text>
+          <v-text-field v-model="editForm.fullName" label="Full Name" readonly />
+          <v-text-field v-model="editForm.employeeId" label="Employee ID" readonly />
+          <v-text-field v-model="editForm.date" label="Date" readonly />
+          <v-select
+            v-model="editForm.status"
+            :items="['OnTime', 'Late', 'Overtime', 'Absent', 'Leave']"
+            label="Status"
+          />
+          <v-text-field v-if="editForm.status === 'Leave'" v-model="editForm.leaveType" label="Type of Leave" />
+          <v-text-field v-model="editForm.note" label="Note" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="grey" text @click="editDialog = false">Cancel</v-btn>
+          <v-btn color="primary" :loading="editLoading" @click="submitEdit">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Attendance Table -->
     <v-card>
+      <div v-if="isLoading" class="d-flex justify-center pa-8">
+        <DotLottieVue
+          style="height: 200px; width: 200px;"
+          autoplay
+          loop
+          src="https://lottie.host/b3e4008f-9dbd-4b76-b13e-e1cdb52f6190/3JhAvD9aX1.json" />
+      </div>
+
       <div class="table-scroll-wrapper">
         <table class="scrollable-table">
           <thead>
             <tr>
+              <th>
+                <v-checkbox
+                  v-model="allSelected"
+                  :indeterminate="isIndeterminate"
+                  hide-details
+                  density="compact"
+                />
+              </th>
               <th>#</th>
               <th>Date</th>
               <th>Employee ID</th>
@@ -123,10 +178,18 @@
           </thead>
           <tbody>
             <tr v-for="(item, index) in filteredAttendance" :key="item._id">
+              <td>
+                <v-checkbox
+                  v-model="selectedRows"
+                  :value="item._id"
+                  hide-details
+                  density="compact"
+                />
+              </td>
               <td>{{ index + 1 }}</td>
-              <td>{{ formatDate(item.date) }}</td>                                <!-- Date column -->
-              <td>{{ item.employeeId }}</td>                                     <!-- Employee ID -->
-              <td>{{ item.fullName }}</td>                                       <!-- Full Name -->
+              <td>{{ formatDate(item.date) }}</td>                                
+              <td>{{ item.employeeId }}</td>                                 
+              <td>{{ item.fullName }}</td>                                 
               <td>{{ item.department || '-' }}</td>
               <td>{{ item.position || '-' }}</td>
               <td>{{ item.line || '-' }}</td>
@@ -144,6 +207,7 @@
           </tbody>
         </table>
       </div>
+      
     </v-card>
   </v-container>
 </template>
@@ -153,6 +217,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import axios from '@/utils/axios'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
+import { DotLottieVue } from '@lottiefiles/dotlottie-vue'
 
 const excelFile = ref(null)
 const attendance = ref([])
@@ -160,7 +225,20 @@ const searchText = ref('')
 const selectedShift = ref('All')
 const selectedDate = ref(null)
 const datePicker = ref(false)
-const employees = ref([])
+const selectedRows = ref([]);
+const isLoading = ref(true)
+
+const editDialog = ref(false);
+const editForm = ref({
+  _id: '',
+  employeeId: '',
+  fullName: '',
+  date: '',
+  status: '',
+  leaveType: '',
+  note: ''
+});
+
 
 // leave
 const leaveFile = ref(null)
@@ -171,15 +249,17 @@ const formattedDate = computed(() =>
 
 const fetchData = async () => {
   try {
-    const res = await axios.get('/attendance')
-    attendance.value = Array.isArray(res.data) ? res.data : []
-    console.log(`✅ Attendance loaded: ${attendance.value.length} records`)
+    isLoading.value = true; // start loading
+    const res = await axios.get('/attendance');
+    attendance.value = Array.isArray(res.data) ? res.data : [];
+    console.log(`✅ Attendance loaded: ${attendance.value.length} records`);
   } catch (err) {
-    console.error('❌ Fetch error:', err.message)
-    attendance.value = []
+    console.error('❌ Fetch error:', err.message);
+    attendance.value = [];
+  } finally {
+    isLoading.value = false; // end loading
   }
-}
-
+};
 
 
 
@@ -245,6 +325,7 @@ const handleImport = async () => {
   try {
     const file = excelFile.value;
     if (!file) return;
+    isLoading.value = true;
 
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -307,6 +388,73 @@ const handleLeaveUpdate = async () => {
   }
 }
 
+const allSelected = computed({
+  get: () => selectedRows.value.length === filteredAttendance.value.length && filteredAttendance.value.length > 0,
+  set: (value) => {
+    selectedRows.value = value ? filteredAttendance.value.map(item => item._id) : [];
+  },
+});
+
+const isIndeterminate = computed(() =>
+  selectedRows.value.length > 0 && selectedRows.value.length < filteredAttendance.value.length
+);
+
+
+const editSelected = () => {
+  if (selectedRows.value.length === 1) {
+    const id = selectedRows.value[0];
+    const record = attendance.value.find(item => item._id === id);
+    if (record) {
+      editForm.value = {
+        _id: record._id,
+        employeeId: record.employeeId,
+        fullName: record.fullName,
+        date: formatDate(record.date),
+        status: record.status,
+        leaveType: record.leaveType || '',
+        note: record.note || ''
+      };
+      editDialog.value = true;
+    }
+  }
+};
+
+
+const submitEdit = async () => {
+  try {
+    const payload = {
+      status: editForm.value.status,
+      leaveType: editForm.value.status === 'Leave' ? editForm.value.leaveType : '',
+      note: editForm.value.note,
+    };
+    const res = await axios.put(`/attendance/${editForm.value._id}`, payload);
+    console.log('✅ Updated attendance:', res.data);
+    editDialog.value = false;
+    await fetchData();
+  } catch (err) {
+    console.error('❌ Update failed:', err.message);
+  }
+};
+
+
+const deleteSelected = async () => {
+  if (selectedRows.value.length === 0) return;
+  const confirmed = confirm(`Delete ${selectedRows.value.length} records?`);
+  if (!confirmed) return;
+  try {
+    await Promise.all(selectedRows.value.map(id =>
+      axios.delete(`/attendance/${id}`)
+    ));
+    console.log('✅ Deleted selected records');
+    await fetchData();
+    selectedRows.value = [];
+  } catch (err) {
+    console.error('❌ Failed to delete selected:', err.message);
+  }
+};
+
+
+
 // ✅ Auto-reload when company changes
 const onCompanyChange = () => {
   console.log('🔄 Company changed, reloading attendance data...')
@@ -321,7 +469,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('companyChanged', onCompanyChange)
 })
 
-
+// simulate loading
+setTimeout(() => {
+  isLoading.value = false
+}, 2000)
 
 </script>
 

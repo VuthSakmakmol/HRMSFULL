@@ -57,6 +57,7 @@ const i18n = createI18n({
 })
 app.use(i18n)
 
+
 // ✅ Mount app
 app.mount('#app')
 

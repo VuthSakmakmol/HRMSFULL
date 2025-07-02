@@ -407,3 +407,18 @@ exports.updateAttendance = async (req, res) => {
 };
 
 
+// Delete single attendance record
+exports.deleteAttendance = async (req, res) => {
+  try {
+    const company = req.company;
+    const deleted = await Attendance.findOneAndDelete({
+      _id: req.params.id,
+      company,
+    });
+    if (!deleted) return res.status(404).json({ message: 'Attendance record not found' });
+    res.json({ message: '✅ Deleted', data: deleted });
+  } catch (err) {
+    console.error('❌ Delete error:', err.message);
+    res.status(500).json({ message: 'Delete failed', error: err.message });
+  }
+};
