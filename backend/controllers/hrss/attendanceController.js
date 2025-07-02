@@ -2,6 +2,8 @@ const Attendance = require('../../models/hrss/attendances');
 const Employee = require('../../models/hrss/employee');
 const XLSX = require('xlsx');
 
+// ────────────────────────────────────────────────────────────────────────────────
+// Utility functions
 function toMinutes(time) {
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
@@ -31,6 +33,7 @@ function formatExcelDate(value) {
 
 function evaluateStatus(startTime, endTime, shiftType) {
   if (!startTime || !endTime) return 'Absent';
+
   let startMin = toMinutes(startTime);
   let endMin = toMinutes(endTime);
 
@@ -55,12 +58,15 @@ function evaluateStatus(startTime, endTime, shiftType) {
   return 'Absent';
 }
 
+// ────────────────────────────────────────────────────────────────────────────────
+// Import attendance records
 exports.importAttendance = async (req, res) => {
   try {
     const { shiftType, rows } = req.body;
-    const companies = Array.isArray(req.user.company) ? req.user.company : [req.user.company];
+    const company = req.company;
+    console.log('📦 Import Attendance for company:', company);
 
-    if (!companies.length || !rows?.length) {
+    if (!company || !rows?.length) {
       console.error('❌ Missing company or empty rows');
       return res.status(400).json({ message: 'Missing company or empty rows' });
     }
@@ -80,22 +86,17 @@ exports.importAttendance = async (req, res) => {
       const leaveType = row.leaveType?.trim() || null;
       const status = evaluateStatus(startTime, endTime, shiftType);
 
-      let foundEmp = await Employee.findOne({
-        employeeId,
-        company: { $in: companies },
-      });
+      const foundEmp = await Employee.findOne({ employeeId, company });
 
-      const company = foundEmp ? foundEmp.company : companies[0]; // fallback
-
+      const empCompany = foundEmp ? foundEmp.company : company;
       const fullName = foundEmp
         ? `${foundEmp.englishFirstName} ${foundEmp.englishLastName}`
         : 'Unknown';
 
-      // Determine status if absent but leaveType present:
       const finalStatus = (!startTime && !endTime && leaveType) ? 'Leave' : status;
 
       const updated = await Attendance.findOneAndUpdate(
-        { employeeId, date, company },
+        { employeeId, date, company: empCompany },
         {
           employeeId,
           date,
@@ -105,7 +106,7 @@ exports.importAttendance = async (req, res) => {
           status: finalStatus,
           leaveType: finalStatus === 'Leave' ? leaveType : null,
           fullName,
-          company,
+          company: empCompany,
           note: row.note || '',
         },
         { upsert: true, new: true }
@@ -116,7 +117,7 @@ exports.importAttendance = async (req, res) => {
         date: formattedDateStr,
         status: updated.status,
         leaveType: updated.leaveType,
-        company,
+        company: empCompany,
       });
     }
 
@@ -130,12 +131,15 @@ exports.importAttendance = async (req, res) => {
   }
 };
 
+// ────────────────────────────────────────────────────────────────────────────────
+// Update leave permission
 exports.updateLeavePermission = async (req, res) => {
   try {
     const { rows } = req.body;
-    const companies = Array.isArray(req.user.company) ? req.user.company : [req.user.company];
+    const company = req.company;
+    console.log('📅 Update Leave for company:', company);
 
-    if (!companies.length || !Array.isArray(rows)) {
+    if (!company || !Array.isArray(rows)) {
       return res.status(400).json({ message: 'Invalid input' });
     }
 
@@ -152,7 +156,7 @@ exports.updateLeavePermission = async (req, res) => {
 
       const existing = await Attendance.findOne({
         employeeId,
-        company: { $in: companies },
+        company,
         date,
         shiftType,
       });
@@ -163,13 +167,7 @@ exports.updateLeavePermission = async (req, res) => {
         await existing.save();
         result.push({ employeeId, date: formattedDateStr, updated: true });
       } else {
-        // If not exist: create new leave record
-        const emp = await Employee.findOne({
-          employeeId,
-          company: { $in: companies }
-        });
-
-        const company = emp ? emp.company : companies[0];
+        const emp = await Employee.findOne({ employeeId, company });
         const fullName = emp
           ? `${emp.englishFirstName} ${emp.englishLastName}`
           : 'Unknown';
@@ -196,70 +194,208 @@ exports.updateLeavePermission = async (req, res) => {
   }
 };
 
-
+// ────────────────────────────────────────────────────────────────────────────────
+// Fetch attendance
 exports.getAllAttendance = async (req, res) => {
   try {
-    const companies = Array.isArray(req.user.company) ? req.user.company : [req.user.company];
-    const records = await Attendance.find({ company: { $in: companies } }).sort({ date: -1 });
-    res.json(records);
+    const company = req.company;
+    console.log('📄 Fetch All Attendance with employee details for company:', company);
+
+    // Fetch all attendance records for the company
+    const records = await Attendance.find({ company }).sort({ date: -1 });
+
+    // Get all unique employee IDs from the attendance records
+    const employeeIds = [...new Set(records.map(r => r.employeeId))];
+
+    // Fetch all corresponding employees in one query
+    const employees = await Employee.find({
+      employeeId: { $in: employeeIds },
+      company,
+    }).select('employeeId department position line');
+
+    // Create a map for quick lookup
+    const employeeMap = {};
+    employees.forEach(emp => {
+      employeeMap[emp.employeeId] = {
+        department: emp.department || '',
+        position: emp.position || '',
+        line: emp.line || '',
+      };
+    });
+
+    // Attach employee info to each attendance record
+    const enrichedRecords = records.map(record => {
+      const empInfo = employeeMap[record.employeeId] || {};
+      return {
+        ...record.toObject(),
+        department: empInfo.department || '-',
+        position: empInfo.position || '-',
+        line: empInfo.line || '-',
+      };
+    });
+
+    res.json(enrichedRecords);
   } catch (err) {
+    console.error('❌ Fetch error:', err.message);
     res.status(500).json({ message: 'Fetch failed', error: err.message });
   }
 };
+
 
 exports.getDayShiftAttendance = async (req, res) => {
   try {
-    const companies = Array.isArray(req.user.company) ? req.user.company : [req.user.company];
+    const company = req.company;
+    console.log('🌞 Fetch Day Shift Attendance with employee details for company:', company);
+
     const records = await Attendance.find({
       shiftType: 'Day Shift',
-      company: { $in: companies },
+      company,
     }).sort({ date: -1 });
-    res.json(records);
+
+    const employeeIds = [...new Set(records.map(r => r.employeeId))];
+
+    const employees = await Employee.find({
+      employeeId: { $in: employeeIds },
+      company,
+    }).select('employeeId department position line');
+
+    const employeeMap = {};
+    employees.forEach(emp => {
+      employeeMap[emp.employeeId] = {
+        department: emp.department || '',
+        position: emp.position || '',
+        line: emp.line || '',
+      };
+    });
+
+    const enrichedRecords = records.map(record => {
+      const empInfo = employeeMap[record.employeeId] || {};
+      return {
+        ...record.toObject(),
+        department: empInfo.department || '-',
+        position: empInfo.position || '-',
+        line: empInfo.line || '-',
+      };
+    });
+
+    res.json(enrichedRecords);
   } catch (err) {
+    console.error('❌ Day shift fetch error:', err.message);
     res.status(500).json({ message: 'Fetch failed', error: err.message });
   }
 };
 
+
 exports.getNightShiftAttendance = async (req, res) => {
   try {
-    const companies = Array.isArray(req.user.company) ? req.user.company : [req.user.company];
+    const company = req.company;
+    console.log('🌜 Fetch Night Shift Attendance with employee details for company:', company);
+
     const records = await Attendance.find({
       shiftType: 'Night Shift',
-      company: { $in: companies },
+      company,
     }).sort({ date: -1 });
-    res.json(records);
+
+    const employeeIds = [...new Set(records.map(r => r.employeeId))];
+
+    const employees = await Employee.find({
+      employeeId: { $in: employeeIds },
+      company,
+    }).select('employeeId department position line');
+
+    const employeeMap = {};
+    employees.forEach(emp => {
+      employeeMap[emp.employeeId] = {
+        department: emp.department || '',
+        position: emp.position || '',
+        line: emp.line || '',
+      };
+    });
+
+    const enrichedRecords = records.map(record => {
+      const empInfo = employeeMap[record.employeeId] || {};
+      return {
+        ...record.toObject(),
+        department: empInfo.department || '-',
+        position: empInfo.position || '-',
+        line: empInfo.line || '-',
+      };
+    });
+
+    res.json(enrichedRecords);
   } catch (err) {
+    console.error('❌ Night shift fetch error:', err.message);
     res.status(500).json({ message: 'Fetch failed', error: err.message });
   }
 };
+
 
 exports.getPaginatedAttendance = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const companies = Array.isArray(req.user.company) ? req.user.company : [req.user.company];
+    const company = req.company;
+    console.log('📃 Fetch Paginated Attendance with employee details for company:', company);
+
     const skip = (page - 1) * limit;
 
+    // Fetch paginated attendance records
     const [records, total] = await Promise.all([
-      Attendance.find({ company: { $in: companies } }).sort({ date: -1 }).skip(skip).limit(limit),
-      Attendance.countDocuments({ company: { $in: companies } }),
+      Attendance.find({ company }).sort({ date: -1 }).skip(skip).limit(limit),
+      Attendance.countDocuments({ company }),
     ]);
 
+    // Extract unique employee IDs from the paginated records
+    const employeeIds = [...new Set(records.map(r => r.employeeId))];
+
+    // Fetch matching employees
+    const employees = await Employee.find({
+      employeeId: { $in: employeeIds },
+      company,
+    }).select('employeeId department position line');
+
+    // Create lookup map
+    const employeeMap = {};
+    employees.forEach(emp => {
+      employeeMap[emp.employeeId] = {
+        department: emp.department || '',
+        position: emp.position || '',
+        line: emp.line || '',
+      };
+    });
+
+    // Enrich records with employee info
+    const enrichedRecords = records.map(record => {
+      const empInfo = employeeMap[record.employeeId] || {};
+      return {
+        ...record.toObject(),
+        department: empInfo.department || '-',
+        position: empInfo.position || '-',
+        line: empInfo.line || '-',
+      };
+    });
+
     res.json({
-      records,
+      records: enrichedRecords,
       total,
       page: Number(page),
       limit: Number(limit),
     });
   } catch (err) {
+    console.error('❌ Pagination fetch error:', err.message);
     res.status(500).json({ message: 'Pagination failed', error: err.message });
   }
 };
 
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Update single attendance record
 exports.updateAttendance = async (req, res) => {
   try {
-    const companies = Array.isArray(req.user.company) ? req.user.company : [req.user.company];
+    const company = req.company;
+    console.log('✏️ Update Attendance for company:', company);
+
     const updated = await Attendance.findOneAndUpdate(
-      { _id: req.params.id, company: { $in: companies } },
+      { _id: req.params.id, company },
       req.body,
       { new: true }
     );
@@ -269,3 +405,5 @@ exports.updateAttendance = async (req, res) => {
     res.status(500).json({ message: 'Update failed', error: err.message });
   }
 };
+
+

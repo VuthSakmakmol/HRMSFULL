@@ -106,9 +106,12 @@
           <thead>
             <tr>
               <th>#</th>
+              <th>Date</th>
               <th>Employee ID</th>
               <th>Full Name</th>
-              <th>Date</th>
+              <th>Department</th>
+              <th>Position</th>
+              <th>Line</th>
               <th>Time In</th>
               <th>Time Out</th>
               <th>Shift</th>
@@ -121,9 +124,12 @@
           <tbody>
             <tr v-for="(item, index) in filteredAttendance" :key="item._id">
               <td>{{ index + 1 }}</td>
-              <td>{{ item.employeeId }}</td>
-              <td>{{ item.fullName }}</td>
-              <td>{{ formatDate(item.date) }}</td>
+              <td>{{ formatDate(item.date) }}</td>                                <!-- Date column -->
+              <td>{{ item.employeeId }}</td>                                     <!-- Employee ID -->
+              <td>{{ item.fullName }}</td>                                       <!-- Full Name -->
+              <td>{{ item.department || '-' }}</td>
+              <td>{{ item.position || '-' }}</td>
+              <td>{{ item.line || '-' }}</td>
               <td>{{ formatTime(item.timeIn) }}</td>
               <td>{{ formatTime(item.timeOut) }}</td>
               <td>{{ item.shiftType }}</td>
@@ -134,7 +140,6 @@
                 <span v-if="item.status === 'Leave'">{{ item.leaveType || '-' }}</span>
                 <span v-else>-</span>
               </td>
-
             </tr>
           </tbody>
         </table>
@@ -155,6 +160,7 @@ const searchText = ref('')
 const selectedShift = ref('All')
 const selectedDate = ref(null)
 const datePicker = ref(false)
+const employees = ref([])
 
 // leave
 const leaveFile = ref(null)
@@ -174,7 +180,12 @@ const fetchData = async () => {
   }
 }
 
-onMounted(fetchData)
+
+
+
+onMounted(() => {
+  fetchData()
+})
 
 const filteredAttendance = computed(() =>
   attendance.value.filter(row => {
@@ -309,6 +320,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('companyChanged', onCompanyChange)
 })
+
+
+
 </script>
 
 
