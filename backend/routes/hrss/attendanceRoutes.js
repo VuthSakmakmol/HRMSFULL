@@ -10,31 +10,42 @@ const {
   importAttendance,
   updateAttendance,
   updateLeavePermission,
-  deleteAttendance, 
+  deleteAttendance,
+  getAttendanceById,
+  getAttendanceHistoryByEmployeeId,
 } = require('../../controllers/hrss/attendanceController');
 
-// 📥 Daily Attendance Import
+// 📥 Import Attendance
 router.post('/import', authenticate, authorizeCompanyAccess, importAttendance);
 
-// ✅ Match frontend: /update-leave
+// ✅ Update Leave Permission
 router.post('/update-leave', authenticate, authorizeCompanyAccess, updateLeavePermission);
 
-// 📄 Fetch All
+// 📄 Fetch All Attendances
 router.get('/', authenticate, authorizeCompanyAccess, getAllAttendance);
 
-// ☀️ Day Shift
+// ☀️ Fetch Day Shift Attendance
 router.get('/day', authenticate, authorizeCompanyAccess, getDayShiftAttendance);
 
-// 🌙 Night Shift
+// 🌙 Fetch Night Shift Attendance
 router.get('/night', authenticate, authorizeCompanyAccess, getNightShiftAttendance);
 
-// 📃 Paginated
+// 📃 Fetch Paginated Attendance
 router.get('/paginated', authenticate, authorizeCompanyAccess, getPaginatedAttendance);
 
+// 🆕 ✅ Get Single Attendance by Attendance ID (for EvaluatePage)
+router.get('/attendances/:id', authenticate, authorizeCompanyAccess, getAttendanceById);
 
-// ✏️ Update Attendance Row (edit)
+// 🆕 ✅ Get Full Attendance History by Employee ID (for EvaluatePage)
+router.get('/history/:employeeId', authenticate, authorizeCompanyAccess, getAttendanceHistoryByEmployeeId);
+
+// ✏️ Update Attendance Row (general edit)
 router.put('/:id', authenticate, authorizeCompanyAccess, updateAttendance);
 
+// 🗑️ Delete Attendance Row
 router.delete('/:id', authenticate, authorizeCompanyAccess, deleteAttendance);
+
+
+
 
 module.exports = router;

@@ -32,31 +32,39 @@ function formatExcelDate(value) {
 }
 
 function evaluateStatus(startTime, endTime, shiftType) {
-  if (!startTime || !endTime) return 'Absent';
+  if (!startTime || !endTime) return { status: 'Absent', overtimeMinutes: 0 };
 
   let startMin = toMinutes(startTime);
   let endMin = toMinutes(endTime);
 
+  let overtimeMinutes = 0;
+
   if (shiftType === 'Day Shift') {
     const expectedStart = toMinutes('07:00');
     const expectedEnd = toMinutes('16:00');
-    if (startMin > expectedStart + 15) return 'Late';
-    if (endMin > expectedEnd + 1) return 'Overtime';
-    return 'OnTime';
+
+    const late = startMin > expectedStart + 15;
+    if (endMin > expectedEnd + 1) overtimeMinutes = endMin - (expectedEnd + 1);
+
+    return { status: late ? 'Late' : 'OnTime', overtimeMinutes };
   }
 
   if (shiftType === 'Night Shift') {
     const expectedStart = toMinutes('18:00');
-    const expectedEnd = toMinutes('03:00') + 1440;
+    const expectedEnd = toMinutes('03:00') + 1440; // Night shift spans midnight
+
     if (startMin < expectedStart) startMin += 1440;
     if (endMin < expectedStart) endMin += 1440;
-    if (startMin > expectedStart + 15) return 'Late';
-    if (endMin > expectedEnd + 1) return 'Overtime';
-    return 'OnTime';
+
+    const late = startMin > expectedStart + 15;
+    if (endMin > expectedEnd + 1) overtimeMinutes = endMin - (expectedEnd + 1);
+
+    return { status: late ? 'Late' : 'OnTime', overtimeMinutes };
   }
 
-  return 'Absent';
+  return { status: 'Absent', overtimeMinutes: 0 };
 }
+
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Import attendance records
@@ -96,7 +104,9 @@ exports.importAttendance = async (req, res) => {
           const timeIn = parseTimeToDate(date, startTime);
           const timeOut = parseTimeToDate(date, endTime);
           const leaveType = row.leaveType?.trim() || null;
-          const status = evaluateStatus(startTime, endTime, shiftType);
+
+          const { status, overtimeMinutes } = evaluateStatus(startTime, endTime, shiftType);
+          const overtimeHours = overtimeMinutes > 0 ? parseFloat((overtimeMinutes / 60).toFixed(2)) : 0;
 
           const foundEmp = await Employee.findOne({ employeeId, company });
           const empCompany = foundEmp ? foundEmp.company : company;
@@ -116,6 +126,8 @@ exports.importAttendance = async (req, res) => {
               timeOut,
               status: finalStatus,
               leaveType: finalStatus === 'Leave' ? leaveType : null,
+              overtimeHours,
+              riskStatus: 'None', // default risk status, updated below if needed
               fullName,
               company: empCompany,
               department: foundEmp?.department || '',
@@ -126,15 +138,14 @@ exports.importAttendance = async (req, res) => {
             { upsert: true, new: true }
           );
 
-          // ──────────────────────────────
-          // 🚨 Consecutive absence check
+          // 🚨 Consecutive absence logic for NearlyAbandon / Abandon
           if (updated.status === 'Absent') {
             const currentDate = new Date(updated.date);
             let consecutiveAbsent = 1;
 
-            for (let i = 1; i <= 5; i++) {
+            for (let i = 1; i <= 10; i++) {
               const prevDate = new Date(currentDate);
-              prevDate.setDate(prevDate.getDate() - i);
+              prevDate.setDate(currentDate.getDate() - i);
 
               const prevAttendance = await Attendance.findOne({
                 employeeId,
@@ -148,7 +159,7 @@ exports.importAttendance = async (req, res) => {
               if (prevAttendance?.status === 'Absent') {
                 consecutiveAbsent++;
               } else {
-                break;
+                break; // streak broken → reset counter
               }
             }
 
@@ -156,7 +167,7 @@ exports.importAttendance = async (req, res) => {
 
             if (consecutiveAbsent >= 6) {
               const abandonStart = new Date(currentDate);
-              abandonStart.setDate(currentDate.getDate() - 5);
+              abandonStart.setDate(currentDate.getDate() - 5); // last 6 days
               await Attendance.updateMany(
                 {
                   employeeId,
@@ -164,7 +175,7 @@ exports.importAttendance = async (req, res) => {
                   date: { $gte: abandonStart, $lte: currentDate },
                   status: 'Absent',
                 },
-                { status: 'Abandon' }
+                { riskStatus: 'Abandon' }
               );
               console.log(`🚨 ${employeeId} marked as Abandon`);
             } else if (consecutiveAbsent >= 3) {
@@ -177,21 +188,18 @@ exports.importAttendance = async (req, res) => {
                   date: { $gte: nearlyStart, $lte: currentDate },
                   status: 'Absent',
                 },
-                { status: 'NearlyAbandon' }
+                { riskStatus: 'NearlyAbandon' }
               );
               console.log(`⚠️ ${employeeId} marked as Nearly Abandon`);
             }
           }
 
-          // ──────────────────────────────
-          // ✅ Handle comeback reset logic
-          if (['OnTime', 'Late', 'Overtime'].includes(updated.status)) {
+          // ✅ Comeback handling: detect Risk on return after NearlyAbandon/Abandon
+          if (['OnTime', 'Late'].includes(updated.status)) {
             const currentDate = new Date(updated.date);
-            let streakDays = [];
-            let wasInRisk = false; // detect if they were NearlyAbandon or Abandon before comeback
+            let wasInRisk = false;
 
-            // walk backward up to 30 days to find the last non-absent day
-            for (let i = 1; i <= 30; i++) {
+            for (let i = 1; i <= 10; i++) {
               const prevDate = new Date(currentDate);
               prevDate.setDate(currentDate.getDate() - i);
 
@@ -204,46 +212,29 @@ exports.importAttendance = async (req, res) => {
                 },
               });
 
-              if (prevAttendance?.status === 'NearlyAbandon' || prevAttendance?.status === 'Abandon') {
+              if (prevAttendance?.riskStatus === 'NearlyAbandon' || prevAttendance?.riskStatus === 'Abandon') {
                 wasInRisk = true;
-                streakDays.push(prevAttendance.date);
-              } else if (prevAttendance?.status === 'Absent') {
-                streakDays.push(prevAttendance.date);
-              } else {
-                break; // streak ends at first day that is not Absent/NearlyAbandon/Abandon
+                break;
               }
             }
 
-            if (streakDays.length > 0) {
-              const earliest = new Date(streakDays[streakDays.length - 1]);
-              const resetResult = await Attendance.updateMany(
-                {
-                  employeeId,
-                  company,
-                  date: { $gte: earliest, $lte: currentDate },
-                  status: { $in: ['NearlyAbandon', 'Abandon'] },
-                },
-                { status: updated.status }
-              );
-              console.log(`✅ Cleared ${resetResult.modifiedCount} NearlyAbandon/Abandon records for ${employeeId} from ${earliest.toDateString()} to ${currentDate.toDateString()}`);
-            }
-
-            // ✅ If employee was in risk streak, mark current day as Risk so manager sees it
             if (wasInRisk) {
-              updated.status = 'Risk';
+              updated.riskStatus = 'Risk';
               await updated.save();
               console.log(`⚠️ Marked ${employeeId} as Risk on comeback date ${updated.date.toDateString()}`);
+            } else {
+              updated.riskStatus = 'None'; // normal comeback → reset risk
+              await updated.save();
             }
           }
-
-
-          // ──────────────────────────────
 
           return {
             employeeId,
             date: formattedDateStr,
             status: updated.status,
             leaveType: updated.leaveType,
+            overtimeHours: updated.overtimeHours,
+            riskStatus: updated.riskStatus,
             company: empCompany,
           };
         } catch (err) {
@@ -574,3 +565,31 @@ exports.deleteAttendance = async (req, res) => {
     res.status(500).json({ message: 'Delete failed', error: err.message });
   }
 };
+
+
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Fetch a single attendance by ID
+exports.getAttendanceById = async (req, res) => {
+  try {
+    const attendance = await Attendance.findById(req.params.id);
+    if (!attendance) return res.status(404).json({ message: 'Attendance not found' });
+    res.json(attendance);
+  } catch (err) {
+    console.error('❌ getAttendanceById error:', err);
+    res.status(500).json({ message: 'Failed to fetch attendance', error: err.message });
+  }
+};
+
+
+// In attendanceController.js
+exports.getAttendanceHistoryByEmployeeId = async (req, res) => {
+  try {
+    const records = await Attendance.find({ employeeId: req.params.employeeId }).sort({ date: -1 });
+    res.json(records);
+  } catch (error) {
+    console.error('❌ getAttendanceHistoryByEmployeeId error:', error);
+    res.status(500).json({ message: 'Error fetching attendance history' });
+  }
+};
+

@@ -13,6 +13,7 @@ const userController = require('../../controllers/userController'); // ✅ FIXED
 const {
   getAllEmployees,
   getEmployeeById,
+  getEmployeeByEmployeeId, // ✅ NEW controller
   createEmployee,
   updateEmployee,
   deleteEmployee,
@@ -58,19 +59,14 @@ router.post('/import-excel', authenticate, authorizeCompanyAccess, enforceCrudPe
       try {
         // Fix date fields
         const dateFields = [
-          'dob',
-          'joinDate',
-          'idCardExpireDate',
-          'passportExpireDate',
-          'visaExpireDate',
-          'medicalCheckDate',
+          'dob', 'joinDate', 'idCardExpireDate', 'passportExpireDate',
+          'visaExpireDate', 'medicalCheckDate',
         ];
-
         dateFields.forEach((field) => {
           if (item[field]) item[field] = excelDateToJSDate(item[field]);
         });
 
-        const emp = new Employee({ ...item, company }); // ✅ trusted company
+        const emp = new Employee({ ...item, company });
         await emp.validate();
         await emp.save();
         inserted.push(emp);
@@ -91,17 +87,30 @@ router.post('/import-excel', authenticate, authorizeCompanyAccess, enforceCrudPe
 });
 
 // ────────────────────────────────────────────────────────────────────────────────
-// Employee CRUD
+// Employee CRUD & APIs
+
+// 📧 Get emails of all users
 router.get('/emails', authenticate, authorize(['GeneralManager', 'Manager']), authorizeCompanyAccess, userController.getUserEmails);
+
+// 📄 Get all employees
 router.get('/', authenticate, authorizeCompanyAccess, getAllEmployees);
+
+// ✅ NEW: Get employee by employeeId (e.g., EMP003) — must be BEFORE '/:id' route!
+router.get('/by-employee-id/:employeeId', authenticate, authorizeCompanyAccess, getEmployeeByEmployeeId);
+
+// 📄 Get employee by MongoDB _id
 router.get('/:id', authenticate, authorizeCompanyAccess, getEmployeeById);
 
+// ➕ Create employee
 router.post('/', authenticate, authorizeCompanyAccess, enforceCrudPermissions, createEmployee);
+
+// ✏️ Update employee
 router.put('/:id', authenticate, authorizeCompanyAccess, enforceCrudPermissions, updateEmployee);
+
+// 🗑️ Delete employee
 router.delete('/:id', authenticate, authorizeCompanyAccess, enforceCrudPermissions, deleteEmployee);
 
-// ────────────────────────────────────────────────────────────────────────────────
-// Optional legacy preview/confirm import endpoints (JSON-based)
+// 📥 Optional legacy preview/confirm import endpoints (JSON-based)
 router.post('/import-preview', authenticate, authorizeCompanyAccess, enforceCrudPermissions, previewImport);
 router.post('/import-confirmed', authenticate, authorizeCompanyAccess, enforceCrudPermissions, confirmImport);
 

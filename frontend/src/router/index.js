@@ -38,6 +38,10 @@ const routes = [
     { path: 'employees', component: () => import('@/views/hrss/EmployeeList.vue') },
     { path: 'addemployee', component: () => import('@/views/hrss/AddEmployee.vue') },
     { path: 'attendance', component: () => import('@/views/hrss/EmployeeAttendance.vue') },
+    { path: 'evaluate/:id', component: () => import('@/views/hrss/EvaluatePage.vue') },
+
+
+    
 
     // Main Employee Dashboard
     { path: 'dashboard', component: () => import('@/views/hrss/dashboard/employees/EmployeeDashboard.vue') },

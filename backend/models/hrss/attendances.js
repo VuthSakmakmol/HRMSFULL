@@ -17,12 +17,32 @@ const attendanceSchema = new mongoose.Schema({
   lateMinutes: { type: Number, default: 0 },
   department: { type: String, default: '' }, 
   position: { type: String, default: '' },   
-  line: { type: String, default: '' },       
+  line: { type: String, default: '' },    
 
   status: {
     type: String,
-    enum: ['OnTime', 'Late', 'Absent', 'NearlyAbandon', 'Abandon', 'Overtime', 'Leave'], 
-    default: 'Absent'
+    enum: ['OnTime', 'Late', 'Absent', 'Leave'],
+    default: 'Absent',
+  },
+  overtimeHours: {
+    type: Number,
+    default: 0, // store in hours (e.g., 1.5 for 1 hour 30 minutes)
+  },
+
+  riskStatus: {
+    type: String,
+    enum: [
+      'None',          // default normal state
+      'NearlyAbandon', // 3-5 consecutive Absents
+      'Abandon',       // 6+ consecutive Absents
+      'Risk',          // returned after risk period but not yet evaluated
+    ],
+    default: 'None',
+  },
+  evaluate: {
+    type: String,
+    enum: ['None', 'Evaluate1', 'Evaluate2', 'Evaluate3'],
+    default: 'None'
   },
 
   leaveType: {

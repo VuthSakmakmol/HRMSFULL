@@ -37,6 +37,16 @@
 
     <v-row class="mb-4" align-center="center" justify="start" dense>
       <v-col cols="auto">
+        <v-btn
+          color="secondary"
+          :disabled="selectedRows.length !== 1"
+          @click="startEvaluation"
+        >
+          <v-icon start>mdi-account-check</v-icon> Evaluate
+        </v-btn>
+      </v-col>
+
+      <v-col cols="auto">
         <v-btn color="primary" :disabled="selectedRows.length !== 1" @click="editSelected">
           <v-icon start>mdi-pencil</v-icon> Edit
         </v-btn>
@@ -137,6 +147,17 @@
             label="Status"
           />
           <v-text-field v-if="editForm.status === 'Leave'" v-model="editForm.leaveType" label="Type of Leave" />
+          <v-select
+            v-model="editForm.riskStatus"
+            :items="['None', 'NearlyAbandon', 'Abandon', 'Risk', 'Evaluated1', 'Evaluated2']"
+            label="Risk Status"
+          />
+
+          <v-text-field
+            v-model="editForm.overtimeHours"
+            type="number"
+            label="Overtime Hours"
+          />
           <v-text-field v-model="editForm.note" label="Note" />
         </v-card-text>
         <v-card-actions>
@@ -173,6 +194,8 @@
               <th>Time Out</th>
               <th>Shift</th>
               <th>Status</th>
+              <th>Risk Status</th>
+              <th>Evaluate</th>
               <th>Late By</th>
               <th>Overtime</th>
               <th>Type of Leave</th>
@@ -200,6 +223,8 @@
               <td>{{ formatTime(item.timeOut) }}</td>
               <td>{{ item.shiftType }}</td>
               <td><v-chip :color="statusColor(item.status)" dark>{{ formatStatus(item.status) }}</v-chip></td>
+              <td><v-chip :color="riskColor(item.riskStatus)" dark>{{ formatRiskStatus(item.riskStatus) }}</v-chip></td>
+              <td><v-chip :color="evaluateColor(item.evaluate)" dark>{{ formatEvaluate(item.evaluate) }}</v-chip></td>
               <td>{{ getLateMinutes(item.timeIn, item.shiftType) }}</td>
               <td>{{ getOvertimeHours(item.timeOut, item.shiftType) }}</td>
               <td>
@@ -252,7 +277,9 @@ import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { DotLottieVue } from '@lottiefiles/dotlottie-vue'
 import Swal from 'sweetalert2'
+import { useRouter } from 'vue-router';
 
+const router = useRouter();
 const excelFile = ref(null)
 const attendance = ref([])
 const searchText = ref('')
@@ -277,8 +304,11 @@ const pageSize = ref('50');
 
 // animation
 const animateRow = (status) => {
-  return status === 'NearlyAbandon' ? 'shake-animation' : '';
+  if (status === 'NearlyAbandon' || status === 'Abandon') return 'shake-animation';
+  if (status === 'Risk') return 'risk-highlight';
+  return '';
 };
+
 
 // leave
 const leaveFile = ref(null)
@@ -347,17 +377,79 @@ const formatTime = val => (val ? dayjs(val).format('HH:mm') : '-')
 
 const statusColor = status => {
   switch (status) {
-    case 'OnTime': return 'green'
-    case 'Late': return 'orange'
-    case 'Overtime': return 'purple'
-    case 'Absent': return 'red'
-    case 'Leave': return 'blue'
-    default: return 'grey'
+    case 'OnTime': return 'green';
+    case 'Late': return 'orange';
+    case 'Overtime': return 'purple';
+    case 'Absent': return 'red';
+    case 'Leave': return 'blue';
+    case 'NearlyAbandon': return 'yellow darken-2';   // bright warning
+    case 'Abandon': return 'deep-orange accent-4';    // urgent red
+    case 'Risk': return 'pink accent-4';              // eye-catching pink
+    default: return 'grey';
   }
-}
+};
 
-const formatStatus = status =>
-  status === 'OnTime' ? 'On Time' : (status === 'Leave' ? 'Permission' : status)
+
+const formatStatus = status => {
+  switch (status) {
+    case 'OnTime': return 'On Time';
+    case 'Late': return 'Late';
+    case 'Overtime': return 'Overtime';
+    case 'Absent': return 'Absent';
+    case 'Leave': return 'Permission';
+    case 'NearlyAbandon': return 'Nearly Abandon';
+    case 'Abandon': return 'Abandon';
+    case 'Risk': return 'Risk on Comeback';
+    default: return status;
+  }
+};
+
+// Risk Status
+const riskColor = (riskStatus) => {
+  switch (riskStatus) {
+    case 'NearlyAbandon': return 'yellow darken-2';
+    case 'Abandon': return 'deep-orange accent-4';
+    case 'Risk': return 'pink accent-4';
+    case 'Evaluated1': return 'green darken-1';
+    case 'Evaluated2': return 'blue darken-2';
+    default: return 'grey';
+  }
+};
+
+const formatRiskStatus = (riskStatus) => {
+  if (!riskStatus || riskStatus === 'None') return '-';
+  if (/^Evaluated/.test(riskStatus)) return riskStatus.replace('Evaluated', 'Evaluated (');
+  return riskStatus;
+};
+
+// Evaluate
+
+const startEvaluation = () => {
+  if (selectedRows.value.length === 1) {
+    const id = selectedRows.value[0];
+    router.push(`/hrss/evaluate/${id}`);
+  } else {
+    alert('Please select exactly one record to evaluate.');
+  }
+};
+
+
+
+const evaluateColor = (evaluate) => {
+  switch (evaluate) {
+    case 'Evaluate1': return 'green darken-1';
+    case 'Evaluate2': return 'blue darken-2';
+    case 'Evaluate3': return 'purple darken-3';
+    default: return 'grey';
+  }
+};
+
+const formatEvaluate = (evaluate) => {
+  if (!evaluate || evaluate === 'None') return '-';
+  return evaluate.replace('Evaluate', 'Evaluation ');
+};
+
+
 
 const getLateMinutes = (timeIn, shiftType) => {
   if (!timeIn) return '-'
@@ -617,6 +709,8 @@ const submitEdit = async () => {
     const payload = {
       status: editForm.value.status,
       leaveType: editForm.value.status === 'Leave' ? editForm.value.leaveType : '',
+      riskStatus: editForm.value.riskStatus || 'None',
+      overtimeHours: editForm.value.overtimeHours || 0,
       note: editForm.value.note,
     };
     const res = await axios.put(`/attendance/${editForm.value._id}`, payload);
@@ -712,7 +806,18 @@ setTimeout(() => {
 
 .shake-animation {
   animation: shake 0.6s ease-in-out infinite;
-  background-color: #fff3cd; /* subtle yellow highlight */
+  background-color: #df7f5c; /* subtle yellow highlight */
 }
+
+@keyframes pulse {
+  0% { background-color: #ffe6eb; }
+  50% { background-color: #ffc2d4; }
+  100% { background-color: #ffe6eb; }
+}
+
+.risk-highlight {
+  animation: pulse 2s infinite;
+}
+
 
 </style>

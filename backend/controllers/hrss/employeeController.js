@@ -155,6 +155,26 @@ exports.getEmployeeById = async (req, res) => {
 };
 
 // ────────────────────────────────────────────────────────────────────────────────
+// Get single employee by employeeId (EMP003 etc.)
+exports.getEmployeeByEmployeeId = async (req, res) => {
+  try {
+    const company = req.company;
+    const employeeId = req.params.employeeId?.trim();
+
+    if (!employeeId) return res.status(400).json({ error: 'employeeId is required' });
+
+    const employee = await Employee.findOne({ employeeId, company });
+    if (!employee) return res.status(404).json({ error: 'Employee not found' });
+
+    res.json(employee);
+  } catch (err) {
+    console.error('[GET EMPLOYEE BY EMPLOYEEID ERROR]', err);
+    res.status(500).json({ error: 'Failed to fetch employee by employeeId' });
+  }
+};
+
+
+// ────────────────────────────────────────────────────────────────────────────────
 // Update employee
 exports.updateEmployee = async (req, res) => {
   try {
