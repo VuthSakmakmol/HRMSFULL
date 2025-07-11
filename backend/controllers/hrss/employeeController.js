@@ -1,5 +1,5 @@
 const Employee = require('../../models/hrss/employee');
-const EmployeeImportError = require('../../models/hrss/employeeImportError');
+const EmployeeImportError = require('../../models/hrss/EmployeeImportError');
 const { logActivity } = require('../../utils/logActivity');
 
 // ────────────────────────────────────────────────────────────────────────────────

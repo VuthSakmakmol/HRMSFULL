@@ -44,6 +44,7 @@ const attendanceSchema = new mongoose.Schema({
     enum: ['None', 'Evaluate1', 'Evaluate2', 'Evaluate3'],
     default: 'None'
   },
+  
 
   leaveType: {
     type: String,

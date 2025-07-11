@@ -469,10 +469,8 @@ const goToCandidates = (job) => {
 }
 
 
-const paginatedRequisitions = computed(() => {
-  const start = (page.value - 1) * itemsPerPage.value
-  return filteredRequisitions.value.slice(start, start + itemsPerPage.value)
-})
+const paginatedRequisitions = computed(() => requisitions.value)
+
 
 
 const getVacantPercent = (job) => {

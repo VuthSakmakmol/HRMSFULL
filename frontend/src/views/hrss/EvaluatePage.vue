@@ -100,10 +100,19 @@
               </v-list>
               <div v-else class="text-grey">No attendance history found.</div>
             </div>
+
+            <v-pagination
+              v-if="totalPages > 1"
+              v-model="currentPage"
+              :length="totalPages"
+              @input="fetchAttendanceHistory"
+              class="mt-3"
+            />
           </v-card-text>
         </v-card>
       </v-col>
     </v-row>
+
   </v-container>
 </template>
 
@@ -114,6 +123,9 @@ import { useRoute, useRouter } from 'vue-router';
 import api from '@/utils/axios';
 import dayjs from 'dayjs';
 
+// ─────────────────────────────────────────────────────────────
+// ⛳ Router and reactive state setup
+// ─────────────────────────────────────────────────────────────
 const route = useRoute();
 const router = useRouter();
 
@@ -125,61 +137,19 @@ const evaluations = ref([]);
 const evaluationStep = ref('');
 const evaluationReason = ref('');
 
-async function loadData() {
-  try {
-    const attendanceRes = await api.get(`/attendance/attendances/${route.params.id}`);
-    attendance.value = attendanceRes.data;
+const totalPages = ref(1);        // ✅ For pagination
+const currentPage = ref(1);       // ✅ Tracks current page
 
-    const empId = attendance.value.employeeId;
-    if (!empId || empId === 'undefined') {
-      throw new Error('Employee ID missing in attendance record!');
-    }
-
-    const empRes = await api.get(`/employees/by-employee-id/${empId}`);
-    employee.value = empRes.data;
-
-    const historyRes = await api.get(`/attendance/history/${empId}`);
-    attendanceHistory.value = historyRes.data;
-
-    const evalRes = await api.get(`/evaluations/${empId}`);
-    evaluations.value = evalRes.data;
-
-  } catch (error) {
-    console.error('❌ Fetch error:', error);
-    alert('Error fetching data.');
-  }
-}
-
-onMounted(loadData);
-
-async function submitEvaluation() {
-  if (!evaluationStep.value || !evaluationReason.value) {
-    alert('Please fill in both evaluation step and reason.');
-    return;
-  }
-
-  try {
-    const empId = attendance.value.employeeId;
-    const payload = {
-      employeeId: empId,
-      step: evaluationStep.value,
-      reason: evaluationReason.value,
-      date: new Date(),
-      evaluator: 'System Admin' // Replace with actual logged-in user if available
-    };
-    await api.post(`/evaluations`, payload);
-    alert('Evaluation submitted successfully!');
-    await loadData();
-  } catch (error) {
-    console.error('❌ Submit error:', error);
-    alert('Failed to submit evaluation.');
-  }
-}
-
+// ─────────────────────────────────────────────────────────────
+// 📌 Utility: Format date
+// ─────────────────────────────────────────────────────────────
 function formatDate(date) {
   return date ? dayjs(date).format('YYYY-MM-DD') : '-';
 }
 
+// ─────────────────────────────────────────────────────────────
+// 🧾 Employee field display logic
+// ─────────────────────────────────────────────────────────────
 const employeeFields = emp => [
   { label: 'Employee ID', value: emp.employeeId },
   { label: 'Khmer Name', value: `${emp.khmerFirstName} ${emp.khmerLastName}` },
@@ -201,4 +171,87 @@ const employeeFields = emp => [
   { label: 'Religion', value: emp.religion },
   { label: 'Remark', value: emp.remark },
 ];
+
+// ─────────────────────────────────────────────────────────────
+// 🔄 Load all data: attendance, employee, evaluation, history
+// ─────────────────────────────────────────────────────────────
+async function loadData() {
+  try {
+    // 1. Get attendance by ID
+    const attendanceRes = await api.get(`/attendance/attendances/${route.params.id}`);
+    attendance.value = attendanceRes.data;
+
+    const empId = attendance.value.employeeId;
+    if (!empId || empId === 'undefined') {
+      throw new Error('Employee ID missing in attendance record!');
+    }
+
+    // 2. Get employee info
+    const empRes = await api.get(`/employees/by-employee-id/${empId}`);
+    employee.value = empRes.data;
+
+    // 3. Get evaluations
+    const evalRes = await api.get(`/evaluations/${empId}`);
+    evaluations.value = evalRes.data;
+
+    // 4. Get paginated attendance history
+    await fetchAttendanceHistory();
+
+  } catch (error) {
+    console.error('❌ Fetch error:', error);
+    alert('Error fetching data.');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 📥 Submit evaluation form
+// ─────────────────────────────────────────────────────────────
+async function submitEvaluation() {
+  if (!evaluationStep.value || !evaluationReason.value) {
+    alert('Please fill in both evaluation step and reason.');
+    return;
+  }
+
+  try {
+    const empId = attendance.value.employeeId;
+    const payload = {
+      employeeId: empId,
+      step: evaluationStep.value,
+      reason: evaluationReason.value,
+      date: new Date(),
+      evaluator: 'System Admin', // Replace with logged-in user if available
+    };
+    await api.post(`/evaluations`, payload);
+    alert('Evaluation submitted successfully!');
+    await loadData(); // refresh everything after submit
+  } catch (error) {
+    console.error('❌ Submit error:', error);
+    alert('Failed to submit evaluation.');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 📜 Fetch paginated attendance history for this employee
+// ─────────────────────────────────────────────────────────────
+const fetchAttendanceHistory = async () => {
+  const empId = attendance.value.employeeId;
+  if (!empId) return;
+
+  try {
+    const res = await api.get(`/attendance/history/${empId}`, {
+      params: { page: currentPage.value, limit: 20 }
+    });
+    attendanceHistory.value = res.data.records;
+    totalPages.value = res.data.totalPages; // ✅ FIXED typo from `totalPage`
+  } catch (err) {
+    console.error('❌ History fetch error:', err.message);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// 🚀 Load everything on mount
+// ─────────────────────────────────────────────────────────────
+onMounted(loadData); // ✅ Only one mount call needed
+
 </script>
+

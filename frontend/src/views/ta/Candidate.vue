@@ -299,6 +299,7 @@ import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
 import socket from '@/utils/socket' // ✅ Use shared socket instance
+import readXlsxFile from 'read-excel-file'
 
 const activeTab = ref('White Collar')
 const showForm = ref(false)
@@ -311,6 +312,7 @@ const route = useRoute()
 const socketListenerAdded = ref(false)
 const totalCandidates = ref(0)
 const formSection = ref(null)
+const jobTitleOptions = ref([])
 
 
 // ================= Web Socket ========================
@@ -581,19 +583,36 @@ const getStageClass = (date) => { return date ? 'stage-btn green-btn' : 'stage-b
 const formatDate = (val) => (!val ? '-' : dayjs(val).format('DD-MMM-YY').toUpperCase())
 const daysBetween = (end, start) => dayjs(end).diff(dayjs(start), 'day')
 
-const fetchJobRequisitions = async () => {
+const fetchJobRequisitions = async (includeAll = false) => {
   try {
-    const user = JSON.parse(localStorage.getItem('user'))
-    const selectedCompany = localStorage.getItem('company')
-    const company = user?.role === 'GeneralManager' ? selectedCompany : user?.company
-    if (!company) throw new Error('Missing company info')
+    const type = activeTab.value === 'White Collar' ? 'White Collar' : 'Blue Collar'
+    const subType = activeTab.value === 'Blue Collar Sewer'
+      ? 'Sewer'
+      : activeTab.value === 'Blue Collar Non-Sewer'
+      ? 'Non-Sewer'
+      : undefined
 
-    const res = await axios.get(`/job-requisitions?company=${company}&all=true`)
+    const params = new URLSearchParams()
+    params.append('type', type)
+    if (subType) params.append('subType', subType)
+    if (includeAll) params.append('all', 'true')
+
+    const res = await axios.get(`/job-requisitions?${params.toString()}`)
     jobRequisitions.value = res.data.requisitions || []
-  } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Failed to fetch requisitions', text: err.message })
+
+    const titles = [...new Set(jobRequisitions.value.map(j => j.jobTitle))].filter(Boolean)
+    jobTitleOptions.value = titles
+
+  } catch (error) {
+    console.error('Error fetching requisitions:', error)
+    Swal.fire({
+      icon: 'error',
+      title: 'Failed to load job requisitions',
+      text: error.response?.data?.message || error.message
+    })
   }
 }
+
 
 
 // === UI & Filters ===
@@ -615,8 +634,8 @@ const filteredJobTitleOptions = computed(() => {
 
 
 
-const exportToExcel = () => {
-  const data = filteredCandidates.value.map((c, index) => ({
+const exportToExcel = () => { 
+  const data = candidates.value.map((c, index) => ({
     No: index + 1,
     CandidateID: c.candidateId,
     JobID: c.jobRequisitionCode,
@@ -645,78 +664,101 @@ const exportToExcel = () => {
   const blob = new Blob([excelBuffer], { type: 'application/octet-stream' })
   saveAs(blob, 'Candidates.xlsx')
 }
+
+
 const handleImportExcel = async (event) => {
-  const file = event.target.files[0]
-  if (!file) return
-
   try {
-    const data = await file.arrayBuffer()
-    const workbook = XLSX.read(data, { type: 'array' })
-    const sheet = workbook.Sheets[workbook.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(sheet)
+    const file = event.target.files[0]
+    if (!file) return
 
-    const user = JSON.parse(localStorage.getItem('user'))
-    const selectedCompany = localStorage.getItem('company')
-    const company = user?.role === 'GeneralManager' ? selectedCompany : user?.company
+    await fetchJobRequisitions(true) // ✅ Refresh job requisitions before import
 
-    if (!company) {
-      Swal.fire({ icon: 'error', title: 'Missing company in localStorage' })
+    const data = await readXlsxFile(file)
+    const headers = data[0]
+    const rows = data.slice(1)
+
+    // ✅ Match headers from your actual Excel file
+    const requiredHeaders = ['FullName', 'JobTitle', 'Recruiter', 'Source']
+    const isValid = requiredHeaders.every(h => headers.includes(h))
+
+    if (!isValid) {
+      Swal.fire('❌ Invalid Format', 'Excel must contain headers: FullName, JobTitle, Recruiter, Source', 'error')
       return
     }
 
-    const imported = []
+    let imported = 0
+    let skipped = 0
 
-    for (const [index, row] of rows.entries()) {
-      const matchedJob = jobRequisitions.value.find(j => j.jobRequisitionId === row.JobID)
-      if (!matchedJob) {
-        console.warn(`Row ${index + 1}: No matching job found for JobID: ${row.JobID}`)
+    for (const row of rows) {
+      const rowData = Object.fromEntries(headers.map((h, i) => [h, row[i]]))
+
+      const jobTitle = rowData['JobTitle']
+      const matchedRequisitions = jobRequisitions.value
+        .filter(jr => jr.jobTitle === jobTitle && jr.status === 'Vacant')
+        .sort((a, b) => a.offerCount - b.offerCount)
+
+      if (!matchedRequisitions.length) {
+        skipped++
+        console.warn(`⚠️ No vacant job requisition for title: ${jobTitle}`)
+        continue
+      }
+
+      const bestMatch = matchedRequisitions[0]
+      const target = bestMatch.targetCandidates || 0
+      const currentOffer = bestMatch.offerCount || 0
+
+      if (currentOffer >= target) {
+        skipped++
+        console.warn(`⛔ Offer full for: ${jobTitle}`)
         continue
       }
 
       const payload = {
-        fullName: row.FullName || '',
-        recruiter: row.Recruiter || '',
-        applicationSource: row.Source || '',
-        jobRequisitionId: matchedJob._id,
-        jobRequisitionCode: matchedJob.jobRequisitionId,
-        department: matchedJob.departmentName,
-        jobTitle: matchedJob.jobTitle,
-        company,
-        type: matchedJob.type,
-        subType: matchedJob.subType || null,
+        fullName: rowData['FullName'] || '',
+        recruiter: rowData['Recruiter'] || '',
+        applicationSource: rowData['Source'] || '',
+        jobRequisitionId: bestMatch._id,
+        jobRequisitionCode: bestMatch.jobRequisitionId,
+        company: bestMatch.company,
+        department: bestMatch.departmentName,
+        jobTitle: bestMatch.jobTitle,
+        type: bestMatch.type,
+        subType: bestMatch.subType || 'General',
         progressDates: {
-          Application: row.Application || new Date(),
-          ManagerReview: row.ManagerReview || null,
-          Interview: row.Interview || null,
-          JobOffer: row.JobOffer || null,
-          Hired: row.Hired || null,
-          Onboard: row.Onboard || null
-        }
+          Application: new Date().toISOString()
+        },
+        hireDecision: 'Candidate in Process'
       }
 
       try {
-        const res = await axios.post('/candidates', payload)
-        imported.push(res.data)
+        await axios.post('/candidates', payload)
+        imported++
       } catch (err) {
-        console.error(`❌ Import row ${index + 1} failed:`, err.response?.data || err.message)
+        console.error('❌ Import error for candidate:', rowData['FullName'], err)
+        skipped++
       }
     }
 
-    await fetchCandidates()
-
     Swal.fire({
       icon: 'success',
-      title: `✅ Imported ${imported.length} candidates to database`,
-      timer: 2000,
-      showConfirmButton: false
+      title: '✅ Import Complete',
+      html: `Imported: <b>${imported}</b><br>Skipped: <b>${skipped}</b>`,
+      allowEnterKey: true
     })
-  } catch (err) {
-    console.error(err)
-    Swal.fire({ icon: 'error', title: 'Import failed', text: err.message })
-  }
 
-  event.target.value = ''
+    await fetchCandidates()
+    await fetchJobRequisitions(true) // ✅ Refresh job requisitions after import
+
+  } catch (err) {
+    console.error('❌ Excel Import Error:', err)
+    Swal.fire('Import Failed', err.message, 'error')
+  } finally {
+    event.target.value = null // reset file input
+  }
 }
+
+
+
 
 
 onBeforeUnmount(() => {
@@ -729,7 +771,7 @@ onBeforeUnmount(() => {
 })
 
 onMounted(async () => {
-  await fetchJobRequisitions()
+  await fetchJobRequisitions(true)
   await fetchCandidates()
 
   const tabToRoom = {
@@ -817,7 +859,7 @@ watch([filters, activeTab], () => {
 }, { deep: true })
 
 watch([activeTab], async () => {
-  await fetchJobRequisitions()
+  await fetchJobRequisitions(true)
   await fetchCandidates()
 
   const tabToRoom = {

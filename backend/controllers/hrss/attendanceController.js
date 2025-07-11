@@ -582,14 +582,37 @@ exports.getAttendanceById = async (req, res) => {
 };
 
 
-// In attendanceController.js
+// GET /api/attendance/history/:employeeId?page=1&limit=20
 exports.getAttendanceHistoryByEmployeeId = async (req, res) => {
   try {
-    const records = await Attendance.find({ employeeId: req.params.employeeId }).sort({ date: -1 });
-    res.json(records);
+    const { page = 1, limit = 20 } = req.query;
+    const employeeId = req.params.employeeId;
+    const company = req.company;
+
+    const parsedLimit = limit === 'All' ? 0 : Number(limit);
+    const skip = (page - 1) * parsedLimit;
+
+    const query = { employeeId, company };
+
+    const attendanceQuery = Attendance.find(query).sort({ date: -1 });
+    if (parsedLimit > 0) attendanceQuery.skip(skip).limit(parsedLimit);
+
+    const [records, total] = await Promise.all([
+      attendanceQuery.exec(),
+      Attendance.countDocuments(query)
+    ]);
+
+    res.json({
+      records,
+      total,
+      page: Number(page),
+      limit: parsedLimit || 'All',
+      totalPages: parsedLimit ? Math.ceil(total / parsedLimit) : 1,
+    });
   } catch (error) {
     console.error('❌ getAttendanceHistoryByEmployeeId error:', error);
     res.status(500).json({ message: 'Error fetching attendance history' });
   }
 };
+
 

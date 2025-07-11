@@ -60,7 +60,7 @@
 
     
     <!-- Import Leave Permission -->
-    <v-row class="mb-4" align-center justify="space-between">
+    <!-- <v-row class="mb-4" align-center justify="space-between">
       <v-col cols="12" sm="4" md="4">
         <v-file-input
           v-model="leaveFile"
@@ -83,7 +83,7 @@
           <v-icon start>mdi-calendar-check</v-icon> Update Leave
         </v-btn>
       </v-col>
-    </v-row>
+    </v-row> -->
 
     <!-- Filters -->
     <v-row class="mb-4" dense>
