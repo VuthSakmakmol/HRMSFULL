@@ -199,12 +199,29 @@ exports.getDashboardStats = async (req, res) => {
         {
           $match: {
             ...baseFilter,
-            'progressDates.Application': { $gte: start, $lte: end }
+            $or: [
+              { 'progressDates.Application': { $gte: start, $lte: end } },
+              {
+                'progressDates.Application': { $exists: false },
+                createdAt: { $gte: start, $lte: end }
+              }
+            ]
+          }
+        },
+        {
+          $project: {
+            applicationMonth: {
+              $cond: {
+                if: { $ifNull: ['$progressDates.Application', false] },
+                then: { $month: '$progressDates.Application' },
+                else: { $month: '$createdAt' }
+              }
+            }
           }
         },
         {
           $group: {
-            _id: { $month: '$progressDates.Application' },
+            _id: '$applicationMonth',
             count: { $sum: 1 }
           }
         }
@@ -214,6 +231,7 @@ exports.getDashboardStats = async (req, res) => {
         monthlyCounts[m._id - 1] = m.count;
       });
     }
+
 
     const monthly = {
       labels: months,
@@ -229,13 +247,6 @@ exports.getDashboardStats = async (req, res) => {
       roadmap
     };
 
-    // ✅ Emit real-time update
-    const io = req.app.get('io');
-    if (io) {
-      io.emit('dashboardUpdate', { company: company.trim().toUpperCase(), data: result });
-    } else {
-      console.warn('⚠️ Socket.io instance not attached; dashboard updates not emitted.');
-    }
 
     res.json(result);
 

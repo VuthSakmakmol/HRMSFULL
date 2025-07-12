@@ -165,15 +165,17 @@ exports.deleteJobRequisition = async (req, res) => {
 };
 
 // 📋 Get job requisitions with pagination + filters
+// 📋 Get job requisitions with pagination + filters
 exports.getJobRequisitions = async (req, res) => {
   try {
     const company = req.company;
 
-    // Pagination
+    // ✅ Pagination setup
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 25;
     const skip = (page - 1) * limit;
 
+    // ✅ Filters from query
     const {
       jobId, department, jobTitle, openingDate, recruiter,
       status, startDate, hiringCost, type, subType
@@ -192,8 +194,10 @@ exports.getJobRequisitions = async (req, res) => {
     if (type) filter.type = type;
     if (subType) filter.subType = subType;
 
+    // ✅ Total count for pagination
     const total = await JobRequisition.countDocuments(filter);
 
+    // ✅ Fetch paginated job requisitions
     const jobList = await JobRequisition.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -201,6 +205,8 @@ exports.getJobRequisitions = async (req, res) => {
       .lean();
 
     const jobIds = jobList.map(j => j._id);
+
+    // ✅ Count candidates by progress per requisition
     const counts = await Candidate.aggregate([
       {
         $match: {
@@ -219,11 +225,13 @@ exports.getJobRequisitions = async (req, res) => {
       }
     ]);
 
+    // ✅ Map counts per requisition
     const countMap = {};
     counts.forEach(({ _id, count }) => {
       const jobId = _id.jobRequisitionId.toString();
       const progress = _id.progress;
       if (!countMap[jobId]) countMap[jobId] = { offerCount: 0, onboardCount: 0 };
+
       if (progress === 'Onboard') {
         countMap[jobId].onboardCount += count;
         countMap[jobId].offerCount += count;
@@ -232,6 +240,7 @@ exports.getJobRequisitions = async (req, res) => {
       }
     });
 
+    // ✅ Append counts to each requisition
     const jobsWithCounts = jobList.map(job => {
       const jobId = job._id.toString();
       const onboardCount = countMap[jobId]?.onboardCount || 0;
@@ -239,12 +248,14 @@ exports.getJobRequisitions = async (req, res) => {
       return { ...job, onboardCount, offerCount };
     });
 
+    // ✅ Return paginated result
     res.json({ requisitions: jobsWithCounts, total });
   } catch (err) {
     console.error('❌ Error fetching job requisitions:', err);
     res.status(500).json({ message: 'Error fetching requisitions', error: err.message });
   }
 };
+
 
 // 🟢 GET /ta/job-requisitions/vacant
 exports.getVacantRequisitions = async (req, res) => {

@@ -1,104 +1,72 @@
 <template>
-  <v-card class="pa-4" elevation="2">
-    <v-row align-center="center" justify="space-between">
-      <v-col cols="auto">
-        <h3 class="text-h6">Number of Applications by Month</h3>
-      </v-col>
-      <v-col cols="auto">
-        <v-select
-          v-model="selectedYear"
-          :items="yearOptions"
-          label="Select Year"
-          variant="outlined"
-          density="compact"
-          hide-details
-          style="max-width: 120px"
+  <v-card class="pa-4" elevation="3">
+    <v-row justify="center">
+      <v-col cols="12" class="text-center">
+        <div class="chart-title mb-2">Number of Applications by Month</div>
+
+        <apexchart
+          type="line"
+          height="300"
+          :options="chartOptions"
+          :series="seriesData"
         />
+
+        <div v-if="seriesData[0].data.length === 0" class="text-caption text-grey mt-2">
+          No monthly data available.
+        </div>
       </v-col>
     </v-row>
-
-    <!-- ✅ Put it right here -->
-    <apexchart
-      v-if="chartSeries[0].data.length > 0"
-      type="line"
-      height="250"
-      :options="chartOptions"
-      :series="chartSeries"
-    />
   </v-card>
 </template>
 
-
 <script setup>
-import { ref, watch, onMounted } from 'vue'
-import axios from '@/utils/axios'
-import dayjs from 'dayjs'
+import { computed } from 'vue'
 
-// State
-const selectedYear = ref(new Date().getFullYear())
-const yearOptions = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i)
-const chartData = ref({ labels: [], counts: [] })
-const loading = ref(false)
+const props = defineProps({
+  labels: { type: Array, default: () => [] },
+  series: { type: Array, default: () => [] } // series of numbers
+})
 
-// Company from localStorage
-const userCompany = ref(localStorage.getItem('company'))
+// Wrap series inside Apex format
+const seriesData = computed(() => [
+  {
+    name: 'Applications',
+    data: props.series
+  }
+])
 
-// Hardcoded type/subType for now (you can pass as props if dynamic)
-const type = ref('White Collar')
-const subType = ref(null)
-
-const chartOptions = ref({
+const chartOptions = computed(() => ({
   chart: {
     id: 'monthly-applications',
-    toolbar: { show: false }
+    toolbar: { show: false },
+    animations: { enabled: false }
   },
   xaxis: {
-    categories: chartData.value.labels
+    categories: props.labels
   },
   yaxis: {
     title: {
       text: 'Applications'
     }
   },
-  colors: ['#3f51b5']
-})
-
-const chartSeries = ref([
-  {
-    name: 'Applications',
-    data: chartData.value.counts
+  colors: ['#3f51b5'],
+  dataLabels: {
+    enabled: true,
+    style: { fontSize: '12px' }
+  },
+  stroke: {
+    curve: 'smooth'
+  },
+  tooltip: {
+    enabled: true
   }
-])
-
-const fetchMonthlyChart = async () => {
-  loading.value = true
-  try {
-    const from = `${selectedYear.value}-01-01`
-    const to = `${selectedYear.value}-12-31`
-
-    const res = await axios.post('/dashboard/stats', {
-      type: type.value,
-      subType: subType.value,
-      recruiter: null,
-      departmentId: null,
-      from,
-      to,
-      year: selectedYear.value,
-      company: userCompany.value
-    })
-
-    chartData.value = res.data.monthly || { labels: [], counts: [] }
-
-    // Update chart
-    chartOptions.value.xaxis.categories = chartData.value.labels
-    chartSeries.value[0].data = chartData.value.counts
-  } catch (err) {
-    console.error('Monthly chart fetch error:', err)
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(fetchMonthlyChart)
-watch(selectedYear, fetchMonthlyChart)
+}))
 </script>
+
+<style scoped>
+.chart-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: #444;
+}
+</style>
