@@ -262,10 +262,18 @@ exports.getVacantRequisitions = async (req, res) => {
   try {
     const company = req.company;
 
-    const vacant = await JobRequisition.find({
+    const { type, subType } = req.query;
+
+    const query = {
       company: company.toUpperCase(),
       status: 'Vacant'
-    }).sort({ createdAt: -1 });
+    };
+
+    if (type) query.type = type;
+    if (subType) query.subType = subType;
+
+    const vacant = await JobRequisition.find(query).sort({ createdAt: -1 });
+
 
     res.json(vacant);
   } catch (err) {

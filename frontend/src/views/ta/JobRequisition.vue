@@ -330,7 +330,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(job, index) in paginatedRequisitions" :key="job._id">
+            <tr v-for="(job, index) in requisitions" :key="job._id">
               <td>{{ (page - 1) * itemsPerPage + index + 1 }}</td>
               <td>{{ job.jobRequisitionId }}</td>
               <td>{{ job.departmentName }}</td>
@@ -394,9 +394,8 @@
         <v-col cols="12" md="6" class="d-flex align-center">
           <v-pagination
             v-model="page"
-            :length="Math.ceil(filteredRequisitions.length / itemsPerPage)"
+            :length="Math.ceil(total / itemsPerPage)"
             total-visible="7"
-            class="flex"
           />
         </v-col>
 
@@ -469,7 +468,7 @@ const goToCandidates = (job) => {
 }
 
 
-const paginatedRequisitions = computed(() => requisitions.value)
+
 
 
 
@@ -600,11 +599,15 @@ const fetchRequisitions = async () => {
   }
 }
 
-
 watch(itemsPerPage, () => {
   page.value = 1
   fetchRequisitions()
 })
+
+watch(page, () => {
+  fetchRequisitions()
+})
+
 
 const getTypeFromTab = (tab) => {
   if (tab === 'White Collar') return 'White Collar'

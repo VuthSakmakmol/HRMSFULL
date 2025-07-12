@@ -585,33 +585,36 @@ const daysBetween = (end, start) => dayjs(end).diff(dayjs(start), 'day')
 
 const fetchJobRequisitions = async (includeAll = false) => {
   try {
-    const type = activeTab.value === 'White Collar' ? 'White Collar' : 'Blue Collar'
+    const type = activeTab.value === 'White Collar' ? 'White Collar' : 'Blue Collar';
     const subType = activeTab.value === 'Blue Collar Sewer'
       ? 'Sewer'
       : activeTab.value === 'Blue Collar Non-Sewer'
-      ? 'Non-Sewer'
-      : undefined
+        ? 'Non-Sewer'
+        : undefined;
 
-    const params = new URLSearchParams()
-    params.append('type', type)
-    if (subType) params.append('subType', subType)
-    if (includeAll) params.append('all', 'true')
+    const params = new URLSearchParams();
+    params.append('type', type);
+    if (subType) params.append('subType', subType);
+    if (includeAll) params.append('all', 'true'); // Optional for future logic
 
-    const res = await axios.get(`/job-requisitions?${params.toString()}`)
-    jobRequisitions.value = res.data.requisitions || []
+    // ✅ Use the vacant-only endpoint
+    const res = await axios.get(`/job-requisitions/vacant?${params.toString()}`);
+    jobRequisitions.value = res.data || [];
 
-    const titles = [...new Set(jobRequisitions.value.map(j => j.jobTitle))].filter(Boolean)
-    jobTitleOptions.value = titles
+    // ✅ Extract unique job titles for form use
+    const titles = [...new Set(jobRequisitions.value.map(j => j.jobTitle))].filter(Boolean);
+    jobTitleOptions.value = titles;
 
   } catch (error) {
-    console.error('Error fetching requisitions:', error)
+    console.error('Error fetching requisitions:', error);
     Swal.fire({
       icon: 'error',
       title: 'Failed to load job requisitions',
       text: error.response?.data?.message || error.message
-    })
+    });
   }
-}
+};
+
 
 
 
