@@ -589,15 +589,26 @@ const fetchRequisitions = async () => {
         limit: itemsPerPage.value,
         company,
         type: getTypeFromTab(activeTab.value),
-        subType: getSubTypeFromTab(activeTab.value)
+        subType: getSubTypeFromTab(activeTab.value),
+        ...filters.value  // ← Inject filters directly
       }
     })
     requisitions.value = res.data.requisitions
     total.value = res.data.total
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Fetch Requisitions Failed', text: err?.response?.data?.message || err.message })
+    Swal.fire({
+      icon: 'error',
+      title: 'Fetch Requisitions Failed',
+      text: err?.response?.data?.message || err.message
+    })
   }
 }
+
+watch(filters, () => {
+  page.value = 1
+  fetchRequisitions()
+}, { deep: true })
+
 
 watch(itemsPerPage, () => {
   page.value = 1
@@ -718,7 +729,7 @@ const deleteJob = async job => {
 
 
 const exportToExcel = () => {
-  const exportData = filteredRequisitions.value.map((job, index) => ({
+  const exportData = requisitions.value.map((job, index) => ({
     No: index + 1,
     'Job ID': job.jobRequisitionId,
     Department: job.departmentName,
