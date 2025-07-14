@@ -114,7 +114,10 @@
       </v-col>
 
       <v-col cols="12" md="6">
-        <MonthlyApplicationLine />
+        <MonthlyApplicationLine
+          :labels="monthlyData.labels"
+          :series="monthlyData.counts"
+        />
       </v-col>
       <v-col cols="12" md="6">
         <VacancyKPI :typeLabel="filterType" :data="kpiData" :loading="loadingKpi" />
