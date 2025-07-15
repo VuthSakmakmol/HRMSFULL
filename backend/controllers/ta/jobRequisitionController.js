@@ -38,17 +38,34 @@ exports.getAllJobTitles = async (req, res) => {
 };
 
 // ➕ Create a job requisition
+// ➕ Create a job requisition (always allowed, even if a Vacant one exists)
 exports.createJobRequisition = async (req, res) => {
   try {
     const {
-      departmentId, departmentName, jobTitle, recruiter, hiringCost,
-      status, openingDate, startDate, type, subType, targetCandidates
+      departmentId,
+      departmentName,
+      jobTitle,
+      recruiter,
+      hiringCost,
+      status,
+      openingDate,
+      startDate,
+      type,
+      subType,
+      targetCandidates
     } = req.body;
 
+    // 1️⃣ Validate department
     const dept = await Department.findById(departmentId);
-    if (!dept) return res.status(400).json({ message: 'Invalid department ID' });
+    if (!dept) {
+      return res.status(400).json({ message: 'Invalid department ID' });
+    }
 
-    const company = req.company;
+    const company = req.company.toUpperCase();
+
+    // ── Duplicate‐Vacant check removed ──
+
+    // 2️⃣ Generate the auto‐incremented ID
     const resolvedSubType = type === 'Blue Collar' ? (subType || 'Non-Sewer') : undefined;
     const prefix = type === 'Blue Collar' ? 'BJR' : 'WJR';
 
@@ -57,9 +74,9 @@ exports.createJobRequisition = async (req, res) => {
       { $inc: { value: 1 } },
       { new: true, upsert: true }
     );
-
     const jobRequisitionId = `${prefix}-${counter.value}`;
 
+    // 3️⃣ Save
     const newRequisition = new JobRequisition({
       jobRequisitionId,
       departmentId,
@@ -75,9 +92,9 @@ exports.createJobRequisition = async (req, res) => {
       startDate,
       company
     });
-
     await newRequisition.save();
 
+    // 4️⃣ Log & emit
     await logActivity({
       actionType: 'CREATE',
       collectionName: 'JobRequisition',
@@ -86,18 +103,19 @@ exports.createJobRequisition = async (req, res) => {
       performedBy: req.user.email,
       company
     });
+    req.app.get('io').emit('jobAdded', newRequisition);
 
-    // ✅ Emit real-time event
-    const io = req.app.get('io');
-    io.emit('jobAdded', newRequisition);
-
+    // 5️⃣ Respond
     res.status(201).json({
       message: 'Job requisition created successfully.',
       requisition: newRequisition
     });
   } catch (err) {
     console.error('❌ Error creating job requisition:', err);
-    res.status(500).json({ message: 'Failed to create job requisition', error: err.message });
+    res.status(500).json({
+      message: 'Failed to create job requisition',
+      error: err.message
+    });
   }
 };
 
