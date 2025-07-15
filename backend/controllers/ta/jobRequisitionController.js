@@ -164,40 +164,75 @@ exports.deleteJobRequisition = async (req, res) => {
   }
 };
 
-// 📋 Get job requisitions with pagination + filters
-// 📋 Get job requisitions with pagination + filters
 exports.getJobRequisitions = async (req, res) => {
   try {
     const company = req.company;
 
-    // ✅ Pagination setup
+    // Pagination setup
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 25;
     const skip = (page - 1) * limit;
 
-    // ✅ Filters from query
+    // Extract filters
     const {
-      jobId, department, jobTitle, openingDate, recruiter,
-      status, startDate, hiringCost, type, subType
+      jobId,
+      department,
+      jobTitle,
+      openingDate,
+      recruiter,
+      status,
+      startDate,
+      hiringCost,
+      type,
+      subType
     } = req.query;
 
+    // Base filter
     const filter = { company: company.toUpperCase() };
 
-    if (jobId) filter.jobRequisitionId = { $regex: jobId, $options: 'i' };
-    if (department) filter.departmentName = { $regex: department, $options: 'i' };
-    if (jobTitle) filter.jobTitle = { $regex: jobTitle, $options: 'i' };
-    if (openingDate) filter.openingDate = { $regex: openingDate, $options: 'i' };
-    if (recruiter) filter.recruiter = { $regex: recruiter, $options: 'i' };
-    if (status) filter.status = status;
-    if (startDate) filter.startDate = { $regex: startDate, $options: 'i' };
-    if (hiringCost) filter.hiringCost = Number(hiringCost);
-    if (type) filter.type = type;
-    if (subType) filter.subType = subType;
+    if (jobId) {
+      filter.jobRequisitionId = { $regex: jobId, $options: 'i' };
+    }
+    if (department) {
+      filter.departmentName = { $regex: department, $options: 'i' };
+    }
+    if (jobTitle) {
+      filter.jobTitle = { $regex: jobTitle, $options: 'i' };
+    }
+    // DATE RANGE filter for openingDate
+    if (openingDate) {
+      const d = new Date(openingDate);
+      const next = new Date(openingDate);
+      next.setDate(next.getDate() + 1);
+      filter.openingDate = { $gte: d, $lt: next };
+    }
+    if (recruiter) {
+      filter.recruiter = { $regex: recruiter, $options: 'i' };
+    }
+    if (status) {
+      filter.status = status;
+    }
+    // DATE RANGE filter for startDate
+    if (startDate) {
+      const d2 = new Date(startDate);
+      const next2 = new Date(startDate);
+      next2.setDate(next2.getDate() + 1);
+      filter.startDate = { $gte: d2, $lt: next2 };
+    }
+    if (hiringCost) {
+      filter.hiringCost = Number(hiringCost);
+    }
+    if (type) {
+      filter.type = type;
+    }
+    if (subType) {
+      filter.subType = subType;
+    }
 
-    // ✅ Total count for pagination
+    // Total count for pagination
     const total = await JobRequisition.countDocuments(filter);
 
-    // ✅ Fetch paginated job requisitions
+    // Fetch paginated
     const jobList = await JobRequisition.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -206,7 +241,7 @@ exports.getJobRequisitions = async (req, res) => {
 
     const jobIds = jobList.map(j => j._id);
 
-    // ✅ Count candidates by progress per requisition
+    // Count candidates per requisition
     const counts = await Candidate.aggregate([
       {
         $match: {
@@ -225,34 +260,37 @@ exports.getJobRequisitions = async (req, res) => {
       }
     ]);
 
-    // ✅ Map counts per requisition
+    // Map counts
     const countMap = {};
     counts.forEach(({ _id, count }) => {
-      const jobId = _id.jobRequisitionId.toString();
-      const progress = _id.progress;
-      if (!countMap[jobId]) countMap[jobId] = { offerCount: 0, onboardCount: 0 };
-
-      if (progress === 'Onboard') {
-        countMap[jobId].onboardCount += count;
-        countMap[jobId].offerCount += count;
-      } else if (progress === 'Hired' || progress === 'JobOffer') {
-        countMap[jobId].offerCount += count;
+      const jid = _id.jobRequisitionId.toString();
+      if (!countMap[jid]) countMap[jid] = { offerCount: 0, onboardCount: 0 };
+      if (_id.progress === 'Onboard') {
+        countMap[jid].onboardCount += count;
+        countMap[jid].offerCount   += count;
+      } else if (_id.progress === 'Hired' || _id.progress === 'JobOffer') {
+        countMap[jid].offerCount   += count;
       }
     });
 
-    // ✅ Append counts to each requisition
+    // Append to each job
     const jobsWithCounts = jobList.map(job => {
-      const jobId = job._id.toString();
-      const onboardCount = countMap[jobId]?.onboardCount || 0;
-      const offerCount = countMap[jobId]?.offerCount || 0;
-      return { ...job, onboardCount, offerCount };
+      const jid = job._id.toString();
+      return {
+        ...job,
+        offerCount:   countMap[jid]?.offerCount   || 0,
+        onboardCount: countMap[jid]?.onboardCount || 0
+      };
     });
 
-    // ✅ Return paginated result
+    // Return
     res.json({ requisitions: jobsWithCounts, total });
   } catch (err) {
     console.error('❌ Error fetching job requisitions:', err);
-    res.status(500).json({ message: 'Error fetching requisitions', error: err.message });
+    res.status(500).json({
+      message: 'Error fetching requisitions',
+      error: err.message
+    });
   }
 };
 

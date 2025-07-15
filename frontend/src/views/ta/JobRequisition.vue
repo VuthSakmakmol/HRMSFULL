@@ -253,25 +253,24 @@
           >
             <template #activator="{ props }">
               <v-text-field
+                v-bind="props"
                 v-model="filters.openingDate"
                 label="Opening Date"
+                readonly
                 prepend-inner-icon="mdi-calendar"
                 variant="outlined"
-                autocomplete="off"
                 density="compact"
                 clearable
-                readonly
-                v-bind="props"
+                hide-details
               />
             </template>
             <v-date-picker
-              v-model="filters.openingDate"
-              @update:modelValue="menu.openingDate = false"
+              @update:modelValue="date => filters.openingDate = dayjs(date).format('YYYY-MM-DD')"
             />
           </v-menu>
         </v-col>
 
-    
+        
         <v-col cols="12" md="2">
           <v-text-field
             v-model="filters.recruiter"
@@ -309,20 +308,19 @@
           >
             <template #activator="{ props }">
               <v-text-field
+                v-bind="props"
                 v-model="filters.startDate"
                 label="Start Date"
+                readonly
                 prepend-inner-icon="mdi-calendar"
                 variant="outlined"
-                autocomplete="off"
                 density="compact"
                 clearable
-                readonly
-                v-bind="props"
+                hide-details
               />
             </template>
             <v-date-picker
-              v-model="filters.startDate"
-              @update:modelValue="menu.startDate = false"
+              @update:modelValue="date => filters.startDate = dayjs(date).format('YYYY-MM-DD')"
             />
           </v-menu>
         </v-col>
@@ -344,7 +342,7 @@
       </v-row>
 
 
-      <!-- Table with Filters -->
+      <!-- TABLE WITH FILTERED DATA -->
       <div class="scroll-wrapper-x">
         <v-table height="550px" fixed-header class="elevation-1 rounded-lg">
           <thead class="custom-sticky-header">
@@ -363,7 +361,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(job, index) in requisitions" :key="job._id">
+            <tr v-for="(job, index) in filteredRequisitions" :key="job._id">
               <td>{{ (page - 1) * itemsPerPage + index + 1 }}</td>
               <td>{{ job.jobRequisitionId }}</td>
               <td>{{ job.departmentName }}</td>
@@ -375,8 +373,6 @@
                   :color="getStatusColor(job.status)"
                   size="small"
                   variant="outlined"
-                  class="cursor-pointer"
-                  :class="{ 'flash-chip': recentlyUpdatedJobId === job._id }"
                   @click="goToCandidates(job)"
                 >
                   {{ job.status }}
@@ -386,32 +382,29 @@
               <td>{{ formatCost(job.hiringCost) }}</td>
               <td>
                 <div class="d-flex align-center" style="gap: 6px;">
-                  <!-- Suspended Circle -->
                   <v-progress-circular
                     :model-value="getSuspendedPercent(job)"
                     color="orange"
                     size="38"
                     width="4"
                   >
-                    <strong style="font-size: 12px">
-                      {{ job.offerCount || 0 }}/{{ job.targetCandidates }}
+                    <strong style="font-size:12px">
+                      {{ job.offerCount }}/{{ job.targetCandidates }}
                     </strong>
                   </v-progress-circular>
-
-                  <!-- Vacant Circle -->
                   <v-progress-circular
                     :model-value="getVacantPercent(job)"
                     color="green"
                     size="38"
                     width="4"
                   >
-                    <strong style="font-size: 12px">
-                      {{ job.onboardCount || 0 }}/{{ job.targetCandidates }}
+                    <strong style="font-size:12px">
+                      {{ job.onboardCount }}/{{ job.targetCandidates }}
                     </strong>
                   </v-progress-circular>
                 </div>
               </td>
-              <td style="display: flex; gap: 3px;">
+              <td style="display:flex; gap:3px;">
                 <v-btn icon size="small" color="primary" @click="editJob(job)">
                   <v-icon>mdi-pencil</v-icon>
                 </v-btn>
@@ -422,7 +415,7 @@
             </tr>
           </tbody>
         </v-table>
-      </div >
+      </div>
       <v-row class="mt-4 d-flex align-center" justify="space-between">
         <v-col cols="12" md="6" class="d-flex align-center">
           <v-pagination
@@ -489,6 +482,17 @@ const triggerFileInput = () => {
   fileInput.value.click()
 }
 
+const menu = ref({ openingDate: false, startDate: false })
+const filters = ref({
+  jobId: '',
+  department: '',
+  jobTitle: '',
+  openingDate: '',
+  recruiter: '',
+  status: '',
+  startDate: '',
+  hiringCost: ''
+})
 
 const goToCandidates = (job) => {
   router.push({
@@ -500,10 +504,6 @@ const goToCandidates = (job) => {
   })
 }
 
-const menu = ref({
-  openingDate: false,
-  startDate: false
-})
 
 
 
@@ -534,17 +534,8 @@ const showFilterForm = ref(false)
 const role = localStorage.getItem('role') || ''
 const company = localStorage.getItem('company') || ''
 
-const filters = ref({
-  jobId: '',
-  department: '',
-  jobTitle: '',
-  openingDate: '',
-  recruiter: '',
-  status: '',
-  startDate: '',
-  hiringCost: ''
-})
 
+// 1️⃣ Compute only by exact YYYY-MM-DD matching on dates
 const filteredRequisitions = computed(() => {
   let base = []
   if (activeTab.value === 'White Collar') {
@@ -557,37 +548,40 @@ const filteredRequisitions = computed(() => {
 
   return base.filter(j =>
     (!filters.value.jobId ||
-      j.jobRequisitionId?.toLowerCase().includes(filters.value.jobId.toLowerCase())) &&
-
+      j.jobRequisitionId.toLowerCase().includes(filters.value.jobId.toLowerCase())
+    ) &&
     (!filters.value.department ||
-      j.departmentName?.toLowerCase().includes(filters.value.department.toLowerCase())) &&
-
+      j.departmentName.toLowerCase().includes(filters.value.department.toLowerCase())
+    ) &&
     (!filters.value.jobTitle ||
-      j.jobTitle?.toLowerCase().includes(filters.value.jobTitle.toLowerCase())) &&
-
+      j.jobTitle.toLowerCase().includes(filters.value.jobTitle.toLowerCase())
+    ) &&
+    // exact-opening-date
     (!filters.value.openingDate ||
-      dayjs(j.openingDate).format('YYYY-MM-DD').toLowerCase().includes(filters.value.openingDate.toLowerCase()) ||
-      dayjs(j.openingDate).format('DD-MMM-YYYY').toLowerCase().includes(filters.value.openingDate.toLowerCase()) ||
-      dayjs(j.openingDate).format('MMM-YY').toLowerCase().includes(filters.value.openingDate.toLowerCase()) ||
-      dayjs(j.openingDate).format('MMM-YYYY').toLowerCase().includes(filters.value.openingDate.toLowerCase())) &&
-
+      dayjs(j.openingDate).format('YYYY-MM-DD') === filters.value.openingDate
+    ) &&
     (!filters.value.recruiter ||
-      j.recruiter?.toLowerCase().includes(filters.value.recruiter.toLowerCase())) &&
-
+      j.recruiter.toLowerCase().includes(filters.value.recruiter.toLowerCase())
+    ) &&
     (!filters.value.status ||
-      j.status === filters.value.status) &&
-
+      j.status === filters.value.status
+    ) &&
+    // exact-start-date
     (!filters.value.startDate ||
-      dayjs(j.startDate).format('YYYY-MM-DD').toLowerCase().includes(filters.value.startDate.toLowerCase()) ||
-      dayjs(j.startDate).format('DD-MMM-YYYY').toLowerCase().includes(filters.value.startDate.toLowerCase()) ||
-      dayjs(j.startDate).format('MMM-YY').toLowerCase().includes(filters.value.startDate.toLowerCase()) ||
-      dayjs(j.startDate).format('MMM-YYYY').toLowerCase().includes(filters.value.startDate.toLowerCase())) &&
-
+      dayjs(j.startDate).format('YYYY-MM-DD') === filters.value.startDate
+    ) &&
     (!filters.value.hiringCost ||
-      String(j.hiringCost).includes(filters.value.hiringCost))
+      String(j.hiringCost).includes(filters.value.hiringCost)
+    )
   )
-
 })
+
+// Watch filters → refetch server data if you still need it, or remove if you fully rely on client-side
+watch(filters, () => {
+  page.value = 1
+  fetchRequisitions()
+}, { deep: true })
+
 
 
 
