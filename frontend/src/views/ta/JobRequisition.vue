@@ -242,19 +242,36 @@
             hide-details
           />
         </v-col>
+
+        <!-- Opening Date Filter -->
         <v-col cols="12" md="2">
-          <v-text-field
-            v-model="filters.openingDate"
-            label="Opening Date (YYYY-MM-DD)"
-            prepend-inner-icon="mdi-calendar"
-            variant="outlined" 
-            autocomplete="off"
-            density="compact"
-            clearable
-            dense
-            hide-details
-          />
+          <v-menu
+            v-model="menu.openingDate"
+            :close-on-content-click="false"
+            transition="scale-transition"
+            offset-y
+          >
+            <template #activator="{ props }">
+              <v-text-field
+                v-model="filters.openingDate"
+                label="Opening Date"
+                prepend-inner-icon="mdi-calendar"
+                variant="outlined"
+                autocomplete="off"
+                density="compact"
+                clearable
+                readonly
+                v-bind="props"
+              />
+            </template>
+            <v-date-picker
+              v-model="filters.openingDate"
+              @update:modelValue="menu.openingDate = false"
+            />
+          </v-menu>
         </v-col>
+
+    
         <v-col cols="12" md="2">
           <v-text-field
             v-model="filters.recruiter"
@@ -281,19 +298,35 @@
             hide-details
           />
         </v-col>
+
+        <!-- Start Date Filter -->
         <v-col cols="12" md="2">
-          <v-text-field
-            v-model="filters.startDate"
-            label="Start Date (YYYY-MM-DD)"
-            prepend-inner-icon="mdi-calendar"
-            variant="outlined" 
-            autocomplete="off"
-            density="compact"
-            clearable
-            dense
-            hide-details
-          />
+          <v-menu
+            v-model="menu.startDate"
+            :close-on-content-click="false"
+            transition="scale-transition"
+            offset-y
+          >
+            <template #activator="{ props }">
+              <v-text-field
+                v-model="filters.startDate"
+                label="Start Date"
+                prepend-inner-icon="mdi-calendar"
+                variant="outlined"
+                autocomplete="off"
+                density="compact"
+                clearable
+                readonly
+                v-bind="props"
+              />
+            </template>
+            <v-date-picker
+              v-model="filters.startDate"
+              @update:modelValue="menu.startDate = false"
+            />
+          </v-menu>
         </v-col>
+
         <v-col cols="12" md="2">
           <v-text-field
             v-model="filters.hiringCost"
@@ -467,6 +500,10 @@ const goToCandidates = (job) => {
   })
 }
 
+const menu = ref({
+  openingDate: false,
+  startDate: false
+})
 
 
 
@@ -634,17 +671,64 @@ const getSubTypeFromTab = (tab) => {
 
 const submitRequisition = async () => {
   try {
-    const payload = { ...form.value }
-    await api.post(`/job-requisitions${company ? `?company=${company}` : ''}`, payload)
-    alerts.value[getAlertKey(payload)] = true
-    localStorage.setItem(`seen_${getAlertKey(payload)}`, 'false')
-    await Swal.fire({ icon: 'success', title: 'Created', text: 'Job requisition created' })
-    form.value = { jobTitle: '', recruiter: '', targetCandidates: 1, openingDate: '' }
-    fetchRequisitions()
+    const selectedJob = jobTitles.value.find(j => j.jobTitle.trim().toLowerCase() === form.value.jobTitle.trim().toLowerCase());
+
+    if (!selectedJob) {
+      return Swal.fire({
+        icon: 'warning',
+        title: 'Invalid Job Title',
+        text: 'Please select a valid job title from the dropdown list.'
+      });
+    }
+
+    // Check type is present
+    if (!selectedJob.type) {
+      return Swal.fire({
+        icon: 'error',
+        title: 'Missing Job Type',
+        text: 'Unable to determine job type. Please reselect the job title or contact admin.'
+      });
+    }
+
+    const payload = {
+      jobTitle: form.value.jobTitle,
+      recruiter: form.value.recruiter,
+      targetCandidates: form.value.targetCandidates || 1,
+      openingDate: form.value.openingDate,
+      hiringCost: form.value.hiringCost || 0,
+      startDate: form.value.startDate || '',
+      departmentId: selectedJob.departmentId,
+      departmentName: selectedJob.departmentName,
+      type: selectedJob.type,
+      subType: selectedJob.type === 'Blue Collar' ? (selectedJob.subType || 'Non-Sewer') : undefined,
+      status: 'Vacant'
+    };
+
+    await api.post(`/job-requisitions${company ? `?company=${company}` : ''}`, payload);
+
+    alerts.value[getAlertKey(payload)] = true;
+    localStorage.setItem(`seen_${getAlertKey(payload)}`, 'false');
+
+    await Swal.fire({ icon: 'success', title: 'Created', text: 'Job requisition created successfully.' });
+
+    form.value = { jobTitle: '', recruiter: '', targetCandidates: 1, openingDate: '' };
+    fetchRequisitions();
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Create Failed', text: err?.response?.data?.message || 'Failed to create requisition' })
+    const serverMessage = err?.response?.data?.message || 'Unknown error occurred.';
+    Swal.fire({
+      icon: 'error',
+      title: 'Create Failed',
+      html: `
+        <strong>Reason:</strong> ${serverMessage}<br><br>
+        <strong>Fix:</strong> Ensure all fields are selected correctly, especially job title and recruiter.
+      `,
+      confirmButtonText: 'OK',
+      allowEnterKey: true
+    });
   }
-}
+};
+
+
 
 const setActive = tab => {
   activeTab.value = tab
