@@ -94,7 +94,7 @@
       <!-- Department -->
       <v-col cols="12" sm="2">
         <v-autocomplete
-          v-model="selectedDepartment"
+          v-model="form.department"
           :items="departments"
           item-title="name"
           item-value="name"

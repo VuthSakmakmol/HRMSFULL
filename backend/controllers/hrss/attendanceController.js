@@ -67,20 +67,17 @@ function evaluateStatus(startTime, endTime, shiftType) {
 
 
 // ────────────────────────────────────────────────────────────────────────────────
-// Import attendance records
+// ────────────────────────────────────────────────────────────────────────────────
+// Import attendance records (UPDATED)
 exports.importAttendance = async (req, res) => {
   try {
     const { shiftType, rows } = req.body;
     const company = req.company;
-    console.log('📦 Import Attendance for company:', company);
-
     if (!company || !Array.isArray(rows) || rows.length === 0) {
-      console.error('❌ Missing company or empty rows');
       return res.status(400).json({ message: 'Missing company or empty rows' });
     }
 
     const summary = [];
-
     const chunkArray = (array, size) => {
       const result = [];
       for (let i = 0; i < array.length; i += size) {
@@ -94,28 +91,36 @@ exports.importAttendance = async (req, res) => {
     for (const chunk of chunks) {
       const chunkResults = await Promise.all(chunk.map(async (row) => {
         try {
-          const employeeId = row.employeeId?.trim();
+          const employeeId       = row.employeeId?.trim();
           const formattedDateStr = formatExcelDate(row.date);
           if (!employeeId || !formattedDateStr) return null;
 
-          const date = new Date(formattedDateStr);
+          const date      = new Date(formattedDateStr);
           const startTime = row.startTime?.trim();
-          const endTime = row.endTime?.trim();
-          const timeIn = parseTimeToDate(date, startTime);
-          const timeOut = parseTimeToDate(date, endTime);
+          const endTime   = row.endTime?.trim();
+          const timeIn    = parseTimeToDate(date, startTime);
+          const timeOut   = parseTimeToDate(date, endTime);
           const leaveType = row.leaveType?.trim() || null;
 
-          const { status, overtimeMinutes } = evaluateStatus(startTime, endTime, shiftType);
-          const overtimeHours = overtimeMinutes > 0 ? parseFloat((overtimeMinutes / 60).toFixed(2)) : 0;
+          // Determine status & overtime
+          const { status, overtimeMinutes } =
+            evaluateStatus(startTime, endTime, shiftType);
+          const overtimeHours = overtimeMinutes > 0
+            ? parseFloat((overtimeMinutes / 60).toFixed(2))
+            : 0;
 
-          const foundEmp = await Employee.findOne({ employeeId, company });
-          const empCompany = foundEmp ? foundEmp.company : company;
-          const fullName = foundEmp
+          // Fetch employee for name + dept info
+          const foundEmp  = await Employee.findOne({ employeeId, company });
+          const empCompany= foundEmp ? foundEmp.company : company;
+          const fullName  = foundEmp
             ? `${foundEmp.englishFirstName} ${foundEmp.englishLastName}`
             : 'Unknown';
 
-          const finalStatus = (!startTime && !endTime && leaveType) ? 'Leave' : status;
+          const finalStatus = (!startTime && !endTime && leaveType)
+            ? 'Leave'
+            : status;
 
+          // Upsert the attendance record
           const updated = await Attendance.findOneAndUpdate(
             { employeeId, date, company: empCompany },
             {
@@ -127,103 +132,113 @@ exports.importAttendance = async (req, res) => {
               status: finalStatus,
               leaveType: finalStatus === 'Leave' ? leaveType : null,
               overtimeHours,
-              riskStatus: 'None', // default risk status, updated below if needed
+              riskStatus: 'None',       // default; we'll adjust below
               fullName,
               company: empCompany,
               department: foundEmp?.department || '',
-              position: foundEmp?.position || '',
-              line: foundEmp?.line || '',
-              note: row.note || '',
+              position:   foundEmp?.position   || '',
+              line:       foundEmp?.line       || '',
+              note:       row.note             || '',
             },
             { upsert: true, new: true }
           );
 
-          // 🚨 Consecutive absence logic for NearlyAbandon / Abandon
+          // ─── Reset to Working on any normal attendance ───────────────────────
+          if (['OnTime','Late','Overtime'].includes(updated.status)) {
+            await Employee.findOneAndUpdate(
+              { employeeId, company: empCompany },
+              { status: 'Working' }
+            );
+          }
+
+          // ─── Consecutive absence → NearlyAbandon / Abandon ──────────────────
           if (updated.status === 'Absent') {
             const currentDate = new Date(updated.date);
             let consecutiveAbsent = 1;
 
+            // look back up to 10 days
             for (let i = 1; i <= 10; i++) {
               const prevDate = new Date(currentDate);
               prevDate.setDate(currentDate.getDate() - i);
 
-              const prevAttendance = await Attendance.findOne({
+              const prev = await Attendance.findOne({
                 employeeId,
                 company,
                 date: {
-                  $gte: new Date(prevDate.setHours(0, 0, 0, 0)),
-                  $lt: new Date(prevDate.setHours(23, 59, 59, 999)),
+                  $gte: new Date(prevDate.setHours(0,0,0,0)),
+                  $lt:  new Date(prevDate.setHours(23,59,59,999))
                 },
               });
-
-              if (prevAttendance?.status === 'Absent') {
-                consecutiveAbsent++;
-              } else {
-                break; // streak broken → reset counter
-              }
+              if (prev?.status === 'Absent') consecutiveAbsent++;
+              else break;
             }
 
-            console.log(`🔎 ${employeeId} absent ${consecutiveAbsent} days in a row`);
-
+            // 6+ → Abandon
             if (consecutiveAbsent >= 6) {
-              const abandonStart = new Date(currentDate);
-              abandonStart.setDate(currentDate.getDate() - 5); // last 6 days
+              const start = new Date(currentDate);
+              start.setDate(currentDate.getDate() - 5);
               await Attendance.updateMany(
                 {
                   employeeId,
                   company,
-                  date: { $gte: abandonStart, $lte: currentDate },
-                  status: 'Absent',
+                  date:   { $gte: start, $lte: currentDate },
+                  status: 'Absent'
                 },
                 { riskStatus: 'Abandon' }
               );
-              console.log(`🚨 ${employeeId} marked as Abandon`);
-            } else if (consecutiveAbsent >= 3) {
-              const nearlyStart = new Date(currentDate);
-              nearlyStart.setDate(currentDate.getDate() - (consecutiveAbsent - 1));
+              console.log(`🚨 ${employeeId} marked Abandon`);
+
+              // ← SYNC EMPLOYEE.status TO 'Abandon'
+              await Employee.findOneAndUpdate(
+                { employeeId, company: empCompany },
+                { status: 'Abandon' }
+              );
+            }
+            // 3–5 → NearlyAbandon
+            else if (consecutiveAbsent >= 3) {
+              const start = new Date(currentDate);
+              start.setDate(currentDate.getDate() - (consecutiveAbsent - 1));
               await Attendance.updateMany(
                 {
                   employeeId,
                   company,
-                  date: { $gte: nearlyStart, $lte: currentDate },
-                  status: 'Absent',
+                  date:   { $gte: start, $lte: currentDate },
+                  status: 'Absent'
                 },
                 { riskStatus: 'NearlyAbandon' }
               );
-              console.log(`⚠️ ${employeeId} marked as Nearly Abandon`);
+              console.log(`⚠️ ${employeeId} marked NearlyAbandon`);
             }
           }
 
-          // ✅ Comeback handling: detect Risk on return after NearlyAbandon/Abandon
+          // ─── Comeback logic (Risk flag) ─────────────────────────────────────
           if (['OnTime', 'Late'].includes(updated.status)) {
             const currentDate = new Date(updated.date);
-            let wasInRisk = false;
+            let wasRisk = false;
 
             for (let i = 1; i <= 10; i++) {
               const prevDate = new Date(currentDate);
               prevDate.setDate(currentDate.getDate() - i);
 
-              const prevAttendance = await Attendance.findOne({
+              const prev = await Attendance.findOne({
                 employeeId,
                 company,
                 date: {
-                  $gte: new Date(prevDate.setHours(0, 0, 0, 0)),
-                  $lt: new Date(prevDate.setHours(23, 59, 59, 999)),
+                  $gte: new Date(prevDate.setHours(0,0,0,0)),
+                  $lt:  new Date(prevDate.setHours(23,59,59,999))
                 },
               });
-
-              if (prevAttendance?.riskStatus === 'NearlyAbandon' || prevAttendance?.riskStatus === 'Abandon') {
-                wasInRisk = true;
-                break;
+              if (['NearlyAbandon','Abandon'].includes(prev?.riskStatus)) {
+                wasRisk = true; break;
               }
             }
 
-            if (wasInRisk) {
+            if (wasRisk) {
               updated.riskStatus = 'Risk';
               await updated.save();
-              console.log(`⚠️ Marked ${employeeId} as Risk on comeback date ${updated.date.toDateString()}`);
+              console.log(`⚠️ ${employeeId} marked Risk on comeback`);
             } else {
-              updated.riskStatus = 'None'; // normal comeback → reset risk
+              updated.riskStatus = 'None';
               await updated.save();
             }
           }
@@ -238,7 +253,7 @@ exports.importAttendance = async (req, res) => {
             company: empCompany,
           };
         } catch (err) {
-          console.error(`❌ Error processing row for employeeId=${row.employeeId}:`, err.message);
+          console.error(`❌ Row error for ${row.employeeId}:`, err.message);
           return { employeeId: row.employeeId || 'N/A', error: err.message };
         }
       }));
@@ -255,7 +270,6 @@ exports.importAttendance = async (req, res) => {
     res.status(500).json({ message: 'Import failed', error: err.message });
   }
 };
-
 
 
 // ────────────────────────────────────────────────────────────────────────────────
