@@ -39,9 +39,8 @@ const routes = [
     { path: 'addemployee', component: () => import('@/views/hrss/AddEmployee.vue') },
     { path: 'attendance', component: () => import('@/views/hrss/EmployeeAttendance.vue') },
     { path: 'evaluate/:id', component: () => import('@/views/hrss/EvaluatePage.vue') },
-
-
-    
+    { path: 'manpower/table', component: () => import('@/views/hrss/manpower/ManpowerTable.vue') },
+    { path: 'manpower/targets', component: () => import('@/views/hrss/manpower/ManpowerTargets.vue') },
 
     // Main Employee Dashboard
     { path: 'dashboard', component: () => import('@/views/hrss/dashboard/employees/EmployeeDashboard.vue') },
@@ -50,6 +49,7 @@ const routes = [
     { path: 'dashboard/charts/gender', component: () => import('@/views/hrss/dashboard/employees/charts/GenderBreakdown.vue') },
     { path: 'dashboard/charts/monthly-join', component: () => import('@/views/hrss/dashboard/employees/charts/MonthlyJoinChart.vue') },
     { path: 'dashboard/charts/total', component: () => import('@/views/hrss/dashboard/employees/charts/TotalEmployeesCard.vue') },
+    { path: 'dashboard/charts/department-position-status', component: () => import('@/views/hrss/dashboard/employees/charts/DepartmentPositionStatusChart.vue') },
 
     // Attendance Dashboard
     { path: 'dashboard/attendance', component: () => import('@/views/hrss/dashboard/attendance/AttendanceDashboard.vue') },

@@ -5,17 +5,33 @@
     <v-row dense>
       <!-- 🔢 Total Employees -->
       <v-col cols="12" sm="4">
-        <TotalEmployeesCard :total="summary.total" :trend="summary.trend" />
+        <TotalEmployeesCard
+          :total="summary.total"
+          :trend="summary.trend"
+        />
       </v-col>
 
       <!-- 👥 Gender Breakdown -->
       <v-col cols="12" sm="4">
-        <GenderBreakdownChart :data="genderData" />
+        <GenderBreakdownChart
+          :data="genderData"
+        />
       </v-col>
 
       <!-- 📈 Monthly Joins -->
       <v-col cols="12" sm="4">
-        <MonthlyJoinChart :chartData="monthlyData" />
+        <MonthlyJoinChart
+          :chart-data="monthlyData"
+        />
+      </v-col>
+
+      <!-- 🗂 Dept & Position by Status -->
+      <v-col cols="12" sm="6" md="4">
+        <DepartmentPositionStatusChart
+          :status-options="statusOptions"
+          :initial-status="initialStatus"
+          :fetch-data="fetchDeptPosData"
+        />
       </v-col>
     </v-row>
   </v-container>
@@ -24,13 +40,30 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from '@/utils/axios'
-import GenderBreakdownChart from './charts/GenderBreakdown.vue'
-import MonthlyJoinChart from './charts/MonthlyJoinChart.vue'
-import TotalEmployeesCard from './charts/TotalEmployeesCard.vue'
 
-const genderData = ref([])
+// existing charts
+import TotalEmployeesCard           from './charts/TotalEmployeesCard.vue'
+import GenderBreakdownChart         from './charts/GenderBreakdown.vue'
+import MonthlyJoinChart             from './charts/MonthlyJoinChart.vue'
+// new chart
+import DepartmentPositionStatusChart from './charts/DepartmentPositionStatusChart.vue'
+
+const summary     = ref({ total: 0, trend: [] })
+const genderData  = ref([])
 const monthlyData = ref({ labels: [], counts: [] })
-const summary = ref({ total: 0, trend: [] })
+
+// for the new chart
+const statusOptions  = ['Working', 'Resign', 'Terminate', 'Abandon', 'Pass Away', 'Retirement', '']
+const initialStatus  = 'Working'
+
+async function fetchDeptPosData(status) {
+  const company = localStorage.getItem('company')
+  const res = await axios.get(
+    '/hrss/dashboard/employees/department-position-status',
+    { params: { company, status } }
+  )
+  return Array.isArray(res.data) ? res.data : []
+}
 
 onMounted(async () => {
   const company = localStorage.getItem('company')
@@ -41,16 +74,12 @@ onMounted(async () => {
 
   // 🔢 Total Employees + Trend
   try {
-    console.log('📡 Fetching employee summary for company:', company)
-    const res = await axios.get('/hrss/dashboard/employees', {
-      params: { company }
-    })
-    console.log('✅ Total employee summary:', res.data)
+    const res = await axios.get('/hrss/dashboard/employees', { params: { company } })
     summary.value = {
       total: res.data.total || 0,
       trend: Array.isArray(res.data.trend) && res.data.trend.length
         ? res.data.trend
-        : [3200, 3400, 3600, 3900, 4100, 4300] // fallback for now
+        : [3200, 3400, 3600, 3900, 4100, 4300]
     }
   } catch (err) {
     console.error('❌ Failed to fetch total employees:', err.message)
@@ -58,11 +87,7 @@ onMounted(async () => {
 
   // 👥 Gender Breakdown
   try {
-    console.log('📡 Fetching gender breakdown for company:', company)
-    const res = await axios.get('/hrss/dashboard/employees/gender', {
-      params: { company }
-    })
-    console.log('✅ Gender data:', res.data)
+    const res = await axios.get('/hrss/dashboard/employees/gender', { params: { company } })
     genderData.value = Array.isArray(res.data) ? res.data : []
   } catch (err) {
     console.error('❌ Failed to fetch gender breakdown:', err.message)
@@ -70,15 +95,12 @@ onMounted(async () => {
 
   // 📈 Monthly Join Chart
   try {
-    console.log('📡 Fetching monthly joins for company:', company)
-    const res = await axios.get('/hrss/dashboard/employees/monthly', {
-      params: { company }
-    })
-    const rawData = Array.isArray(res.data) ? res.data : []
-    const labels = rawData.map(row => row._id)
-    const counts = rawData.map(row => row.count || 0)
-    monthlyData.value = { labels, counts }
-    console.log('✅ Monthly Chart Data:', monthlyData.value)
+    const res = await axios.get('/hrss/dashboard/employees/monthly', { params: { company } })
+    const raw = Array.isArray(res.data) ? res.data : []
+    monthlyData.value = {
+      labels: raw.map(r => r._id),
+      counts: raw.map(r => r.count || 0)
+    }
   } catch (err) {
     console.error('❌ Failed to fetch monthly joins:', err.message)
   }
