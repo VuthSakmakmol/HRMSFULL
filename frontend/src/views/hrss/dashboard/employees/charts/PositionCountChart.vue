@@ -1,9 +1,7 @@
 <template>
   <v-card flat class="pa-2 rounded-lg elevation-1" height="100%">
-    <v-card-title class="text-subtitle-2 font-weight-medium d-flex align-center mb-2">
-      <v-icon start color="pink" size="20">mdi-chart-bar</v-icon>
-      <span class="ml-2">Sewer &amp; Jumper Monthly Comparison</span>
-    </v-card-title>
+    <v-icon start color="pink" size="20">mdi-chart-line</v-icon>
+    <span class="ml-2">Sewer &amp; Jumper</span>
 
     <v-card-text>
       <ApexChart
@@ -29,7 +27,6 @@ const props = defineProps({
   chartData: {
     type: Object,
     required: true,
-    // { labels: string[], sewer: number[], jumper: number[], combined: number[] }
   }
 })
 

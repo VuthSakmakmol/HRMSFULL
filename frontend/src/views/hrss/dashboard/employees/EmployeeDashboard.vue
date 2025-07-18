@@ -1,6 +1,6 @@
 <template>
   <v-container fluid class="pa-4">
-    <h2>Employee Dashboard</h2>
+    <h2 class="text-h6 font-weight-bold mb-4">Employee Dashboard</h2>
 
     <!-- GLOBAL FILTERS -->
     <v-row class="mb-6" dense>
@@ -16,6 +16,7 @@
           variant="outlined"
         />
       </v-col>
+
       <v-col cols="12" sm="4" v-if="selectedPeriod !== 'all'">
         <v-select
           v-model="selectedYear"
@@ -29,186 +30,218 @@
     </v-row>
 
     <v-row dense>
-      <!-- Total Employees -->
+      
+
+      <!-- 2) Overall Join Trends -->
+      <v-col cols="12" sm="4">
+        <MonthlyJoinChart
+          :chart-data="monthlyProcessed"
+        />
+      </v-col>
+
+      <!-- 3) Sewer & Jumper Comparison -->
+      <v-col cols="12" sm="4">
+        <PositionCountChart
+          :chart-data="positionProcessed"
+        />
+      </v-col>
+
+      <!-- 4) Merchandising Join Trends -->
+      <v-col cols="12" sm="4">
+        <MonthlyJoinChart
+          :chart-data="merchMonthlyProcessed"
+        />
+      </v-col>
+
+      <!-- 1) Total Employees -->
       <v-col cols="12" sm="4">
         <TotalEmployeesCard
           :total="summary.total"
           :trend="summary.trend"
         />
       </v-col>
-
-      <!-- Join Trends -->
-      <v-col cols="12" sm="4">
-        <MonthlyJoinChart :chart-data="monthlyProcessed" />
-      </v-col>
-
-      <!-- Sewer & Jumper Comparison -->
-      <v-col cols="12" sm="4">
-        <PositionCountChart :chart-data="positionProcessed" />
-      </v-col>
     </v-row>
   </v-container>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
-import axios from '@/utils/axios';
+import { ref, onMounted, computed, watch } from 'vue'
+import axios from '@/utils/axios'
 
-import TotalEmployeesCard   from './charts/TotalEmployeesCard.vue';
-import MonthlyJoinChart     from './charts/MonthlyJoinChart.vue';
-import PositionCountChart   from './charts/PositionCountChart.vue';
+// Charts & Cards
+import TotalEmployeesCard   from './charts/TotalEmployeesCard.vue'
+import MonthlyJoinChart     from './charts/MonthlyJoinChart.vue'
+import PositionCountChart   from './charts/PositionCountChart.vue'
 
-// ─── RAW DATA ──────────────────────────────────────────────────────
-const summary         = ref({ total: 0, trend: [] });
-const monthlyRaw      = ref({ labels: [], counts: [] });
-const positionRaw     = ref({ labels: [], sewer: [], jumper: [], combined: [] });
+// ─── RAW DATA STATES ───────────────────────────────────────────────
+const summary            = ref({ total: 0, trend: [] })
+const monthlyRaw         = ref({ labels: [], counts: [] })
+const positionRaw        = ref({ labels: [], sewer: [], jumper: [], combined: [] })
+const merchMonthlyRaw    = ref({ labels: [], counts: [] })
+
 
 // ─── GLOBAL FILTER STATE ──────────────────────────────────────────
-const periodOptions   = [
+const periodOptions  = [
   { text: 'All',       value: 'all'      },
   { text: 'Yearly',    value: 'yearly'   },
   { text: 'Quarterly', value: 'quarterly'}
-];
-const selectedPeriod  = ref('all');
-const selectedYear    = ref(null);
-watch(selectedPeriod, () => (selectedYear.value = null));
+]
+const selectedPeriod = ref('all')
+const selectedYear   = ref(null)
+watch(selectedPeriod, () => { selectedYear.value = null })
 
-// derive years from monthly labels
+// derive year options from the main monthly data
 const yearOptions = computed(() => {
-  const yrs = new Set(monthlyRaw.value.labels.map(l => l.slice(0,4)));
-  return Array.from(yrs).sort();
-});
+  const years = new Set(monthlyRaw.value.labels.map(l => l.slice(0,4)))
+  return Array.from(years).sort()
+})
 
-// ─── FETCH ALL DASHBOARD DATA ────────────────────────────────────
+// ─── FETCH EVERYTHING ON MOUNT ────────────────────────────────────
 onMounted(async () => {
-  const company = localStorage.getItem('company');
-  if (!company) return;
+  const company = localStorage.getItem('company')
+  if (!company) return
 
-  // 1) summary
+  // 1) Total / Male / Female summary
   try {
-    const { data } = await axios.get('/hrss/dashboard/employees', { params:{ company }});
+    const { data } = await axios.get('/hrss/dashboard/employees', { params:{ company } })
     summary.value = {
       total: data.total || 0,
       trend: data.trend || []
-    };
-  } catch {}
+    }
+  } catch (err) {
+    console.error('Failed to fetch summary:', err)
+  }
 
-  // 2) joins
+  // 2) Overall monthly join
   try {
-    const { data } = await axios.get('/hrss/dashboard/employees/monthly', { params:{ company }});
+    const { data } = await axios.get('/hrss/dashboard/employees/monthly', { params:{ company }})
     monthlyRaw.value = {
       labels: data.map(r => r._id),
       counts: data.map(r => r.count)
-    };
-  } catch {}
+    }
+  } catch (err) {
+    console.error('Failed to fetch overall monthly joins:', err)
+  }
 
-
-  // 🎯 Sewer & Jumper Monthly
-try {
-  const { data } = await axios.get(
-    '/hrss/dashboard/employees/positions/monthly',
-    { params: { company } }
-  );
-  console.log('position monthly raw:', data);
+  // 3) Sewer & Jumper monthly counts
+  try {
+    const { data } = await axios.get('/hrss/dashboard/employees/positions/monthly', { params:{ company }})
     positionRaw.value = {
       labels:   data.labels,
       sewer:    data.sewer,
       jumper:   data.jumper,
       combined: data.combined
-    };
+    }
   } catch (err) {
-    console.error('❌ Failed to fetch position-monthly:', err);
+    console.error('Failed to fetch position counts:', err)
   }
 
-});
+  // 4) Merchandising monthly join (uses the new endpoint)
+  try {
+    const { data } = await axios.get(
+      '/hrss/dashboard/employees/monthly/merchandising',
+      { params:{ company } }
+    )
+    merchMonthlyRaw.value = {
+      labels: data.map(r => r._id),
+      counts: data.map(r => r.count)
+    }
+  } catch (err) {
+    console.error('Failed to fetch merchandising monthly joins:', err)
+  }
+})
 
-// ─── PROCESS & FILTER ────────────────────────────────────────────
-// helper to zip raw into objects
-const rawJoins = computed(() =>
-  monthlyRaw.value.labels.map((lbl,i) => ({
-    date: lbl,
-    count: monthlyRaw.value.counts[i] || 0
+// ─── PROCESS & FILTER HELPERS ──────────────────────────────────────
+
+// helper to zip any monthlyRaw-like state into {date,count} objects
+function makeRaw(raw) {
+  return raw.labels.map((lbl,i) => ({
+    date:  lbl,
+    count: raw.counts[i] || 0
   }))
-);
+}
 
-const monthlyProcessed = computed(() => {
+// generic filter logic for “All / Yearly / Quarterly”
+function makeProcessed(raw) {
+  const arr = makeRaw(raw)
   if (selectedPeriod.value === 'all') {
-    return { ...monthlyRaw.value };
+    // just pass through
+    return { labels: raw.labels, counts: raw.counts }
   }
   if (selectedPeriod.value === 'yearly') {
-    if (!selectedYear.value) return { labels:[], counts:[] };
-    const y = selectedYear.value;
+    if (!selectedYear.value) return { labels: [], counts: [] }
+    const y = selectedYear.value
     const months = Array.from({ length: 12 }, (_, i) =>
       `${y}-${String(i+1).padStart(2,'0')}`
-    );
+    )
     const counts = months.map(m => {
-      const f = rawJoins.value.find(r => r.date === m);
-      return f ? f.count : 0;
-    });
-    return { labels: months, counts };
+      const f = arr.find(r => r.date === m)
+      return f ? f.count : 0
+    })
+    return { labels: months, counts }
   }
   if (selectedPeriod.value === 'quarterly') {
-    if (!selectedYear.value) return { labels:[], counts:[] };
-    const y = selectedYear.value;
-    const sums = [0,0,0,0];
-    rawJoins.value.forEach(r => {
+    if (!selectedYear.value) return { labels: [], counts: [] }
+    const y = selectedYear.value
+    const sums = [0,0,0,0]
+    arr.forEach(r => {
       if (r.date.startsWith(y)) {
-        const m = +r.date.slice(5,7);
-        sums[Math.ceil(m/3)-1] += r.count;
+        const m = +r.date.slice(5,7)
+        sums[Math.ceil(m/3)-1] += r.count
       }
-    });
-    return { labels:['Q1','Q2','Q3','Q4'], counts: sums };
+    })
+    return { labels:['Q1','Q2','Q3','Q4'], counts: sums }
   }
-  return { labels:[], counts:[] };
-});
+  return { labels: [], counts: [] }
+}
 
-// same exact filter logic for positionRaw
-const rawPos = computed(() =>
-  positionRaw.value.labels.map((lbl,i) => ({
-    date:     lbl,
-    sewer:    positionRaw.value.sewer[i]    || 0,
-    jumper:   positionRaw.value.jumper[i]   || 0,
-    combined: positionRaw.value.combined[i] || 0
-  }))
-);
+// computed views
+const monthlyProcessed       = computed(() => makeProcessed(monthlyRaw.value))
+const merchMonthlyProcessed  = computed(() => makeProcessed(merchMonthlyRaw.value))
 
+// for Sewer+Jumper we need a custom filter because we have three arrays
 const positionProcessed = computed(() => {
-  // ALL
+  const raw = positionRaw.value
+  const arr = raw.labels.map((lbl,i) => ({
+    date:     lbl,
+    sewer:    raw.sewer[i]    || 0,
+    jumper:   raw.jumper[i]   || 0,
+    combined: raw.combined[i] || 0
+  }))
+
   if (selectedPeriod.value === 'all') {
-    return { ...positionRaw.value };
+    return { ...raw }
   }
-  // YEARLY
   if (selectedPeriod.value === 'yearly') {
-    if (!selectedYear.value) return { labels:[], sewer:[], jumper:[], combined:[] };
-    const y = selectedYear.value;
+    if (!selectedYear.value) return { labels: [], sewer: [], jumper: [], combined: [] }
+    const y = selectedYear.value
     const months = Array.from({ length: 12 }, (_, i) =>
       `${y}-${String(i+1).padStart(2,'0')}`
-    );
-    const s = months.map(m => rawPos.value.find(r=>r.date===m)?.sewer  || 0);
-    const j = months.map(m => rawPos.value.find(r=>r.date===m)?.jumper || 0);
-    const c = s.map((v,i) => v + j[i]);
-    return { labels: months, sewer: s, jumper: j, combined: c };
+    )
+    const s = months.map(m => arr.find(r => r.date===m)?.sewer    || 0)
+    const j = months.map(m => arr.find(r => r.date===m)?.jumper   || 0)
+    const c = months.map((_,i) => s[i] + j[i])
+    return { labels: months, sewer: s, jumper: j, combined: c }
   }
-  // QUARTERLY
   if (selectedPeriod.value === 'quarterly') {
-    if (!selectedYear.value) return { labels:[], sewer:[], jumper:[], combined:[] };
-    const y = selectedYear.value;
-    const sums = { sewer:[0,0,0,0], jumper:[0,0,0,0], combined:[0,0,0,0] };
-    rawPos.value.forEach(r => {
+    if (!selectedYear.value) return { labels: [], sewer: [], jumper: [], combined: [] }
+    const y = selectedYear.value
+    const sums = { sewer:[0,0,0,0], jumper:[0,0,0,0], combined:[0,0,0,0] }
+    arr.forEach(r => {
       if (r.date.startsWith(y)) {
-        const m = +r.date.slice(5,7), qi = Math.ceil(m/3)-1;
-        sums.sewer[qi]    += r.sewer;
-        sums.jumper[qi]   += r.jumper;
-        sums.combined[qi] += r.combined;
+        const idx = Math.ceil(+r.date.slice(5,7)/3)-1
+        sums.sewer[idx]    += r.sewer
+        sums.jumper[idx]   += r.jumper
+        sums.combined[idx] += r.combined
       }
-    });
+    })
     return {
       labels:   ['Q1','Q2','Q3','Q4'],
       sewer:    sums.sewer,
       jumper:   sums.jumper,
       combined: sums.combined
-    };
+    }
   }
-  return { labels:[], sewer:[], jumper:[], combined:[] };
-});
+  return { labels: [], sewer: [], jumper: [], combined: [] }
+})
 </script>

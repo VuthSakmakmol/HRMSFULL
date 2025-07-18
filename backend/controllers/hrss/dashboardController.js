@@ -99,3 +99,38 @@ exports.getPositionMonthlyCounts = async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch position monthly counts' });
   }
 }
+
+
+// ─── Merchandising: Monthly Join Trend ────────────────────────────
+exports.getMerchandisingMonthlyJoin = async (req, res) => {
+  try {
+    const company = req.company || req.query.company
+    if (!company) {
+      return res.status(400).json({ error: 'Company is required' })
+    }
+
+    // aggregate by joinDate (or fallback to createdAt) into YYYY-MM buckets
+    const data = await Employee.aggregate([
+      { $match: { company, department: 'Merchandising' } },
+      { $project: {
+          month: {
+            $dateToString: {
+              format: '%Y-%m',
+              date: { $ifNull: ['$joinDate', '$createdAt'] }
+            }
+          }
+      }},
+      { $group: {
+          _id:   '$month',
+          count: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ])
+
+    return res.json(data)
+  } catch (err) {
+    console.error('❌ getMerchandisingMonthlyJoin error:', err)
+    return res.status(500).json({ error: 'Failed to fetch merchandising monthly joins' })
+  }
+}
+

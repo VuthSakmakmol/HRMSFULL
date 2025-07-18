@@ -12,5 +12,8 @@ router.get('/employees/monthly', authenticate, dashboardController.getMonthlyJoi
 // 🎯 Sewer & Jumper Monthly Breakdown
 router.get('/employees/positions/monthly', authenticate, dashboardController.getPositionMonthlyCounts);
 
+// 🎯 Merchandising only: Monthly join trend
+router.get('/employees/monthly/merchandising', authenticate, dashboardController.getMerchandisingMonthlyJoin)
+
 
 module.exports = router;
