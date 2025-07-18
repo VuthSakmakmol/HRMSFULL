@@ -134,3 +134,50 @@ exports.getMerchandisingMonthlyJoin = async (req, res) => {
   }
 }
 
+// ─── Monthly join trend for “other” positions ────────────────────
+exports.getOtherPositionsMonthlyJoin = async (req, res) => {
+  try {
+    const company    = req.company || req.query.company
+    if (!company) return res.status(400).json({ error: 'Company is required' })
+
+    const excludeDept = 'Merchandising'
+    const excludePos  = ['Sewer','Jumper']
+
+    // 1) aggregate by month+position
+    const agg = await Employee.aggregate([
+      { $match: {
+          company,
+          department: { $ne: excludeDept },
+          position:   { $nin: excludePos },
+          joinDate:   { $exists:true, $ne:null }
+      }},
+      { $group: {
+          _id:   { month:'$joinDate', position:'$position' },
+          count: { $sum: 1 }
+      }},
+      { $project: {
+          month:    { $dateToString:{ format:'%Y-%m', date:'$_id.month' } },
+          position: '$_id.position',
+          count:    1
+      }},
+      { $sort: { month: 1 } }
+    ])
+
+    // 2) pivot into labels + series
+    const months    = Array.from(new Set(agg.map(d => d.month))).sort()
+    const positions = Array.from(new Set(agg.map(d => d.position))).sort()
+
+    const series = positions.map(pos => ({
+      name: pos,
+      data: months.map(m => {
+        const found = agg.find(d => d.month === m && d.position === pos)
+        return found ? found.count : 0
+      })
+    }))
+
+    res.json({ labels: months, series })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Failed to fetch other positions monthly joins' })
+  }
+}

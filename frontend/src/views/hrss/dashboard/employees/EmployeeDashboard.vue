@@ -53,6 +53,15 @@
         />
       </v-col>
 
+
+      <!-- 4) Other Position Joint -->
+      <v-col cols="12" sm="6">
+        <OtherPositionChart
+          :chart-data="otherPivot"
+          title="Other Positions Join Trends"
+        />
+      </v-col>
+
       <!-- 1) Total Employees -->
       <v-col cols="12" sm="4">
         <TotalEmployeesCard
@@ -72,13 +81,15 @@ import axios from '@/utils/axios'
 import TotalEmployeesCard   from './charts/TotalEmployeesCard.vue'
 import MonthlyJoinChart     from './charts/MonthlyJoinChart.vue'
 import PositionCountChart   from './charts/PositionCountChart.vue'
+import OtherPositionChart   from './charts/OtherPositionChart.vue'
+
 
 // ─── RAW DATA STATES ───────────────────────────────────────────────
 const summary            = ref({ total: 0, trend: [] })
 const monthlyRaw         = ref({ labels: [], counts: [] })
 const positionRaw        = ref({ labels: [], sewer: [], jumper: [], combined: [] })
 const merchMonthlyRaw    = ref({ labels: [], counts: [] })
-
+const otherPivot         = ref({ labels: [], series: [] })
 
 // ─── GLOBAL FILTER STATE ──────────────────────────────────────────
 const periodOptions  = [
@@ -149,6 +160,20 @@ onMounted(async () => {
   } catch (err) {
     console.error('Failed to fetch merchandising monthly joins:', err)
   }
+
+  // fetch “other positions” monthly join trend
+  try {
+    const { data } = await axios.get(
+      '/hrss/dashboard/employees/monthly/positions/others',
+      { params: { company } }
+    )
+    // data is [{ _id: 'YYYY-MM', count: N }, …]
+     otherPivot.value = data
+  } catch (err) {
+    console.error('❌ Failed to fetch other positions monthly joins:', err)
+  }
+
+
 })
 
 // ─── PROCESS & FILTER HELPERS ──────────────────────────────────────
@@ -198,6 +223,7 @@ function makeProcessed(raw) {
 // computed views
 const monthlyProcessed       = computed(() => makeProcessed(monthlyRaw.value))
 const merchMonthlyProcessed  = computed(() => makeProcessed(merchMonthlyRaw.value))
+const otherProcessed = computed(() => otherPivot.value)
 
 // for Sewer+Jumper we need a custom filter because we have three arrays
 const positionProcessed = computed(() => {

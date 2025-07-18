@@ -15,5 +15,8 @@ router.get('/employees/positions/monthly', authenticate, dashboardController.get
 // 🎯 Merchandising only: Monthly join trend
 router.get('/employees/monthly/merchandising', authenticate, dashboardController.getMerchandisingMonthlyJoin)
 
+// ─── Other Positions Monthly Join Trend ─────────────────────────
+router.get('/employees/monthly/positions/others', authenticate, dashboardController.getOtherPositionsMonthlyJoin)
+
 
 module.exports = router;
