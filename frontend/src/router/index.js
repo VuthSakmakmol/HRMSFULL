@@ -46,16 +46,16 @@ const routes = [
     { path: 'dashboard', component: () => import('@/views/hrss/dashboard/employees/EmployeeDashboard.vue') },
 
     // Chart components for optional direct view
-    { path: 'dashboard/charts/gender', component: () => import('@/views/hrss/dashboard/employees/charts/GenderBreakdown.vue') },
     { path: 'dashboard/charts/monthly-join', component: () => import('@/views/hrss/dashboard/employees/charts/MonthlyJoinChart.vue') },
     { path: 'dashboard/charts/total', component: () => import('@/views/hrss/dashboard/employees/charts/TotalEmployeesCard.vue') },
-    { path: 'dashboard/charts/department-position-status', component: () => import('@/views/hrss/dashboard/employees/charts/DepartmentPositionStatusChart.vue') },
+    { path: 'dashboard/charts/position-count', component: () => import('@/views/hrss/dashboard/employees/charts/PositionCountChart.vue') },
+
+
 
     // Attendance Dashboard
     { path: 'dashboard/attendance', component: () => import('@/views/hrss/dashboard/attendance/AttendanceDashboard.vue') },
   ]
-}
-,
+},
 
 
   // Default and fallback

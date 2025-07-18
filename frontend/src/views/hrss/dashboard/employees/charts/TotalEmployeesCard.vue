@@ -9,24 +9,13 @@
           </div>
           <div class="text-h5 font-weight-bold text-primary">{{ total }}</div>
         </div>
-        <v-avatar size="40" color="blue-lighten-4">
-          <v-icon color="primary">mdi-account-multiple</v-icon>
-        </v-avatar>
       </v-row>
-
-      <!-- Sparkline Trend Chart -->
-      <apexchart
-        type="line"
-        height="60"
-        :options="sparklineOptions"
-        :series="[{ name: 'Employees', data: trend }]"
-      />
     </v-card>
   </v-col>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+
 
 const props = defineProps({
   total: Number,
@@ -36,23 +25,4 @@ const props = defineProps({
   }
 })
 
-const sparklineOptions = computed(() => ({
-  chart: {
-    type: 'line',
-    sparkline: { enabled: true },
-    background: 'transparent'
-  },
-  stroke: {
-    curve: 'smooth',
-    width: 2
-  },
-  tooltip: {
-    enabled: true,
-    x: { show: false },
-    y: {
-      formatter: val => `${val} employees`
-    }
-  },
-  colors: ['#42A5F5']
-}))
 </script>

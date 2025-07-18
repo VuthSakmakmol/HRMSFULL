@@ -1,30 +1,21 @@
 <template>
-  <v-card
-    flat
-    class="pa-2 rounded-lg elevation-1"
-    height="100%"
-    style="background-color: #f5f7fa"
-  >
-    <!-- 🔖 Title -->
-    <v-card-title class="text-subtitle-2 font-weight-medium d-flex align-center mb-2">
-      <v-icon start color="pink" size="20">mdi-calendar-month</v-icon>
-      Monthly Employee Joins
-    </v-card-title>
+  <v-card flat class="pa-2 rounded-lg elevation-1" height="100%">
+    <v-icon start color="pink" size="20">mdi-chart-line</v-icon>
+    <span class="ml-2">Employee Join Trends</span>
 
-    <!-- 📊 Chart -->
-    <div v-if="Array.isArray(chartData.counts) && chartData.counts.length">
+    <div v-if="chartData.labels.length">
       <apexchart
-        type="bar"
-        height="220"
+        type="line"
+        height="240"
         :options="chartOptions"
         :series="chartSeries"
       />
     </div>
-
-    <!-- 🚫 No Data -->
     <v-container v-else class="text-center">
-      <v-icon size="36">mdi-chart-bar</v-icon>
-      <p class="text-caption text-grey">No monthly data available</p>
+      <v-icon size="36">mdi-chart-line</v-icon>
+      <p class="text-caption text-grey">
+        No data available
+      </p>
     </v-container>
   </v-card>
 </template>
@@ -35,49 +26,31 @@ import { computed } from 'vue'
 const props = defineProps({
   chartData: {
     type: Object,
-    default: () => ({
-      labels: [],
-      counts: []
-    })
+    required: true,
+    // { labels: string[], counts: number[] }
   }
 })
 
-// 📊 Series
-const chartSeries = computed(() => [
-  {
-    name: 'Joins',
-    data: Array.isArray(props.chartData.counts) ? props.chartData.counts : []
-  }
-])
+const chartSeries = computed(() => [{
+  name: 'Joins',
+  data: props.chartData.counts
+}])
 
-// ⚙️ Options
 const chartOptions = computed(() => ({
-  chart: {
-    type: 'bar',
-    toolbar: { show: false }
-  },
+  chart: { toolbar: { show: false } },
+  stroke: { curve: 'smooth' },
+  markers: { size: 4 },
   xaxis: {
-    categories: Array.isArray(props.chartData.labels) ? props.chartData.labels : [],
+    categories: props.chartData.labels,
     labels: { rotate: -45, style: { fontSize: '11px' } }
   },
   yaxis: {
     title: { text: 'Employees' },
     labels: { style: { fontSize: '11px' } }
   },
-  plotOptions: {
-    bar: {
-      borderRadius: 4,
-      columnWidth: '45%'
-    }
-  },
   dataLabels: {
     enabled: true,
     style: { fontSize: '11px' }
-  },
-  colors: ['#FF4081']
+  }
 }))
 </script>
-
-<style scoped>
-/* Optional custom style */
-</style>

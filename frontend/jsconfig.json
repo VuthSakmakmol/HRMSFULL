@@ -6,15 +6,14 @@
     "baseUrl": "./",
     "moduleResolution": "bundler",
     "paths": {
-      "@/*": [
-        "src/*"
-      ]
+      "@/*": ["src/*"]
     },
-    "lib": [
+    "lib": [                      /* ← now nested properly */
       "esnext",
       "dom",
       "dom.iterable",
       "scripthost"
     ]
-  }
+  },
+  "include": ["src/**/*"]        /* optional, but recommended to tell VS Code what to cover */
 }

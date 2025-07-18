@@ -44,29 +44,58 @@ exports.getMonthlyJoinChart = async (req, res) => {
 }
 
 
+exports.getPositionMonthlyCounts = async (req, res) => {
+  // 1) confirm what we're matching
+  console.log('🔍 company filters:', { fromAuth: req.company, fromQuery: req.query.company });
 
-// ─── Gender Breakdown ───────────────────────────────────────────
-// controllers/dashboardController.js
-exports.getGenderBreakdown = async (req, res) => {
+  // 2) pick whichever one you actually want
+  const company = req.company || req.query.company;
+  if (!company) {
+    return res.status(400).json({ error: 'Company is required' });
+  }
+
   try {
-    const company = req.user?.company || req.query.company // if needed
-    const query = company ? { company } : {}
-
-    const result = await Employee.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: { $ifNull: ['$gender', 'Other'] },
+    const positions = ['Sewer','Jumper'];
+    const agg = await Employee.aggregate([
+      { $match: {
+          company,
+          position:  { $in: positions },
+          joinDate:  { $exists: true, $ne: null }
+      }},
+      { $project: {
+          month:    { $dateToString: { format:'%Y-%m', date:'$joinDate' } },
+          position: 1
+      }},
+      { $group: {
+          _id:   { month:'$month', position:'$position' },
           count: { $sum: 1 }
-        }
-      }
-    ])
+      }},
+      { $group: {
+          _id:    '$_id.month',
+          counts: { $push: { position:'$_id.position', count:'$count' } }
+      }},
+      { $sort: { _id: 1 } }
+    ]);
 
-    res.json(result)
+    // pivot
+    const labels   = [];
+    const sewer    = [];
+    const jumper   = [];
+    const combined = [];
+
+    agg.forEach(b => {
+      labels.push(b._id);
+      const s = b.counts.find(x=>x.position==='Sewer')?.count || 0;
+      const j = b.counts.find(x=>x.position==='Jumper')?.count|| 0;
+      sewer.push(s);
+      jumper.push(j);
+      combined.push(s+j);
+    });
+
+    console.log('📊 positionMonthlyCounts:', { labels, sewer, jumper, combined });
+    return res.json({ labels, sewer, jumper, combined });
   } catch (err) {
-    console.error('❌ Failed to fetch gender breakdown:', err.message)
-    res.status(500).json({ error: 'Server error' })
+    console.error('❌ Error in getPositionMonthlyCounts:', err);
+    return res.status(500).json({ error: 'Failed to fetch position monthly counts' });
   }
 }
-
-

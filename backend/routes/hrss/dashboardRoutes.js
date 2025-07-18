@@ -6,10 +6,11 @@ const { authenticate } = require('../../middlewares/authMiddleware');
 // 🧑‍🤝‍🧑 Total Employees
 router.get('/employees', authenticate, dashboardController.getEmployeeSummary);
 
-// 👥 Gender Breakdown
-router.get('/employees/gender', authenticate, dashboardController.getGenderBreakdown);
-
 // 📈 Monthly Joins
 router.get('/employees/monthly', authenticate, dashboardController.getMonthlyJoinChart);
+
+// 🎯 Sewer & Jumper Monthly Breakdown
+router.get('/employees/positions/monthly', authenticate, dashboardController.getPositionMonthlyCounts);
+
 
 module.exports = router;

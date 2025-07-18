@@ -10,16 +10,30 @@
       </v-card-title>
 
       <v-row dense align="center">
-        <!-- Month -->
+        <!-- Year -->
         <v-col cols="12" sm="3">
-          <v-text-field
-            v-model="yearMonth"
-            label="Month"
-            type="month"
+          <v-select
+            v-model="selectedYear"
+            :items="years"
+            label="Year"
             dense
-            @change="loadRows"
+            hide-details
           />
         </v-col>
+
+        <!-- Month -->
+        <v-col cols="12" sm="3">
+          <v-select
+            v-model="selectedMonth"
+            :items="months"
+            item-title="text"
+            item-value="value"
+            label="Month"
+            dense
+            hide-details
+          />
+        </v-col>
+
         <!-- Department -->
         <v-col cols="12" sm="4">
           <v-autocomplete
@@ -37,7 +51,7 @@
 
     <v-card>
       <v-card-title>
-        Targets for {{ selectedDept || '—' }}
+        Targets for {{ selectedDept || '—' }} ({{ yearMonth }})
       </v-card-title>
 
       <v-data-table
@@ -55,7 +69,7 @@
           />
         </template>
         <template #no-data>
-          Select a department and month to begin.
+          Select a year, month and department to begin.
         </template>
       </v-data-table>
     </v-card>
@@ -63,36 +77,60 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import dayjs from 'dayjs'
 import axios from '@/utils/axios'
 
-const yearMonth    = ref(dayjs().format('YYYY-MM'))
-const departments  = ref([])   // { name, jobTitles: [] }
-const selectedDept = ref(null)
-const rows         = ref([])   // { position, target }
+// 1) Year/Month dropdown data
+const currentYear = dayjs().year()
+const years       = Array.from({ length: 11 }, (_, i) => String(currentYear - 5 + i))
+const months      = Array.from({ length: 12 }, (_, i) => {
+  const value = String(i + 1).padStart(2, '0')
+  const text  = dayjs().month(i).format('MMMM')
+  return { text, value }
+})
 
-const isLoading    = ref(false)
-const isSaving     = ref(false)
+// 2) Selected filters
+const selectedYear  = ref(dayjs().format('YYYY'))
+const selectedMonth = ref(dayjs().format('MM'))
+const selectedDept  = ref(null)
 
+// 3) Computed YYYY-MM string
+const yearMonth = computed(() => `${selectedYear.value}-${selectedMonth.value}`)
+
+// 4) Department lists (raw + deduped)
+const departmentsRaw = ref([]) 
+const departments    = computed(() => {
+  const seen = new Set()
+  return departmentsRaw.value.filter(d => {
+    if (seen.has(d.name)) return false
+    seen.add(d.name)
+    return true
+  })
+})
+
+// 5) Table data + state
+const rows      = ref([])   // { position, target }
+const isLoading = ref(false)
+const isSaving  = ref(false)
 const tableHeaders = [
   { text: 'Position', value: 'position' },
   { text: 'Target',   value: 'target'   }
 ]
 
-// 1) load department list once
+// 6) Load departments once
 async function loadDepartments() {
   try {
     const company = localStorage.getItem('company') || ''
-    const res = await axios.get('/departments', { params:{ company }})
-    departments.value = Array.isArray(res.data) ? res.data : []
+    const res     = await axios.get('/departments', { params: { company } })
+    departmentsRaw.value = Array.isArray(res.data) ? res.data : []
   } catch (err) {
     console.error('❌ loadDepartments error:', err)
-    departments.value = []
+    departmentsRaw.value = []
   }
 }
 
-// 2) populate rows whenever month or department changes
+// 7) Load target rows when yearMonth or dept changes
 async function loadRows() {
   if (!selectedDept.value) {
     rows.value = []
@@ -100,24 +138,24 @@ async function loadRows() {
   }
   isLoading.value = true
   try {
-    // find positions for this dept
-    const deptObj = departments.value.find(d => d.name === selectedDept.value)
+    // find jobTitles for that dept
+    const deptObj  = departmentsRaw.value.find(d => d.name === selectedDept.value)
     const positions = deptObj?.jobTitles || []
 
     // fetch existing targets
     const company = localStorage.getItem('company') || ''
-    const res = await axios.get('/hrss/manpower/targets', {
+    const res     = await axios.get('/hrss/manpower/targets', {
       params: { company, yearMonth: yearMonth.value }
     })
     const targets = Array.isArray(res.data) ? res.data : []
-    const map = new Map()
+    const map     = new Map()
     targets.forEach(t => {
       if (t.department === selectedDept.value) {
         map.set(t.position, t.target)
       }
     })
 
-    // build table rows
+    // build rows
     rows.value = positions.map(pos => ({
       position: pos,
       target:   map.get(pos) || 0
@@ -130,7 +168,7 @@ async function loadRows() {
   }
 }
 
-// 3) save them all
+// 8) Save all targets
 async function saveAll() {
   if (!selectedDept.value) {
     return alert('Select a department first.')
@@ -153,16 +191,15 @@ async function saveAll() {
     alert('Failed to save some targets.')
   } finally {
     isSaving.value = false
-    // reload to reflect any defaults
     loadRows()
   }
 }
 
-// wire up
-onMounted(async () => {
-  await loadDepartments()
-  watch([selectedDept, yearMonth], loadRows, { immediate: true })
-})
+// 9) Watch for filter changes
+watch([yearMonth, selectedDept], loadRows, { immediate: true })
+
+// 10) On mount: fetch department list
+onMounted(loadDepartments)
 </script>
 
 <style scoped>
