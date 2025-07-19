@@ -61,6 +61,8 @@ app.use('/api/employees', require('./routes/hrss/employeeRoutes'));
 app.use('/api/location', require('./routes/hrss/locationRoutes'))
 app.use('/api/meta', require('./routes/hrss/metaRoutes'))
 
+// excome
+app.use('/api/excome', require('./routes/hrss/excomeRoutes'));
 
 // HRSS Attendance
 app.use('/api/attendance', require('./routes/hrss/attendanceRoutes'))

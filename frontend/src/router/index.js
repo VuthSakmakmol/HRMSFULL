@@ -44,12 +44,16 @@ const routes = [
 
     // Main Employee Dashboard
     { path: 'dashboard', component: () => import('@/views/hrss/dashboard/employees/EmployeeDashboard.vue') },
+    { path: 'dashboard/excome', component: () => import('@/views/hrss/dashboard/employees/ExcomeDashboard.vue')},
+
 
     // Chart components for optional direct view
     { path: 'dashboard/charts/monthly-join', component: () => import('@/views/hrss/dashboard/employees/charts/MonthlyJoinChart.vue') },
     { path: 'dashboard/charts/total', component: () => import('@/views/hrss/dashboard/employees/charts/TotalEmployeesCard.vue') },
     { path: 'dashboard/charts/position-count', component: () => import('@/views/hrss/dashboard/employees/charts/PositionCountChart.vue') },
 
+    // Excome Dashboard component
+    { path: 'dashboard/excome/typeOfPosition', component: () => import('@/views/hrss/dashboard/employees/excome/TypeOfPosition.vue')},
 
 
     // Attendance Dashboard

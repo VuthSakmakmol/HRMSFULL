@@ -92,10 +92,10 @@ exports.getPositionMonthlyCounts = async (req, res) => {
       combined.push(s+j);
     });
 
-    console.log('📊 positionMonthlyCounts:', { labels, sewer, jumper, combined });
+    // console.log('📊 positionMonthlyCounts:', { labels, sewer, jumper, combined });
     return res.json({ labels, sewer, jumper, combined });
   } catch (err) {
-    console.error('❌ Error in getPositionMonthlyCounts:', err);
+    // console.error('❌ Error in getPositionMonthlyCounts:', err);
     return res.status(500).json({ error: 'Failed to fetch position monthly counts' });
   }
 }

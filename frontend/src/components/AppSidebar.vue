@@ -117,6 +117,14 @@
             </div>
           </template>
         </v-list-item>
+                <v-list-item :to="{ path: '/hrss/dashboard/excome' }">
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
+              Excome
+            </div>
+          </template>
+        </v-list-item>
       </v-list-group>
 
 
