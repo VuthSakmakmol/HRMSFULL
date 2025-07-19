@@ -54,6 +54,7 @@ const routes = [
 
     // Excome Dashboard component
     { path: 'dashboard/excome/typeOfPosition', component: () => import('@/views/hrss/dashboard/employees/excome/TypeOfPosition.vue')},
+    { path: 'dashboard/excome/summaryBudgetTable', component: () => import('@/views/hrss/dashboard/employees/excome/SummaryBudgetTable.vue')},
 
 
     // Attendance Dashboard

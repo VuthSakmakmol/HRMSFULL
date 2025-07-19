@@ -26,6 +26,13 @@
         <TypeOfPosition title="Indirect Labor" :count="counts.indirectLabor" />
       </v-col>
     </v-row>
+
+    <!-- Summary Budget Table -->
+    <v-row class="mt-8">
+      <v-col cols="12">
+        <SummaryBudgetTable />
+      </v-col> 
+    </v-row>
   </v-container>
 </template>
 
@@ -33,10 +40,15 @@
 import axios from '@/utils/axios'
 // assumes this file sits alongside TypeOfPosition.vue
 import TypeOfPosition from './excome/TypeOfPosition.vue'
+import SummaryBudgetTable from './excome/SummaryBudgetTable.vue'
+
 
 export default {
   name: 'ExcomeDashboard',
-  components: { TypeOfPosition },
+    components: {
+    TypeOfPosition,
+    SummaryBudgetTable
+  },
   data() {
     return {
       // default to current month in YYYY-MM format
