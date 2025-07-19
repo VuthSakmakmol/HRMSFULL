@@ -1,12 +1,13 @@
 // routes/hrss/excomeRoutes.js
-const express = require('express')
-const router  = express.Router()
+const express                 = require('express')
+const router                  = express.Router()
 
-const { authenticate }                  = require('../../middlewares/authMiddleware')
-const { authorizeCompanyAccess }        = require('../../middlewares/roleMiddleware')
+const { authenticate }        = require('../../middlewares/authMiddleware')
+const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware')
 const {
   getMonthlyEmployeeCount,
-  getManpowerTargets
+  getManpowerTargets,
+  getAverageAge
 } = require('../../controllers/hrss/excomeController')
 
 // ─── Monthly Headcount by Employee Type ────────────────────────────────────────
@@ -25,6 +26,15 @@ router.get(
   authenticate,
   authorizeCompanyAccess,
   getManpowerTargets
+)
+
+// ─── Average Age Metrics ───────────────────────────────────────────────────────
+// GET /api/excome/employee-age
+router.get(
+  '/employee-age',
+  authenticate,
+  authorizeCompanyAccess,
+  getAverageAge
 )
 
 module.exports = router

@@ -176,3 +176,33 @@ exports.getManpowerTargets = async (req, res) => {
     })
   }
 }
+
+
+// controllers/hrss/excomeController.js
+
+exports.getAverageAge = async (req, res) => {
+  try {
+    const company = req.company
+    if (!company) return res.status(403).json({ message: 'Unauthorized' })
+
+    // Base match filter
+    const base = { company, status: 'Working' }
+
+    // Helper: average the stored `age` field
+    const computeAvg = async (extraFilter) => {
+      const [group] = await Employee.aggregate([
+        { $match: { ...base, ...extraFilter } },
+        { $group: { _id: null, avgAge: { $avg: '$age' } } }
+      ])
+      return group ? Math.round(group.avgAge * 10) / 10 : 0
+    }
+
+    const totalAvg = await computeAvg({})
+    const sewerAvg = await computeAvg({ position: { $in: ['Sewer','Jumper'] } })
+
+    return res.json({ total: totalAvg, sewer: sewerAvg })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'Failed-avgAge', error: err.message })
+  }
+}

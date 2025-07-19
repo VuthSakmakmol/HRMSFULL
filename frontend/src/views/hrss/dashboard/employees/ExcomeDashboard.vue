@@ -34,6 +34,7 @@
       </v-col>
     </v-row>
     
+    <!-- Indirect Labor Chart -->
     <v-row class="mt-8">
       <v-col cols="12">
         <IndirectLaborChart />
@@ -46,16 +47,23 @@
         <SummaryBudgetTable />
       </v-col>
     </v-row>
+
+    <!-- Avg Age cards -->
+    <v-row class="mt-8">
+      <v-col cols="12">
+        <AvgAgeCard />
+      </v-col>
+    </v-row>
   </v-container>
 </template>
 
 <script>
 import axios from '@/utils/axios'
-import TypeOfPosition     from './excome/TypeOfPosition.vue'
-import SummaryBudgetTable from './excome/SummaryBudgetTable.vue'
-import DirectLaborChart   from './excome/DirectLaborChart.vue'
-import IndirectLaborChart from './excome/IndirectLaborChart.vue'
-
+import TypeOfPosition      from './excome/TypeOfPosition.vue'
+import SummaryBudgetTable  from './excome/SummaryBudgetTable.vue'
+import DirectLaborChart    from './excome/DirectLaborChart.vue'
+import IndirectLaborChart  from './excome/IndirectLaborChart.vue'
+import AvgAgeCard          from './excome/AvgAgeCard.vue'
 
 export default {
   name: 'ExcomeDashboard',
@@ -63,11 +71,14 @@ export default {
     TypeOfPosition,
     SummaryBudgetTable,
     DirectLaborChart,
-    IndirectLaborChart
+    IndirectLaborChart,
+    AvgAgeCard
   },
   data() {
     return {
+      // default to current month in YYYY-MM format
       selectedMonth: this.formatMonth(new Date()),
+      // headcount by type
       counts: {
         directLabor:   0,
         marketing:     0,
@@ -76,11 +87,13 @@ export default {
     }
   },
   methods: {
+    // format JS Date → "YYYY-MM"
     formatMonth(date) {
       const y = date.getFullYear()
       const m = String(date.getMonth() + 1).padStart(2, '0')
       return `${y}-${m}`
     },
+    // fetch headcount totals
     async fetchCounts() {
       try {
         const res = await axios.get('/excome/employee-count', {
