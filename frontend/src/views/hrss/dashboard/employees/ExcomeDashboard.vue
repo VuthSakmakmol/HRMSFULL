@@ -27,35 +27,50 @@
       </v-col>
     </v-row>
 
+    <!-- Direct Labor Chart -->
+    <v-row class="mt-8">
+      <v-col cols="12">
+        <DirectLaborChart />
+      </v-col>
+    </v-row>
+    
+    <v-row class="mt-8">
+      <v-col cols="12">
+        <IndirectLaborChart />
+      </v-col>
+    </v-row>
+
     <!-- Summary Budget Table -->
     <v-row class="mt-8">
       <v-col cols="12">
         <SummaryBudgetTable />
-      </v-col> 
+      </v-col>
     </v-row>
   </v-container>
 </template>
 
 <script>
 import axios from '@/utils/axios'
-// assumes this file sits alongside TypeOfPosition.vue
-import TypeOfPosition from './excome/TypeOfPosition.vue'
+import TypeOfPosition     from './excome/TypeOfPosition.vue'
 import SummaryBudgetTable from './excome/SummaryBudgetTable.vue'
+import DirectLaborChart   from './excome/DirectLaborChart.vue'
+import IndirectLaborChart from './excome/IndirectLaborChart.vue'
 
 
 export default {
   name: 'ExcomeDashboard',
-    components: {
+  components: {
     TypeOfPosition,
-    SummaryBudgetTable
+    SummaryBudgetTable,
+    DirectLaborChart,
+    IndirectLaborChart
   },
   data() {
     return {
-      // default to current month in YYYY-MM format
       selectedMonth: this.formatMonth(new Date()),
       counts: {
-        directLabor: 0,
-        marketing: 0,
+        directLabor:   0,
+        marketing:     0,
         indirectLabor: 0
       }
     }
@@ -68,13 +83,11 @@ export default {
     },
     async fetchCounts() {
       try {
-        // Adjust this URL if you mounted excomeRoutes under a different prefix
         const res = await axios.get('/excome/employee-count', {
           params: { month: this.selectedMonth }
         })
-        const counts = res.data?.counts
-        if (counts) {
-          this.counts = counts
+        if (res.data?.counts) {
+          this.counts = res.data.counts
         } else {
           console.warn('Excome API returned no counts:', res.data)
         }
