@@ -10,29 +10,54 @@ const Employee       = require('../../models/hrss/employee')
  */
 exports.createOrUpdateTarget = async (req, res) => {
   try {
-    const { department, position, yearMonth, target } = req.body
-    const company = req.company
-    if (!company) 
-      return res.status(403).json({ message: 'Unauthorized' })
-    if (!department || !position || !yearMonth || typeof target !== 'number') {
-      return res
-        .status(400)
-        .json({ message: 'Missing required fields' })
+    // extract roadmap (default to 0 if not provided)
+    const {
+      department,
+      position,
+      yearMonth,
+      target,
+      roadmap = 0
+    } = req.body;
+
+    const company = req.company;
+    if (!company) {
+      return res.status(403).json({ message: 'Unauthorized' });
     }
 
-    const filter  = { company, department, position, yearMonth }
-    const update  = { $set: { target } }
-    const options = { upsert: true, new: true }
+    // validate required fields
+    if (
+      !department ||
+      !position ||
+      !yearMonth ||
+      typeof target !== 'number' ||
+      typeof roadmap !== 'number'
+    ) {
+      return res
+        .status(400)
+        .json({ message: 'Missing or invalid fields' });
+    }
 
-    const doc = await ManpowerTarget.findOneAndUpdate(filter, update, options)
-    return res.json(doc)
+    // build filter and update
+    const filter = { company, department, position, yearMonth };
+    const update = {
+      $set: {
+        target,   // Budget
+        roadmap   // Planned hires
+      }
+    };
+    const options = { upsert: true, new: true };
+
+    // perform upsert
+    const doc = await ManpowerTarget.findOneAndUpdate(filter, update, options);
+    return res.json(doc);
+
   } catch (err) {
-    console.error('❌ createOrUpdateTarget error:', err)
+    console.error('❌ createOrUpdateTarget error:', err);
     return res
       .status(500)
-      .json({ message: 'Failed to save target', error: err.message })
+      .json({ message: 'Failed to save target', error: err.message });
   }
-}
+};
 
 /**
  * GET /api/hrss/manpower/targets?yearMonth=YYYY-MM

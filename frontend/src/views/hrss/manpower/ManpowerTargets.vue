@@ -60,6 +60,7 @@
         :loading="isLoading"
         class="elevation-1"
       >
+        <!-- editable Budget -->
         <template #item.target="{ item }">
           <v-text-field
             v-model.number="item.target"
@@ -68,6 +69,16 @@
             hide-details
           />
         </template>
+        <!-- editable Roadmap -->
+        <template #item.roadmap="{ item }">
+          <v-text-field
+            v-model.number="item.roadmap"
+            type="number"
+            dense
+            hide-details
+          />
+        </template>
+        <!-- no-data -->
         <template #no-data>
           Select a year, month and department to begin.
         </template>
@@ -99,7 +110,7 @@ const selectedDept  = ref(null)
 const yearMonth = computed(() => `${selectedYear.value}-${selectedMonth.value}`)
 
 // 4) Department lists (raw + deduped)
-const departmentsRaw = ref([]) 
+const departmentsRaw = ref([])
 const departments    = computed(() => {
   const seen = new Set()
   return departmentsRaw.value.filter(d => {
@@ -110,15 +121,18 @@ const departments    = computed(() => {
 })
 
 // 5) Table data + state
-const rows      = ref([])   // { position, target }
+const rows      = ref([])   // { position, target, roadmap }
 const isLoading = ref(false)
 const isSaving  = ref(false)
+
+// 6) Headers: use `title` so they render correctly
 const tableHeaders = [
-  { text: 'Position', value: 'position' },
-  { text: 'Target',   value: 'target'   }
+  { title: 'Position',         value: 'position' },
+  { title: 'Target: Budget',   value: 'target'   },
+  { title: 'Target: Roadmap',  value: 'roadmap'  },
 ]
 
-// 6) Load departments once
+// 7) Load departments once
 async function loadDepartments() {
   try {
     const company = localStorage.getItem('company') || ''
@@ -130,7 +144,7 @@ async function loadDepartments() {
   }
 }
 
-// 7) Load target rows when yearMonth or dept changes
+// 8) Load rows when yearMonth or dept changes
 async function loadRows() {
   if (!selectedDept.value) {
     rows.value = []
@@ -139,26 +153,31 @@ async function loadRows() {
   isLoading.value = true
   try {
     // find jobTitles for that dept
-    const deptObj  = departmentsRaw.value.find(d => d.name === selectedDept.value)
+    const deptObj   = departmentsRaw.value.find(d => d.name === selectedDept.value)
     const positions = deptObj?.jobTitles || []
 
-    // fetch existing targets
+    // fetch existing targets (with roadmap)
     const company = localStorage.getItem('company') || ''
     const res     = await axios.get('/hrss/manpower/targets', {
       params: { company, yearMonth: yearMonth.value }
     })
     const targets = Array.isArray(res.data) ? res.data : []
-    const map     = new Map()
+
+    // build lookup maps
+    const mapT = new Map()
+    const mapR = new Map()
     targets.forEach(t => {
       if (t.department === selectedDept.value) {
-        map.set(t.position, t.target)
+        mapT.set(t.position, t.target)
+        mapR.set(t.position, t.roadmap || 0)
       }
     })
 
-    // build rows
+    // assemble rows
     rows.value = positions.map(pos => ({
       position: pos,
-      target:   map.get(pos) || 0
+      target:   mapT.get(pos) || 0,
+      roadmap:  mapR.get(pos) || 0
     }))
   } catch (err) {
     console.error('❌ loadRows error:', err)
@@ -168,7 +187,7 @@ async function loadRows() {
   }
 }
 
-// 8) Save all targets
+// 9) Save all
 async function saveAll() {
   if (!selectedDept.value) {
     return alert('Select a department first.')
@@ -182,7 +201,8 @@ async function saveAll() {
         department: selectedDept.value,
         position:   row.position,
         yearMonth:  yearMonth.value,
-        target:     row.target
+        target:     row.target,
+        roadmap:    row.roadmap
       })
     ))
     alert('✅ All targets saved.')
@@ -195,10 +215,8 @@ async function saveAll() {
   }
 }
 
-// 9) Watch for filter changes
+// 10) Watch & mount
 watch([yearMonth, selectedDept], loadRows, { immediate: true })
-
-// 10) On mount: fetch department list
 onMounted(loadDepartments)
 </script>
 

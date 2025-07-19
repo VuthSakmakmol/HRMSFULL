@@ -20,10 +20,18 @@ const manpowerTargetSchema = new mongoose.Schema({
     required: true,
     match: /^\d{4}-\d{2}$/
   },
+  // Budget target
   target: {
     type: Number,
     required: true,
     min: 0
+  },
+  // New roadmap field (e.g. planned hires)
+  roadmap: {
+    type: Number,
+    required: true,
+    min: 0,
+    default: 0
   }
 }, {
   timestamps: true
