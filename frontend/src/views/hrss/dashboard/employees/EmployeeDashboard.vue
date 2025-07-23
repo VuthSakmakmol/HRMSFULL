@@ -55,12 +55,12 @@
 
 
       <!-- 4) Other Position Joint -->
-      <v-col cols="12" sm="6">
+      <!-- <v-col cols="12" sm="6">
         <OtherPositionChart
           :chart-data="otherPivot"
           title="Other Positions Join Trends"
         />
-      </v-col>
+      </v-col> -->
 
       <!-- 1) Total Employees -->
       <v-col cols="12" sm="4">

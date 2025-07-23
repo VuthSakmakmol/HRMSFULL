@@ -206,3 +206,34 @@ exports.getAverageAge = async (req, res) => {
     return res.status(500).json({ message: 'Failed-avgAge', error: err.message })
   }
 }
+
+// ─── Average Years of Service ───────────────────────────────────────────────
+exports.getAverageService = async (req, res) => {
+  try {
+    const company = req.company;
+    if (!company) return res.status(403).json({ message: 'Missing company' });
+
+    const computeService = async (matchFilter) => {
+      const result = await Employee.aggregate([
+        { $match: { company, status: 'Working', ...matchFilter } },
+        { $project: { serviceMs: { $subtract: ['$$NOW', '$joinDate'] } } },
+        { $project: { serviceYears: { $divide: ['$serviceMs', 1000 * 60 * 60 * 24 * 365] } } },
+        { $group:   { _id: null, avgService: { $avg: '$serviceYears' } } }
+      ]);
+      if (!result.length) return 0;
+      return Math.round(result[0].avgService * 10) / 10;
+    };
+
+    const total   = await computeService({});   
+    const sewer   = await computeService({ 
+      position: { $in: ['Sewer', 'Jumper'] } 
+    });
+
+    res.json({ total, sewer });
+  }
+  catch (err) {
+    console.error(err);
+    res.status(400).json({ error: 'Could not calculate service' });
+  }
+};
+

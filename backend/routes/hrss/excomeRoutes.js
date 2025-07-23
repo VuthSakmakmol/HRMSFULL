@@ -7,7 +7,8 @@ const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware')
 const {
   getMonthlyEmployeeCount,
   getManpowerTargets,
-  getAverageAge
+  getAverageAge,
+  getAverageService
 } = require('../../controllers/hrss/excomeController')
 
 // ─── Monthly Headcount by Employee Type ────────────────────────────────────────
@@ -36,5 +37,15 @@ router.get(
   authorizeCompanyAccess,
   getAverageAge
 )
+
+// ─── Average Years of Service ──────────────────────────────────────────────────
+// GET /api/excome/employee-service
+router.get(
+  '/employee-service',
+  authenticate,
+  authorizeCompanyAccess,
+  getAverageService
+)
+
 
 module.exports = router
