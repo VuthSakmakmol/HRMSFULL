@@ -1,117 +1,110 @@
 <template>
-  <v-container fluid class="pa-6">
-    <v-card class="pa-4 elevation-1">
-      <v-row class="mb-4" align="center">
-        <v-col cols="12" sm="4" md="3">
-          <v-select
-            v-model="selectedYear"
-            :items="yearOptions"
-            label="Select Year"
-            density="compact"
-            variant="outlined"
-            @update:modelValue="fetchData"
-          />
-        </v-col>
-      </v-row>
+  <v-card class="pa-4">
+    <v-row class="mb-4" align="center" justify="space-between">
+      <v-col cols="12" sm="6">
+        <h3 class="text-h6 font-weight-bold">📊 Monthly Headcount by Position</h3>
+      </v-col>
+      <v-col cols="12" sm="3">
+        <v-select
+          v-model="selectedYear"
+          :items="yearOptions"
+          label="Select Year"
+          dense
+          variant="outlined"
+          @update:modelValue="fetchSnapshots"
+        />
+      </v-col>
+    </v-row>
 
-      <v-table fixed-header class="table-scroll-x">
-        <thead>
-          <tr>
-            <th class="text-left">Type of Employee</th>
-            <th v-for="m in monthNames" :key="m" class="text-center">{{ m }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="type in employeeTypes" :key="type.key">
-            <td><strong>{{ type.label }}</strong></td>
-            <td v-for="month in 12" :key="month" class="text-center">
-              {{ snapshotData[type.key][month - 1] || 0 }}
-            </td>
-          </tr>
-          <!-- Grand Total -->
-          <tr class="bg-grey-lighten-3 font-weight-bold">
-            <td>Grand Total</td>
-            <td v-for="month in 12" :key="'total-' + month" class="text-center">
-              {{ grandTotals[month - 1] || 0 }}
-            </td>
-          </tr>
-        </tbody>
-      </v-table>
-    </v-card>
-  </v-container>
+    <v-table fixed-header class="table-scroll-x elevation-1">
+      <thead>
+        <tr>
+          <th class="text-left">Type</th>
+          <th v-for="month in months" :key="month" class="text-left">{{ month }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="type in positionTypes" :key="type">
+          <td>{{ type }}</td>
+          <td v-for="month in months" :key="month">
+            {{ displayData[type][month] }}
+          </td>
+        </tr>
+        <tr class="font-weight-bold">
+          <td>Total</td>
+          <td v-for="month in months" :key="month">
+            {{
+              positionTypes.reduce((sum, type) => sum + displayData[type][month], 0)
+            }}
+          </td>
+        </tr>
+      </tbody>
+    </v-table>
+  </v-card>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
 import axios from '@/utils/axios'
-import dayjs from 'dayjs'
+import { ref, reactive, onMounted } from 'vue'
 
-const selectedYear = ref(dayjs().year())
-const yearOptions = Array.from({ length: 10 }, (_, i) => dayjs().year() - i)
-
-const monthNames = [
+// Month labels and structure
+const months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ]
+const positionTypes = ['Direct Labor', 'Marketing', 'Indirect Labor']
 
-const employeeTypes = [
-  { key: 'directLabor', label: 'Direct' },
-  { key: 'indirectLabor', label: 'Indirect' },
-  { key: 'marketing', label: 'Marketing' }
-]
+// Default empty data structure
+const emptyData = () => {
+  const obj = {}
+  positionTypes.forEach(type => {
+    obj[type] = {}
+    months.forEach(month => {
+      obj[type][month] = 0
+    })
+  })
+  return obj
+}
 
-const snapshotData = ref({
-  directLabor: Array(12).fill(0),
-  indirectLabor: Array(12).fill(0),
-  marketing: Array(12).fill(0)
-})
+const displayData = reactive(emptyData())
 
-const grandTotals = computed(() => {
-  const totals = Array(12).fill(0)
-  for (let i = 0; i < 12; i++) {
-    totals[i] =
-      (snapshotData.value.directLabor[i] || 0) +
-      (snapshotData.value.indirectLabor[i] || 0) +
-      (snapshotData.value.marketing[i] || 0)
-  }
-  return totals
-})
+const selectedYear = ref(new Date().getFullYear())
+const yearOptions = Array.from({ length: 6 }, (_, i) => 2023 + i)
 
-const fetchData = async () => {
+const fetchSnapshots = async () => {
   try {
-    const res = await axios.get('/excome/monthly-snapshots', {
+    const res = await axios.get('/hrss/excome/employee-snapshots', {
       params: { year: selectedYear.value }
-    });
+    })
 
-    console.log('[FULL RESPONSE]', res);
-    console.log('[FETCHED DATA]', res.data);
-
-    const snapshots = Array.isArray(res.data.snapshots) ? res.data.snapshots : [];
-
-    if (!snapshots.length) {
-      console.warn('⚠ No snapshot data found for this year');
+    const isHTML = typeof res.data === 'string' && res.data.startsWith('<!DOCTYPE')
+    if (isHTML) {
+      console.warn('⚠️ API returned HTML instead of JSON')
+      return
     }
 
-    const empty = Array(12).fill(0);
-    snapshotData.value = {
-      directLabor: [...empty],
-      indirectLabor: [...empty],
-      marketing: [...empty]
-    };
+    const raw = res.data?.snapshots || []
+    const formatted = emptyData()
 
-    for (const snap of snapshots) {
-      const m = snap.month;
-      snapshotData.value.directLabor[m] = snap.directLabor || 0;
-      snapshotData.value.indirectLabor[m] = snap.indirectLabor || 0;
-      snapshotData.value.marketing[m] = snap.marketing || 0;
-    }
+    raw.forEach(item => {
+      const monthName = months[item.month]
+      formatted['Direct Labor'][monthName] = item.directLabor || 0
+      formatted['Marketing'][monthName] = item.marketing || 0
+      formatted['Indirect Labor'][monthName] = item.indirectLabor || 0
+    })
+
+    positionTypes.forEach(type => {
+      months.forEach(month => {
+        displayData[type][month] = formatted[type][month]
+      })
+    })
   } catch (err) {
-    console.error('❌ Failed to fetch snapshots:', err);
+    console.error('❌ Failed to fetch snapshot data:', err)
   }
-};
+}
 
 
-onMounted(fetchData)
+onMounted(fetchSnapshots)
 </script>
 
 <style scoped>

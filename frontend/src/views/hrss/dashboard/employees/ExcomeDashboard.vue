@@ -21,40 +21,38 @@
       </v-col>
     </v-row>
 
-    <!-- Avg Age card -->
+    <!-- Additional sections (commented out) -->
+    <!--
     <v-row class="avg-age-section">
       <v-col cols="12" class="dashboard-card card-avg-age">
         <AvgAgeCard />
       </v-col>
     </v-row>
 
-    <!-- Avg Years of Service cards -->
     <v-row class="avg-service-section">
       <v-col cols="12" class="dashboard-card card-avg-service">
         <YearOfService />
       </v-col>
     </v-row>
 
-    <!-- Direct Labor Chart -->
     <v-row class="chart-section">
       <v-col cols="12" class="dashboard-card card-direct-chart">
         <DirectLaborChart />
       </v-col>
     </v-row>
-    
-    <!-- Indirect Labor Chart -->
+
     <v-row class="chart-section">
       <v-col cols="12" class="dashboard-card card-indirect-chart">
         <IndirectLaborChart />
       </v-col>
     </v-row>
 
-    <!-- Summary Budget Table -->
     <v-row class="summary-table-section">
       <v-col cols="12" class="dashboard-card card-summary">
         <SummaryBudgetTable />
       </v-col>
     </v-row>
+    -->
   </v-container>
 </template>
 
@@ -65,9 +63,7 @@ import SummaryBudgetTable  from './excome/SummaryBudgetTable.vue'
 import DirectLaborChart    from './excome/DirectLaborChart.vue'
 import IndirectLaborChart  from './excome/IndirectLaborChart.vue'
 import AvgAgeCard          from './excome/AvgAgeCard.vue'
-import YearOfService from './excome/YearOfService.vue'
-
-
+import YearOfService       from './excome/YearOfService.vue'
 
 export default {
   name: 'ExcomeDashboard',
@@ -81,9 +77,8 @@ export default {
   },
   data() {
     return {
-      // default to current month in YYYY-MM format
       selectedMonth: this.formatMonth(new Date()),
-      // headcount by type
+
       counts: {
         directLabor:   0,
         marketing:     0,
@@ -92,25 +87,31 @@ export default {
     }
   },
   methods: {
-    // format JS Date → "YYYY-MM"
     formatMonth(date) {
       const y = date.getFullYear()
       const m = String(date.getMonth() + 1).padStart(2, '0')
       return `${y}-${m}`
     },
-    // fetch headcount totals
+
     async fetchCounts() {
       try {
-        const res = await axios.get('/excome/employee-count', {
+        const res = await axios.get('/api/hrss/excome/employee-count', {
           params: { month: this.selectedMonth }
         })
+
+        const isHTML = typeof res.data === 'string' && res.data.startsWith('<!DOCTYPE')
+        if (isHTML) {
+          console.warn('⚠️ API returned HTML instead of JSON')
+          return
+        }
+
         if (res.data?.counts) {
           this.counts = res.data.counts
         } else {
-          console.warn('Excome API returned no counts:', res.data)
+          console.warn('⚠️ Excome API returned no counts:', res.data)
         }
       } catch (err) {
-        console.error('Failed to load Excome headcount:', err)
+        console.error('❌ Failed to load Excome headcount:', err)
       }
     }
   },
@@ -145,44 +146,21 @@ export default {
 }
 
 /* Colored variants */
-.card-direct {
-  border-top: 4px solid #3b82f6;       /* Blue */
-  background-color: #eff6ff;
-}
-.card-marketing {
-  border-top: 4px solid #10b981;       /* Green */
-  background-color: #ecfdf5;
-}
-.card-indirect {
-  border-top: 4px solid #f59e0b;       /* Amber */
-  background-color: #fffbeb;
-}
-.card-avg-age {
-  border-top: 4px solid #ec4899;       /* Pink */
-  background-color: #fdf2f8;
-}
-
-/* Chart wrappers get same accent as their related cards */
-.card-direct-chart {
-  border-top: 4px solid #3b82f6;
-  background-color: #eff6ff;
-}
-.card-indirect-chart {
-  border-top: 4px solid #f59e0b;
-  background-color: #fffbeb;
-}
-
-/* Summary table variant */
-.card-summary {
-  border-top: 4px solid #8b5cf6;       /* Violet */
-  background-color: #f5f3ff;
-}
+.card-direct         { border-top: 4px solid #3b82f6; background-color: #eff6ff; }
+.card-marketing      { border-top: 4px solid #10b981; background-color: #ecfdf5; }
+.card-indirect       { border-top: 4px solid #f59e0b; background-color: #fffbeb; }
+.card-avg-age        { border-top: 4px solid #ec4899; background-color: #fdf2f8; }
+.card-direct-chart   { border-top: 4px solid #3b82f6; background-color: #eff6ff; }
+.card-indirect-chart { border-top: 4px solid #f59e0b; background-color: #fffbeb; }
+.card-summary        { border-top: 4px solid #8b5cf6; background-color: #f5f3ff; }
+.card-avg-service    { border-top: 4px solid #6366f1; background-color: #eef2ff; }
 
 /* Section spacing */
-.headcount-section { margin-bottom: 2rem; }
-.avg-age-section    { margin-bottom: 2rem; }
-.chart-section      { margin-bottom: 2rem; }
-.summary-table-section { margin-bottom: 2rem; }
+.headcount-section        { margin-bottom: 2rem; }
+.avg-age-section          { margin-bottom: 2rem; }
+.chart-section            { margin-bottom: 2rem; }
+.summary-table-section    { margin-bottom: 2rem; }
+.avg-service-section      { margin-bottom: 2rem; }
 
 /* Typography tweaks */
 .dashboard-container .v-label,
@@ -190,13 +168,6 @@ export default {
   font-weight: 500;
   color: #374151;
 }
-
-.avg-service-section { margin-bottom: 2rem; }
-.card-avg-service {
-  border-top: 4px solid #6366f1;   /* Indigo */
-  background-color: #eef2ff;
-}
-
 
 .dashboard-container .v-input__control {
   font-size: 0.95rem;

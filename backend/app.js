@@ -64,6 +64,10 @@ app.use('/api/meta', require('./routes/hrss/metaRoutes'))
 // excome
 app.use('/api/excome', require('./routes/hrss/excomeRoutes'));
 
+// hrss/excome
+app.use('/api/hrss/excome', require('./routes/hrss/excome/employeeMonthlyCountRoutes'))
+
+
 // HRSS Attendance
 app.use('/api/attendance', require('./routes/hrss/attendanceRoutes'))
 // Manpower 
@@ -84,18 +88,19 @@ const uploadRoutes = require('./routes/hrss/upload')
 app.use('/api/upload', uploadRoutes) // ✅ mount it under /api/upload
 
 
-// ─── SERVE FRONTEND ────────────────────────────────────────────────────────────
+// ─── SERVE FRONTEND STATIC FILES ───────────────────────────────────────────────
 const frontendDist = path.join(__dirname, '../frontend/dist');
 app.use(express.static(frontendDist));
 
-// Handle SPA routes properly (Vue, React, etc.)
-app.get(/.*/, (req, res) => {
-  res.sendFile(path.join(frontendDist, 'index.html'));
-});
-
-// ─── HEALTH CHECK ──────────────────────────────────────────────────────────────
+// ─── HEALTH CHECK (should be before wildcard catch) ────────────────────────────
 app.get('/api/health', (req, res) => {
   res.send('✅ HRMS API is running...');
+});
+
+// ⚠️ This must be the LAST route — it will match everything else
+// DO NOT place any app.use or app.get below this!
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(frontendDist, 'index.html'));
 });
 
 // Large data import
