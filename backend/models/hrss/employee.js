@@ -69,7 +69,7 @@ const employeeSchema = new mongoose.Schema({
   // 📥 Source & Skills
   sourceOfHiring: { type: String, enum: ['Agency', 'Banner / Job Announcement Board', 'Brochure', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'LinkedIn','Telegram', 'Other',  ''], default: '' },
   introducerId: { type: String, default: '' },
-  employeeType: { type: String, enum: ['Admin', 'Indirect', 'Operator', ''], default: '' },
+  employeeType: { type: String, enum: ['Direct', 'Indirect', 'MAarketing', ''], default: '' },
   singleNeedle: { type: String, default: '' },
   overlock: { type: String, default: '' },
   coverstitch: { type: String, default: '' },

@@ -3,81 +3,99 @@
 const Employee       = require('../../models/hrss/employee')
 const ManpowerTarget = require('../../models/hrss/manpowerTarget')
 
-/**
- * GET /api/excome/employee-count?month=YYYY-MM
- * (unchanged)
- */
+const EmployeeSnapshot = require('../../models/hrss/excome/EmployeeMonthlySnapshot');
+
 exports.getMonthlyEmployeeCount = async (req, res) => {
   try {
-    const { month } = req.query
-    let year, monthIndex
+    const { month } = req.query;
+    let year, monthIndex;
 
     if (month) {
-      const parts = month.split('-')
+      const parts = month.split('-');
       if (parts.length !== 2) {
-        return res.status(400).json({ message: 'Invalid month format. Use YYYY-MM.' })
+        return res.status(400).json({ message: 'Invalid month format. Use YYYY-MM.' });
       }
-      year       = parseInt(parts[0], 10)
-      monthIndex = parseInt(parts[1], 10) - 1
+      year       = parseInt(parts[0], 10);
+      monthIndex = parseInt(parts[1], 10) - 1;
       if (isNaN(year) || isNaN(monthIndex) || monthIndex < 0 || monthIndex > 11) {
-        return res.status(400).json({ message: 'Invalid month format. Use YYYY-MM.' })
+        return res.status(400).json({ message: 'Invalid month format. Use YYYY-MM.' });
       }
     } else {
-      const now = new Date()
-      year       = now.getFullYear()
-      monthIndex = now.getMonth()
+      const now = new Date();
+      year       = now.getFullYear();
+      monthIndex = now.getMonth();
     }
 
-    const endOfMonth = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999)
-    const company = req.company
+    const endOfMonth = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+    const company = req.company;
     if (!company) {
-      return res.status(403).json({ message: 'Unauthorized: company missing' })
+      return res.status(403).json({ message: 'Unauthorized: company missing' });
     }
 
     const baseFilter = {
       company,
       status: 'Working',
       joinDate: { $lte: endOfMonth }
-    }
+    };
 
     const [directCount, marketingCount, indirectCount] = await Promise.all([
-      Employee.countDocuments({ ...baseFilter, position: { $in: ['Sewer','Jumper'] } }),
+      Employee.countDocuments({ ...baseFilter, position: { $in: ['Sewer', 'Jumper'] } }),
       Employee.countDocuments({ ...baseFilter, department: 'Merchandising' }),
       Employee.countDocuments({
         ...baseFilter,
-        position:   { $nin: ['Sewer','Jumper'] },
+        position:   { $nin: ['Sewer', 'Jumper'] },
         department: { $ne:  'Merchandising' }
       }),
-    ])
+    ]);
 
-    const responseMonth = `${year}-${String(monthIndex + 1).padStart(2,'0')}`
+    // ✅ Save or update monthly snapshot
+    await EmployeeSnapshot.findOneAndUpdate(
+      { company, year, month: monthIndex },
+      {
+        $set: {
+          directLabor: directCount,
+          marketing: marketingCount,
+          indirectLabor: indirectCount,
+          updatedAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+
+    const responseMonth = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
     return res.json({
       month: responseMonth,
       counts: {
-        directLabor:   directCount,
-        marketing:     marketingCount,
+        directLabor: directCount,
+        marketing: marketingCount,
         indirectLabor: indirectCount
       }
-    })
+    });
   } catch (err) {
-    console.error('[GET MONTHLY EMPLOYEE COUNT ERROR]', err)
-    return res.status(500).json({ message: 'Failed to get employee counts', error: err.message })
+    console.error('[GET MONTHLY EMPLOYEE COUNT ERROR]', err);
+    return res.status(500).json({ message: 'Failed to get employee counts', error: err.message });
   }
-}
+};
+
+exports.getEmployeeSnapshotsByYear = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year);
+    const company = req.company;
+
+    if (!year || !company) {
+      return res.status(400).json({ message: 'Year and company are required.' });
+    }
+
+    const snapshots = await EmployeeSnapshot.find({ year, company }).sort({ month: 1 });
+
+    return res.json({ snapshots }); // ✅ format your frontend expects
+  } catch (err) {
+    console.error('[Snapshot Fetch Error]', err);
+    return res.status(500).json({ message: 'Failed to fetch snapshots', error: err.message });
+  }
+};
 
 
-/**
- * GET /api/excome/manpower/targets?year=YYYY
- *
- * Returns:
- * {
- *   months: ['2025-01','2025-02',…],
- *   categories: [
- *     { key:'direct',   title:'Direct',   targetBudget:[], targetRoadmap:[], actual:[], varianceBudget:[], varianceRoadmap:[] },
- *     { key:'indirect', title:'Indirect', …same shape… }
- *   ]
- * }
- */
 exports.getManpowerTargets = async (req, res) => {
   try {
     const { year } = req.query

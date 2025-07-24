@@ -16,14 +16,8 @@
 
     <!-- Headcount cards -->
     <v-row dense class="headcount-section">
-      <v-col cols="12" sm="4" md="4" class="dashboard-card card-direct">
-        <TypeOfPosition title="Direct Labor" :count="counts.directLabor" />
-      </v-col>
-      <v-col cols="12" sm="4" md="4" class="dashboard-card card-marketing">
-        <TypeOfPosition title="Marketing" :count="counts.marketing" />
-      </v-col>
-      <v-col cols="12" sm="4" md="4" class="dashboard-card card-indirect">
-        <TypeOfPosition title="Indirect Labor" :count="counts.indirectLabor" />
+      <v-col cols="12" sm="12" md="12" class="dashboard-card">
+        <TypeOfPosition />
       </v-col>
     </v-row>
 

@@ -8,7 +8,8 @@ const {
   getMonthlyEmployeeCount,
   getManpowerTargets,
   getAverageAge,
-  getAverageService
+  getAverageService,
+  getEmployeeSnapshotsByYear
 } = require('../../controllers/hrss/excomeController')
 
 // ─── Monthly Headcount by Employee Type ────────────────────────────────────────
@@ -19,6 +20,15 @@ router.get(
   authorizeCompanyAccess,
   getMonthlyEmployeeCount
 )
+
+// routes/hrss/excomeRoutes.js
+router.get(
+  '/monthly-snapshots',
+  authenticate,
+  authorizeCompanyAccess,
+  getEmployeeSnapshotsByYear
+)
+
 
 // ─── Manpower Targets Summary by Category ──────────────────────────────────────
 // GET /api/excome/manpower/targets?year=YYYY
