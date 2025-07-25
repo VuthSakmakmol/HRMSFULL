@@ -1,20 +1,23 @@
 <template>
   <v-container fluid class="dashboard-container">
 
-    <!-- <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-age">
-      <AvgAgeCard />
-    </v-col>
+    <v-row class="chart-section" dense>
+      <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-age">
+        <AvgAgeCard />
+      </v-col>
 
-    <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-service">
-      <YearOfService />
-    </v-col> -->
+      <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-service">
+        <YearOfService />
+      </v-col>
+    </v-row>
 
     <!-- Headcount cards -->
-    <!-- <v-row dense class="headcount-section">
+    <v-row dense class="headcount-section">
       <v-col cols="12" sm="12" md="12" class="dashboard-card">
         <TypeOfPosition />
       </v-col>
-    </v-row> -->
+    </v-row>
+
 
     <!-- Additional sections (commented out) -->
     <v-row class="mb-4" align="center">
