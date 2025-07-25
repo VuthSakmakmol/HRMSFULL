@@ -1,45 +1,51 @@
 <template>
   <v-container fluid class="dashboard-container">
 
-    
+    <!-- <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-age">
+      <AvgAgeCard />
+    </v-col>
+
+    <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-service">
+      <YearOfService />
+    </v-col> -->
+
     <!-- Headcount cards -->
-    <v-row dense class="headcount-section">
+    <!-- <v-row dense class="headcount-section">
       <v-col cols="12" sm="12" md="12" class="dashboard-card">
         <TypeOfPosition />
       </v-col>
-    </v-row>
+    </v-row> -->
 
     <!-- Additional sections (commented out) -->
-    
-    <v-row class="avg-age-section">
-      <v-col cols="12" class="dashboard-card card-avg-age">
-        <AvgAgeCard />
+    <v-row class="mb-4" align="center">
+      <v-col cols="12" sm="4">
+        <v-select
+          v-model="selectedYear"
+          :items="yearOptions"
+          label="Select Year"
+          variant="outlined"
+          density="comfortable"
+        />
       </v-col>
     </v-row>
 
-    <v-row class="avg-service-section">
-      <v-col cols="12" class="dashboard-card card-avg-service">
-        <YearOfService />
+    <v-row class="chart-section" dense>
+      <v-col cols="12" sm="6" class="pa-2 dashboard-card card-direct-chart">
+        <DirectLaborChart :year="selectedYear" />
       </v-col>
-    </v-row>
 
-    <v-row class="chart-section">
-      <v-col cols="12" class="dashboard-card card-direct-chart">
-        <DirectLaborChart />
+      <v-col cols="12" sm="6" class="pa-2 dashboard-card card-indirect-chart">
+        <IndirectLaborChart :year="selectedYear" />
       </v-col>
-    </v-row>
 
-    <v-row class="chart-section">
-      <v-col cols="12" class="dashboard-card card-indirect-chart">
-        <IndirectLaborChart />
-      </v-col>
-    </v-row>
-
-    <v-row class="summary-table-section">
       <v-col cols="12" class="dashboard-card card-summary">
-        <SummaryBudgetTable />
+        <SummaryBudgetTable :year="selectedYear" />
       </v-col>
     </v-row>
+
+
+
+
    
   </v-container>
 </template>
@@ -64,12 +70,15 @@ export default {
     YearOfService,
   },
   data() {
+    const currentYear = new Date().getFullYear()
     return {
+      selectedYear: currentYear,
+      yearOptions: Array.from({ length: 5 }, (_, i) => currentYear - i),
       selectedMonth: this.formatMonth(new Date()),
 
       counts: {
-        directLabor:   0,
-        marketing:     0,
+        directLabor: 0,
+        marketing: 0,
         indirectLabor: 0
       }
     }
@@ -160,4 +169,9 @@ export default {
 .dashboard-container .v-input__control {
   font-size: 0.95rem;
 }
+
+.chart-section .v-col {
+  padding: 12px !important;
+}
+
 </style>

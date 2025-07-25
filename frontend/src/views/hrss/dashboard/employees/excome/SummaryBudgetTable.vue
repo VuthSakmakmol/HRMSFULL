@@ -53,8 +53,49 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import axios from '@/utils/axios'
+
+// Props
+const props = defineProps<{ year: number }>()
+
+// Reactive state
+const months = ref<string[]>([])
+const categories = ref<Category[]>([])
+
+// Format YYYY-MM to "Jan"
+const formatMonth = (ym: string) => {
+  const [y, m] = ym.split('-').map(Number)
+  return new Date(y, m - 1).toLocaleString('default', { month: 'short' })
+}
+
+// Format percentage safely
+const formatPercent = (actual: number, budget: number) => {
+  if (!budget) return '–'
+  return Math.round((actual / budget) * 100) + '%'
+}
+
+// Fetch data on year change
+watch(() => props.year, fetchData, { immediate: true })
+
+async function fetchData() {
+  console.log('[SummaryBudgetTable] fetching for year', props.year)
+
+  try {
+    const { data } = await axios.get('/excome/manpower/targets', {
+      params: { year: props.year }
+    })
+
+    if (Array.isArray(data.months) && Array.isArray(data.categories)) {
+      months.value = data.months
+      categories.value = data.categories
+    } else {
+      console.warn('[SummaryBudgetTable] unexpected payload shape', data)
+    }
+  } catch (err) {
+    console.error('[SummaryBudgetTable] error fetching targets', err)
+  }
+}
 
 interface Category {
   key: string
@@ -65,51 +106,8 @@ interface Category {
   varianceBudget: number[]
   varianceRoadmap: number[]
 }
-
-const months = ref<string[]>([])
-const categories = ref<Category[]>([])
-
-/**
- * Converts "YYYY-MM" → "Mon"
- */
-const formatMonth = (ym: string) => {
-  const [y, m] = ym.split('-').map(Number)
-  return new Date(y, m - 1).toLocaleString('default', { month: 'short' })
-}
-
-/**
- * Returns a percentage string of actual/vs budget, rounded to nearest whole.
- * If budget is zero or missing, returns "–".
- */
-const formatPercent = (actual: number, budget: number) => {
-  if (!budget) return '–'
-  return Math.round((actual / budget) * 100) + '%'
-}
-
-onMounted(async () => {
-  const year = new Date().getFullYear()
-  console.log('[SummaryBudgetTable] fetching for year', year)
-
-  try {
-    console.log('[SummaryBudgetTable] GET /excome/manpower/targets?year=' + year)
-    const { data } = await axios.get('/excome/manpower/targets', {
-      params: { year }
-    })
-    console.log('[SummaryBudgetTable] raw response:', data)
-
-    if (Array.isArray(data.months) && Array.isArray(data.categories)) {
-      months.value     = data.months
-      categories.value = data.categories
-      console.log('[SummaryBudgetTable] months:', months.value)
-      console.log('[SummaryBudgetTable] categories:', categories.value)
-    } else {
-      console.warn('[SummaryBudgetTable] unexpected payload shape', data)
-    }
-  } catch (err) {
-    console.error('[SummaryBudgetTable] error fetching targets', err)
-  }
-})
 </script>
+
 
 <style scoped>
 .category-block {
