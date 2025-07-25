@@ -1,12 +1,23 @@
 <template>
   <div>
-    <strong>Indirect Labor Chart</strong>
+    <strong>📊 Indirect Labor Headcount</strong>
     <apexchart
-      v-if="series.length"
+      v-if="seriesHeadcount.length"
       type="line"
-      height="450"
-      :options="options"
-      :series="series"
+      height="400"
+      :options="optionsHeadcount"
+      :series="seriesHeadcount"
+    />
+
+    <br />
+
+    <strong>📈 Fill Rate and Variance</strong>
+    <apexchart
+      v-if="seriesFillRate.length"
+      type="line"
+      height="400"
+      :options="optionsFillRate"
+      :series="seriesFillRate"
     />
   </div>
 </template>
@@ -25,94 +36,110 @@ interface Category {
   varianceRoadmap: number[]
 }
 
-const series = ref<any[]>([])
-const options = ref<any>({})
+const seriesHeadcount = ref<any[]>([])
+const optionsHeadcount = ref<any>({})
+const seriesFillRate = ref<any[]>([])
+const optionsFillRate = ref<any>({})
 
 const formatMonth = (ym: string) => {
   const [y, m] = ym.split('-').map(Number)
-  return new Date(y, m - 1)
-    .toLocaleString('default', { month: 'short' })
+  return new Date(y, m - 1).toLocaleString('default', { month: 'short', year: '2-digit' })
 }
 
 onMounted(async () => {
   const year = new Date().getFullYear()
-  const { data } = await axios.get('/excome/manpower/targets', {
-    params: { year }
-  })
+  const { data } = await axios.get('/excome/manpower/targets', { params: { year } })
 
-  // grab the "indirect" slice
   const indirect: Category = data.categories.find((c: Category) => c.key === 'indirect')
   const months = data.months.map(formatMonth)
 
-  // compute fill‐rate %
+  if (!indirect) return
+
   const fillRate = indirect.targetBudget.map((b, i) =>
-    b > 0 ? Math.round(indirect.actual[i] / b * 100) : 0
+    b > 0 ? Math.round((indirect.actual[i] / b) * 100) : 0
   )
 
-  // flip sign on variances so that positive means over-target, negative is under
-  const varianceBudget  = indirect.varianceBudget .map(v => -v)
+  const varianceBudget = indirect.varianceBudget.map(v => -v)
   const varianceRoadmap = indirect.varianceRoadmap.map(v => -v)
 
-  // determine how low to allow the primary axis so negative dips show
-  const allVars = [...varianceBudget, ...varianceRoadmap]
-  const minVar  = Math.min(0, ...allVars)
-  const yMin    = Math.floor(minVar * 1.2)
+  const maxHeadcount = Math.max(
+    ...indirect.targetBudget,
+    ...indirect.targetRoadmap,
+    ...indirect.actual,
+    ...varianceBudget,
+    ...varianceRoadmap,
+    1
+  )
 
-  series.value = [
-    { name: 'Target Budget',   type: 'column', data: indirect.targetBudget   },
-    { name: 'Target Roadmap',  type: 'column', data: indirect.targetRoadmap  },
-    { name: 'Actual',          type: 'column', data: indirect.actual         },
-    { name: '+/- Budget',      type: 'line',   data: varianceBudget          },
-    { name: '+/- Roadmap',     type: 'line',   data: varianceRoadmap         },
-    { name: 'Fill Rate (%)',   type: 'line',   data: fillRate               }
+  // Chart 1: Headcount Trend
+  seriesHeadcount.value = [
+    { name: 'Target Budget', type: 'line', data: indirect.targetBudget },
+    { name: 'Target Roadmap', type: 'line', data: indirect.targetRoadmap },
+    { name: 'Actual', type: 'line', data: indirect.actual }
   ]
 
-  options.value = {
-    colors: [
-      '#008FFB', // Target Budget
-      '#00E396', // Target Roadmap
-      '#FEB019', // Actual
-      '#FF4560', // +/- Budget (red)
-      '#FF4560', // +/- Roadmap (red)
-      '#775DD0'  // Fill Rate
-    ],
-    chart: {
-      stacked: false,
-      toolbar: { show: false }
+  optionsHeadcount.value = {
+    chart: { height: 400, type: 'line', zoom: { enabled: true } },
+    stroke: { curve: 'smooth', width: 2 },
+    markers: { size: 4 },
+    xaxis: {
+      categories: months,
+      title: { text: 'Month' }
     },
-    stroke: {
-      width: [0, 0, 0, 2, 2, 3]
+    yaxis: {
+      title: { text: 'Headcount' },
+      min: 0,
+      max: Math.ceil(maxHeadcount * 1.2)
     },
+    tooltip: {
+      shared: true,
+      y: {
+        formatter: val => typeof val === 'number' ? val.toFixed(0) : val
+      }
+    },
+    colors: ['#008FFB', '#00E396', '#FEB019'],
+    legend: { position: 'top', fontSize: '13px' }
+  }
+
+  // Chart 2: Fill Rate and Variance
+  seriesFillRate.value = [
+    { name: 'Fill Rate (%)', type: 'line', data: fillRate },
+    { name: '± Budget', type: 'column', data: varianceBudget },
+    { name: '± Roadmap', type: 'column', data: varianceRoadmap }
+  ]
+
+  optionsFillRate.value = {
+    chart: { height: 400, type: 'line', stacked: false },
+    stroke: { width: [3, 0, 0], curve: 'smooth' },
+    markers: { size: 4 },
     plotOptions: {
-      bar: { columnWidth: '50%' }
+      bar: { columnWidth: '35%', borderRadius: 4 }
     },
-    xaxis: { categories: months },
+    xaxis: {
+      categories: months,
+      title: { text: 'Month' }
+    },
     yaxis: [
       {
-        title: { text: 'Headcount', style: { fontWeight: 500 } },
-        min: yMin
+        title: { text: 'Fill Rate (%)' },
+        min: 0,
+        max: 100,
+        labels: { formatter: val => `${val}%` }
       },
       {
         opposite: true,
-        title: { text: 'Percentage', style: { fontWeight: 500 } },
-        labels: { formatter: (val: number) => `${val}%` },
-        min: 0,
-        max: 100
+        title: { text: 'Variance (±)', style: { color: '#999' } },
+        labels: { style: { color: '#999' } }
       }
     ],
     tooltip: {
       shared: true,
-      intersect: false,
-      y: [
-        { formatter: (v: number) => `${v}` },    // Budget
-        { formatter: (v: number) => `${v}` },    // Roadmap
-        { formatter: (v: number) => `${v}` },    // Actual
-        { formatter: (v: number) => `${v}` },    // +/- Budget
-        { formatter: (v: number) => `${v}` },    // +/- Roadmap
-        { formatter: (v: number) => `${v}%` }    // Fill rate
-      ]
+      y: {
+        formatter: val => typeof val === 'number' ? val.toFixed(0) : val
+      }
     },
-    legend: { position: 'top' }
+    colors: ['#775DD0', '#FF4560', '#FF66C4'],
+    legend: { position: 'top', fontSize: '13px' }
   }
 })
 </script>

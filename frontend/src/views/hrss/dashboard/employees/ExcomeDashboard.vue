@@ -1,19 +1,7 @@
 <template>
   <v-container fluid class="dashboard-container">
-    <!-- Month selector -->
-    <v-row class="month-selector" justify="start">
-      <v-col cols="12" sm="4" md="3">
-        <v-text-field
-          v-model="selectedMonth"
-          label="Select month"
-          type="month"
-          @change="fetchCounts"
-          dense
-          outlined
-        />
-      </v-col>
-    </v-row>
 
+    
     <!-- Headcount cards -->
     <v-row dense class="headcount-section">
       <v-col cols="12" sm="12" md="12" class="dashboard-card">
@@ -22,7 +10,7 @@
     </v-row>
 
     <!-- Additional sections (commented out) -->
-    <!--
+    
     <v-row class="avg-age-section">
       <v-col cols="12" class="dashboard-card card-avg-age">
         <AvgAgeCard />
@@ -52,7 +40,7 @@
         <SummaryBudgetTable />
       </v-col>
     </v-row>
-    -->
+   
   </v-container>
 </template>
 
