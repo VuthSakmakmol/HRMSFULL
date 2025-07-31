@@ -74,16 +74,16 @@
         </v-expansion-panel-title>
         <v-expansion-panel-text class="gap-2 flex">
           <v-row dense class="chart-section">
-            <v-col cols="6" class="dashboard-card card-summary">
+            <v-col cols="12" class="dashboard-card card-summary">
               <ReasonResignDirectTable :year="selectedYear" />
             </v-col>
-            <v-col cols="6" class="dashboard-card card-summary">
+            <v-col cols="12" class="dashboard-card card-summary">
               <ReasonResignDirectLabor :year="selectedYear" />
             </v-col>
-            <v-col cols="6" class="dashboard-card card-summary">
+            <v-col cols="12" class="dashboard-card card-summary">
               <ReasonResignIndirectTable :year="selectedYear" />
             </v-col>
-            <v-col cols="6" class="dashboard-card card-summary">
+            <v-col cols="12" class="dashboard-card card-summary">
               <ReasonResignIndirectLabor :year="selectedYear" />
             </v-col>
           </v-row>
