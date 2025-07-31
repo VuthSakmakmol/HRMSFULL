@@ -1,70 +1,100 @@
 <template>
   <v-container fluid class="dashboard-container">
 
-    <v-row class="chart-section" dense>
-      <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-age">
-        <AvgAgeCard />
-      </v-col>
+    <v-expansion-panels multiple>
 
-      <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-service">
-        <YearOfService />
-      </v-col>
-    </v-row>
+      <!-- Section 1: Age and Year of Service -->
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          📊 Age & Year of Service
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-row dense class="chart-section">
+            <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-age">
+              <AvgAgeCard />
+            </v-col>
 
-    <!-- Headcount cards -->
-    <v-row dense class="headcount-section">
-      <v-col cols="12" sm="12" md="12" class="dashboard-card">
-        <TypeOfPosition />
-      </v-col>
-    </v-row>
+            <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-service">
+              <YearOfService />
+            </v-col>
+          </v-row>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
 
+      <!-- Section 2: Headcount by Position -->
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          👷 Headcount by Type
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-row dense class="headcount-section">
+            <v-col cols="12" class="dashboard-card">
+              <TypeOfPosition />
+            </v-col>
+          </v-row>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
 
-    <!-- Additional sections (commented out) -->
-    <v-row class="mb-4" align="center">
-      <v-col cols="12" sm="4">
-        <v-select
-          v-model="selectedYear"
-          :items="yearOptions"
-          label="Select Year"
-          variant="outlined"
-          density="comfortable"
-        />
-      </v-col>
-    </v-row>
+      <!-- Section 3: Charts -->
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          📈 Direct & Indirect Labor Charts + Budget Summary
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-row class="mb-4" align="center">
+            <v-col cols="12" sm="4">
+              <v-select
+                v-model="selectedYear"
+                :items="yearOptions"
+                label="Select Year"
+                variant="outlined"
+                density="comfortable"
+              />
+            </v-col>
+          </v-row>
 
-    <v-row class="chart-section" dense>
-      <v-col cols="12" sm="6" class="pa-2 dashboard-card card-direct-chart">
-        <DirectLaborChart :year="selectedYear" />
-      </v-col>
+          <v-row dense class="chart-section">
+            <v-col cols="12" sm="6" class="pa-2 dashboard-card card-direct-chart">
+              <DirectLaborChart :year="selectedYear" />
+            </v-col>
+            <v-col cols="12" sm="6" class="pa-2 dashboard-card card-indirect-chart">
+              <IndirectLaborChart :year="selectedYear" />
+            </v-col>
+            <v-col cols="12" class="dashboard-card card-summary">
+              <SummaryBudgetTable :year="selectedYear" />
+            </v-col>
+          </v-row>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
 
-      <v-col cols="12" sm="6" class="pa-2 dashboard-card card-indirect-chart">
-        <IndirectLaborChart :year="selectedYear" />
-      </v-col>
+      <!-- Section 4: Resign Reasons -->
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          📉 Resign Reason Summary
+        </v-expansion-panel-title>
+        <v-expansion-panel-text class="gap-2 flex">
+          <v-row dense class="chart-section">
+            <v-col cols="6" class="dashboard-card card-summary">
+              <ReasonResignDirectTable :year="selectedYear" />
+            </v-col>
+            <v-col cols="6" class="dashboard-card card-summary">
+              <ReasonResignDirectLabor :year="selectedYear" />
+            </v-col>
+            <v-col cols="6" class="dashboard-card card-summary">
+              <ReasonResignIndirectTable :year="selectedYear" />
+            </v-col>
+            <v-col cols="6" class="dashboard-card card-summary">
+              <ReasonResignIndirectLabor :year="selectedYear" />
+            </v-col>
+          </v-row>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
 
-      <v-col cols="12" class="dashboard-card card-summary">
-        <SummaryBudgetTable :year="selectedYear" />
-      </v-col>
-
-      <v-col cols="12" class="dashboard-card card-summary">
-        <ReasonResignDirectTable :year="selectedYear" />
-      </v-col>
-
-      <v-col cols="12" class="dashboard-card card-summary">
-        <ReasonResignDirectLabor :year="selectedYear" />
-      </v-col>
-
-      <v-col cols="12" class="dashboard-card card-summary">
-        <ReasonResignIndirectTable :year="selectedYear" />
-      </v-col>
-
-      <v-col cols="12" class="dashboard-card card-summary">
-        <ReasonResignIndirectLabor :year="selectedYear" />
-      </v-col>
-    </v-row>
-
-   
+    </v-expansion-panels>
+    
   </v-container>
 </template>
+
 
 <script>
 import axios from '@/utils/axios'
