@@ -167,7 +167,7 @@ exports.getAverageService = async (req, res) => {
 
 
 // GET /api/hrss/excome/resign-reason-summary?year=2025
-exports.getMonthlyResignReasonStats = async (req, res) => {
+exports.getMonthlyResignReasonDirectStats = async (req, res) => {
   try {
     const year = parseInt(req.query.year);
     const company = req.company;
@@ -240,3 +240,221 @@ exports.getMonthlyResignReasonStats = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+
+exports.getResignReasonDirectLabor = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year)
+    const company = req.company
+
+    if (!year || !company) {
+      return res.status(400).json({ message: 'Year and company required' })
+    }
+
+    const directPositions = ['Sewer', 'Jumper']
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+    const resigns = await Employee.find({
+      company: { $in: Array.isArray(company) ? company : [company] },
+      status: 'Resign',
+      position: { $in: directPositions },
+      resignReason: { $ne: '' },
+      resignDate: {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`)
+      }
+    })
+
+    console.log(`📦 Resigned Direct Labor (${year}):`, resigns.length)
+
+    // Step 1: Count resigns by month & reason
+    const monthly = Array.from({ length: 12 }, () => ({}))
+    for (const emp of resigns) {
+      const monthIndex = new Date(emp.resignDate).getMonth()
+      const reason = emp.resignReason?.trim() || 'Unknown'
+      monthly[monthIndex][reason] = (monthly[monthIndex][reason] || 0) + 1
+    }
+
+    // Step 2: Collect all unique reasons
+    const reasons = new Set()
+    monthly.forEach(monthMap => {
+      Object.keys(monthMap).forEach(r => reasons.add(r))
+    })
+
+    // Step 3: Build final table
+    const result = []
+    const totalPerMonth = Array(12).fill(0)
+
+    reasons.forEach(reason => {
+      const row = { reason }
+      let total = 0
+
+      for (let i = 0; i < 12; i++) {
+        const count = monthly[i][reason] || 0
+        row[monthLabels[i]] = count
+        totalPerMonth[i] += count
+        total += count
+      }
+
+      row.total = total
+      result.push(row)
+    })
+
+    // Step 4: Calculate % column
+    const grandTotal = totalPerMonth.reduce((a, b) => a + b, 0)
+    result.forEach(row => {
+      const percent = row.total > 0 ? Math.round((row.total / grandTotal) * 100) : 0
+      row.percent = `${percent}%`
+    })
+
+    res.json({ year, table: result })
+  } catch (err) {
+    console.error('❌ Error in getResignReasonDirectLabor:', err)
+    res.status(500).json({ message: 'Server error' })
+  }
+}
+
+
+exports.getMonthlyResignReasonIndirectStats = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year)
+    const company = req.company
+
+    if (!year || !company) {
+      return res.status(400).json({ message: 'Year and company required' })
+    }
+
+    const excludeDirectPositions = ['Sewer', 'Jumper']
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+    // Step 1: Fetch resign employees for this year, this company, indirect positions
+    const allEmployees = await Employee.find({
+      company: { $in: Array.isArray(company) ? company : [company] },
+      status: 'Resign',
+      position: { $nin: excludeDirectPositions },
+      resignReason: { $ne: '' },
+      resignDate: {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`)
+      }
+    })
+
+    console.log('👉 Total Indirect Resign Employees:', allEmployees.length)
+
+    // Step 2: Initialize monthly summary
+    const summary = Array.from({ length: 12 }, () => ({}))
+
+    for (const emp of allEmployees) {
+      const month = new Date(emp.resignDate).getMonth() // 0 = Jan, 11 = Dec
+      const reason = emp.resignReason?.trim() || 'Unknown'
+      summary[month][reason] = (summary[month][reason] || 0) + 1
+    }
+
+    // Step 3: Collect all unique reasons
+    const reasonSet = new Set()
+    summary.forEach(monthMap => {
+      Object.keys(monthMap).forEach(reason => reasonSet.add(reason))
+    })
+
+    // Step 4: Build formatted result table
+    const result = []
+    const totalByMonth = Array(12).fill(0)
+
+    reasonSet.forEach(reason => {
+      const row = { reason }
+      let total = 0
+
+      for (let i = 0; i < 12; i++) {
+        const count = summary[i][reason] || 0
+        row[monthLabels[i]] = count
+        totalByMonth[i] += count
+        total += count
+      }
+
+      row.total = total
+      result.push(row)
+    })
+
+    // Step 5: Add percent column
+    const grandTotal = totalByMonth.reduce((a, b) => a + b, 0)
+    result.forEach(row => {
+      const percent = row.total > 0 ? Math.round((row.total / grandTotal) * 100) : 0
+      row.percent = `${percent}%`
+    })
+
+    res.json({ year, table: result })
+  } catch (err) {
+    console.error('❌ Error in getMonthlyResignReasonIndirectStats:', err)
+    res.status(500).json({ message: 'Server error' })
+  }
+}
+
+
+exports.getResignReasonIndirectLabor = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year)
+    const company = req.company
+
+    if (!year || !company) {
+      return res.status(400).json({ message: 'Year and company required' })
+    }
+
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+    const resigns = await Employee.find({
+      company: { $in: Array.isArray(company) ? company : [company] },
+      status: 'Resign',
+      position: { $nin: ['Sewer', 'Jumper'] },
+      resignReason: { $ne: '' },
+      resignDate: {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`)
+      }
+    })
+
+    console.log(`📦 Resigned Indirect Labor (${year}):`, resigns.length)
+
+    // Step 1: Group by month + reason
+    const monthly = Array.from({ length: 12 }, () => ({}))
+    for (const emp of resigns) {
+      const monthIndex = new Date(emp.resignDate).getMonth()
+      const reason = emp.resignReason?.trim() || 'Unknown'
+      monthly[monthIndex][reason] = (monthly[monthIndex][reason] || 0) + 1
+    }
+
+    // Step 2: Collect all reasons
+    const reasons = new Set()
+    monthly.forEach(monthMap => {
+      Object.keys(monthMap).forEach(r => reasons.add(r))
+    })
+
+    // Step 3: Format table
+    const result = []
+    const totalPerMonth = Array(12).fill(0)
+
+    reasons.forEach(reason => {
+      const row = { reason }
+      let total = 0
+      for (let i = 0; i < 12; i++) {
+        const count = monthly[i][reason] || 0
+        row[monthLabels[i]] = count
+        totalPerMonth[i] += count
+        total += count
+      }
+      row.total = total
+      result.push(row)
+    })
+
+    // Step 4: Add %
+    const grandTotal = totalPerMonth.reduce((a, b) => a + b, 0)
+    result.forEach(row => {
+      const percent = row.total > 0 ? Math.round((row.total / grandTotal) * 100) : 0
+      row.percent = `${percent}%`
+    })
+
+    res.json({ year, table: result })
+  } catch (err) {
+    console.error('❌ Error in getResignReasonIndirectLabor:', err)
+    res.status(500).json({ message: 'Server error' })
+  }
+}

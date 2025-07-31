@@ -46,7 +46,19 @@
       </v-col>
 
       <v-col cols="12" class="dashboard-card card-summary">
-        <ResignReasonTable :year="selectedYear" />
+        <ReasonResignDirectTable :year="selectedYear" />
+      </v-col>
+
+      <v-col cols="12" class="dashboard-card card-summary">
+        <ReasonResignDirectLabor :year="selectedYear" />
+      </v-col>
+
+      <v-col cols="12" class="dashboard-card card-summary">
+        <ReasonResignIndirectTable :year="selectedYear" />
+      </v-col>
+
+      <v-col cols="12" class="dashboard-card card-summary">
+        <ReasonResignIndirectLabor :year="selectedYear" />
       </v-col>
     </v-row>
 
@@ -62,7 +74,11 @@ import DirectLaborChart    from './excome/DirectLaborChart.vue'
 import IndirectLaborChart  from './excome/IndirectLaborChart.vue'
 import AvgAgeCard          from './excome/AvgAgeCard.vue'
 import YearOfService       from './excome/YearOfService.vue'
-import ResignReasonTable from './excome/ResignReasonTable.vue'
+import ReasonResignDirectTable from './excome/ReasonResignDirectTable.vue'
+import ReasonResignIndirectTable from './excome/ReasonResignIndirectTable.vue'
+import ReasonResignDirectLabor from './excome/ReasonResignDirectLabor.vue'
+import ReasonResignIndirectLabor from './excome/ReasonResignIndirectLabor.vue'
+
 
 export default {
   name: 'ExcomeDashboard',
@@ -73,7 +89,10 @@ export default {
     IndirectLaborChart,
     AvgAgeCard,
     YearOfService,
-    ResignReasonTable,
+    ReasonResignDirectTable,
+    ReasonResignIndirectTable,
+    ReasonResignDirectLabor,
+    ReasonResignIndirectLabor,
   },
   data() {
     const currentYear = new Date().getFullYear()

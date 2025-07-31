@@ -8,7 +8,11 @@ const {
   getManpowerTargets,
   getAverageAge,
   getAverageService,
-  getMonthlyResignReasonStats
+  getMonthlyResignReasonDirectStats,
+  getMonthlyResignReasonIndirectStats,
+  getResignReasonDirectLabor,
+  getResignReasonIndirectLabor,
+  
 } = require('../../controllers/hrss/excomeController')
 
 
@@ -47,6 +51,28 @@ router.get(
   '/resign-reason-summary',
   authenticate,
   authorizeCompanyAccess,
-  getMonthlyResignReasonStats
+  getMonthlyResignReasonDirectStats
+)
+
+router.get(
+  '/resign-reason-indirect-summary',
+  authenticate,
+  authorizeCompanyAccess,
+  getMonthlyResignReasonIndirectStats
+)
+
+
+router.get(
+  '/resign-reason-direct-labor',
+  authenticate,
+  authorizeCompanyAccess,
+  getResignReasonDirectLabor
+)
+
+router.get(
+  '/resign-reason-indirect-labor',
+  authenticate,
+  authorizeCompanyAccess,
+  getResignReasonIndirectLabor
 )
 module.exports = router
