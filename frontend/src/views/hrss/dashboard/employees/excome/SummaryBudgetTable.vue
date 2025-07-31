@@ -82,7 +82,7 @@ async function fetchData() {
   console.log('[SummaryBudgetTable] fetching for year', props.year)
 
   try {
-    const { data } = await axios.get('/excome/manpower/targets', {
+    const { data } = await axios.get('/hrss/excome/manpower/targets', {
       params: { year: props.year }
     })
 

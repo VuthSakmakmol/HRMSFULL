@@ -73,7 +73,7 @@ const yearOptions = Array.from({ length: 6 }, (_, i) => 2023 + i)
 
 const fetchSnapshots = async () => {
   try {
-    const res = await axios.get('/hrss/excome/employee-snapshots', {
+    const res = await axios.get('/hrss/excome-monthly/employee-snapshots', {
       params: { year: selectedYear.value }
     })
 

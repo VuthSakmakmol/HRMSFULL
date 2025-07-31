@@ -164,3 +164,79 @@ exports.getAverageService = async (req, res) => {
   }
 };
 
+
+
+// GET /api/hrss/excome/resign-reason-summary?year=2025
+exports.getMonthlyResignReasonStats = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year);
+    const company = req.company;
+
+    if (!year || !company) {
+      return res.status(400).json({ message: 'Year and company required' });
+    }
+
+    const sewerPositions = ['Sewer', 'Jumper'];
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    // Step 1: Fetch resign employees for this year, this company, only sewer positions
+    const allEmployees = await Employee.find({
+      company: { $in: Array.isArray(company) ? company : [company] },
+      status: 'Resign',
+      position: { $in: sewerPositions },
+      resignReason: { $ne: '' },
+      resignDate: {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`)
+      }
+    });
+
+    console.log('👉 Total Matching Employees:', allEmployees.length);
+
+    // Step 2: Initialize monthly summary
+    const summary = Array.from({ length: 12 }, () => ({}));
+
+    for (const emp of allEmployees) {
+      const month = new Date(emp.resignDate).getMonth(); // 0 = Jan, 11 = Dec
+      const reason = emp.resignReason?.trim() || 'Unknown';
+      summary[month][reason] = (summary[month][reason] || 0) + 1;
+    }
+
+    // Step 3: Collect all unique reasons
+    const reasonSet = new Set();
+    summary.forEach(monthMap => {
+      Object.keys(monthMap).forEach(reason => reasonSet.add(reason));
+    });
+
+    // Step 4: Build formatted result table
+    const result = [];
+    const totalByMonth = Array(12).fill(0);
+
+    reasonSet.forEach(reason => {
+      const row = { reason };
+      let total = 0;
+
+      for (let i = 0; i < 12; i++) {
+        const count = summary[i][reason] || 0;
+        row[monthLabels[i]] = count;
+        totalByMonth[i] += count;
+        total += count;
+      }
+
+      row.total = total;
+      result.push(row);
+    });
+
+    // Step 5: Add percent column
+    const grandTotal = totalByMonth.reduce((a, b) => a + b, 0);
+    result.forEach(row => {
+      const percent = row.total > 0 ? Math.round((row.total / grandTotal) * 100) : 0;
+      row.percent = `${percent}%`;
+    });
+
+    res.json({ year, table: result });
+  } catch (err) {
+    console.error('Error in getMonthlyResignReasonStats:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};

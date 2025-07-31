@@ -39,7 +39,11 @@ const employeeSchema = new mongoose.Schema({
   education: { type: String, enum: ['Primary School','Secondary School','High School', 'Bacherlor Degree', 'Master', 'Doctor', ''], default: '' },
   religion: { type: String, enum: [ 'Buddhism', 'Islam' ,'Christianity', 'Hinduism', ''], default: '' },
   nationality: { type: String, enum: ['Khmer', 'Thai', 'Vietnamese', 'Filipino', 'Sri Lankan', 'Bangladehi', 'Indian', ''], default: '' },
-
+  resignReason: {type: String, enum: ['Could not Contact', 'Take care of child/children', 'Heath Issue', 'Family Issue',
+    'Change Carrer', 'Take care of the parent', 'Personal Issue',
+    'Back to homland', 'Family-owned business/farm', 'Supervisor/Leader Attitude', 'Contract not renwed', 'Go to work oversea',
+    'Teamwork Issue', 'Distance of the workplace', 'Transportation Issue', ''
+  ], default: ''},
   // 📍 Address
   placeOfBirth: { type: addressSchema, default: () => ({}) },
   placeOfLiving: { type: addressSchema, default: () => ({}) },
@@ -52,8 +56,10 @@ const employeeSchema = new mongoose.Schema({
   team: { type: String, default: '' },
   section: { type: String, default: '' },
   shift: { type: String, enum: ['Day Shift', 'Night Shift', ''], default: '' },
-  status: { type: String, enum: ['Working', 'Resign', 'Terminate', 'Abandon', 'Pass Away', 'Retirement', ''], default: '' },
+  status: { type: String, enum: ['Working', 'Resign', 'Terminate', 'Abandon', 'Pass Away', 'Retirement', ''], default: 'Working' },
+  resignDate: { type: Date, default: null },
   remark: { type: String, default: '' },
+
 
   // 📄 Documents
   idCard: { type: String, default: '' },

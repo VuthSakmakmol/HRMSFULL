@@ -32,7 +32,7 @@ const ages = ref<AgeResponse>({ total: 0, sewer: 0 })
 
 onMounted(async () => {
   try {
-    const { data } = await axios.get('/excome/employee-age')
+    const { data } = await axios.get('/hrss/excome/employee-age')
     ages.value = {
       total: data.total,
       sewer: data.sewer

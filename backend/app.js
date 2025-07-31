@@ -62,10 +62,8 @@ app.use('/api/location', require('./routes/hrss/locationRoutes'))
 app.use('/api/meta', require('./routes/hrss/metaRoutes'))
 
 // excome
-app.use('/api/excome', require('./routes/hrss/excomeRoutes'));
-
-// hrss/excome
-app.use('/api/hrss/excome', require('./routes/hrss/excome/employeeMonthlyCountRoutes'))
+app.use('/api/hrss/excome', require('./routes/hrss/excomeRoutes')); // contains getMonthlyResignReasonStats
+app.use('/api/hrss/excome-monthly', require('./routes/hrss/excome/employeeMonthlyCountRoutes')); // contains snapshot logic
 
 
 // HRSS Attendance

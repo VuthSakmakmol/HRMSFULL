@@ -44,10 +44,11 @@
       <v-col cols="12" class="dashboard-card card-summary">
         <SummaryBudgetTable :year="selectedYear" />
       </v-col>
+
+      <v-col cols="12" class="dashboard-card card-summary">
+        <ResignReasonTable :year="selectedYear" />
+      </v-col>
     </v-row>
-
-
-
 
    
   </v-container>
@@ -61,6 +62,7 @@ import DirectLaborChart    from './excome/DirectLaborChart.vue'
 import IndirectLaborChart  from './excome/IndirectLaborChart.vue'
 import AvgAgeCard          from './excome/AvgAgeCard.vue'
 import YearOfService       from './excome/YearOfService.vue'
+import ResignReasonTable from './excome/ResignReasonTable.vue'
 
 export default {
   name: 'ExcomeDashboard',
@@ -71,6 +73,7 @@ export default {
     IndirectLaborChart,
     AvgAgeCard,
     YearOfService,
+    ResignReasonTable,
   },
   data() {
     const currentYear = new Date().getFullYear()
@@ -95,7 +98,7 @@ export default {
 
     async fetchCounts() {
       try {
-        const res = await axios.get('/api/hrss/excome/employee-count', {
+        const res = await axios.get('/hrss/excome/employee-count', {
           params: { month: this.selectedMonth }
         })
 

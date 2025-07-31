@@ -8,5 +8,9 @@ module.exports = {
   shiftOptions: ['Day Shift', 'Night Shift'],
   statusOptions: ['Working', 'Resign', 'Terminate', 'Abandon', 'Pass Away', 'Retirement'],
   sourceOfHiringOptions: ['Agency', 'Banner / Job Announcement Board', 'Brochure', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'LinkedIn','Telegram', 'Other', ],
-  employeeTypeOptions: ['Direct', 'Indirect', 'Marketing']
+  employeeTypeOptions: ['Direct', 'Indirect', 'Marketing'],
+  resignReasonOptions: ['Could not Contact', 'Take care of child/children', 'Heath Issue', 'Family Issue',
+    'Change Carrer', 'Take care of the parent', 'Personal Issue',
+    'Back to homland', 'Family-owned business/farm', 'Supervisor/Leader Attitude', 'Contract not renwed', 'Go to work oversea',
+    'Teamwork Issue', 'Distance of the workplace', 'Transportation Issue']
 }

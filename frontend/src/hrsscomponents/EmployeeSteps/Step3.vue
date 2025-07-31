@@ -15,6 +15,7 @@
           @keydown.enter.prevent="focusNext($event)"
         />
       </v-col>
+
       <v-col cols="12" sm="2">
         <v-text-field
           v-model="form.team"
@@ -26,6 +27,7 @@
           @keydown.enter.prevent="focusNext($event)"
         />
       </v-col>
+
       <v-col cols="12" sm="2">
         <v-text-field
           v-model="form.section"
@@ -38,7 +40,7 @@
         />
       </v-col>
 
-      <!-- Shift & Status -->
+      <!-- Shift -->
       <v-col cols="12" sm="2">
         <v-select
           v-model="form.shift"
@@ -51,6 +53,8 @@
           @keydown.enter.prevent="focusNext($event)"
         />
       </v-col>
+
+      <!-- Status -->
       <v-col cols="12" sm="2">
         <v-select
           v-model="form.status"
@@ -60,6 +64,34 @@
           density="comfortable"
           autocomplete="off"
           name="status"
+          @keydown.enter.prevent="focusNext($event)"
+        />
+      </v-col>
+
+      <!-- Reason of Resign -->
+      <v-col cols="12" sm="2" v-if="form.status === 'Resign'">
+        <v-select
+          v-model="form.resignReason"
+          :items="enumOptions.resignReasonOptions"
+          label="Reason of Resign"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="reasonResign"
+          @keydown.enter.prevent="focusNext($event)"
+        />
+      </v-col>
+
+      <!-- Resign Date (only show if status === Resign) -->
+      <v-col cols="12" sm="2" v-if="form.status === 'Resign'">
+        <v-text-field
+          v-model="form.resignDate"
+          label="Resign Date"
+          type="date"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          name="resignDate"
           @keydown.enter.prevent="focusNext($event)"
         />
       </v-col>
@@ -90,6 +122,7 @@
           @keydown.enter.prevent="focusNext($event)"
         />
       </v-col>
+
       <v-col cols="12" sm="2">
         <v-text-field
           v-model="form.overlock"
@@ -101,6 +134,7 @@
           @keydown.enter.prevent="focusNext($event)"
         />
       </v-col>
+
       <v-col cols="12" sm="2">
         <v-text-field
           v-model="form.coverstitch"
@@ -112,6 +146,7 @@
           @keydown.enter.prevent="focusNext($event)"
         />
       </v-col>
+
       <v-col cols="12" sm="2">
         <v-text-field
           v-model="form.totalMachine"
@@ -129,15 +164,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import axios from '@/utils/axios'
 
-defineProps({ form: Object })
+const props = defineProps({ form: Object })
+const form = props.form
 
 const enumOptions = ref({
   shiftOptions: [],
   statusOptions: [],
-  sourceOfHiringOptions: []
+  sourceOfHiringOptions: [],
+  resignReasonOptions: []
 })
 
 onMounted(async () => {
@@ -149,7 +186,21 @@ onMounted(async () => {
   }
 })
 
-// Focus next field on Enter
+// Reset resignReason and resignDate if status is not Resign
+watch(
+  () => form.status,
+  (val) => {
+    if (val === 'Resign') {
+      if (!form.resignDate) {
+        form.resignDate = new Date().toISOString().substring(0, 10)
+      }
+    } else {
+      form.resignReason = ''
+      form.resignDate = null
+    }
+  }
+)
+
 function focusNext(event) {
   const formElements = Array.from(
     event.target

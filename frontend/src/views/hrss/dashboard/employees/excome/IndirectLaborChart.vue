@@ -46,7 +46,7 @@ watch(() => props.year, fetchChartData, { immediate: true })
 
 async function fetchChartData() {
   try {
-    const { data } = await axios.get('/excome/manpower/targets', {
+    const { data } = await axios.get('/hrss/excome/manpower/targets', {
       params: { year: props.year }
     })
 

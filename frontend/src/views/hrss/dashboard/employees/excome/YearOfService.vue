@@ -32,7 +32,7 @@ const services = ref<ServiceResponse>({ total: 0, sewer: 0 })
 
 onMounted(async () => {
   try {
-    const { data } = await axios.get<ServiceResponse>('/excome/employee-service')
+    const { data } = await axios.get<ServiceResponse>('/hrss/excome/employee-service')
     services.value = { total: data.total, sewer: data.sewer }
   } catch (err) {
     console.error('Failed to load average service years:', err)
