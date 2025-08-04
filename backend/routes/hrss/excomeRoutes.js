@@ -12,6 +12,10 @@ const {
   getMonthlyResignReasonIndirectStats,
   getResignReasonDirectLabor,
   getResignReasonIndirectLabor,
+  getPeriodOfDirectLaborResignByYear,
+  getPeriodOfIndirectLaborResignByYear,
+  getPeriodOfDirectLaborChartResignByYear,
+  getPeriodOfIndirectLaborChartResignByYear
   
 } = require('../../controllers/hrss/excomeController')
 
@@ -75,4 +79,35 @@ router.get(
   authorizeCompanyAccess,
   getResignReasonIndirectLabor
 )
+
+router.get(
+  '/period-of-direct-resign',
+  authenticate,
+  authorizeCompanyAccess,
+  getPeriodOfDirectLaborResignByYear
+)
+
+// Indirect Labor Period of Resignation
+router.get(
+  '/period-of-indirect-resign',
+  authenticate,
+  authorizeCompanyAccess,
+  getPeriodOfIndirectLaborResignByYear
+)
+
+router.get(
+  '/period-of-direct-chart-resign',
+  authenticate,
+  authorizeCompanyAccess,
+  getPeriodOfDirectLaborChartResignByYear
+)
+
+router.get(
+  '/period-of-indirect-chart-resign',
+  authenticate,
+  authorizeCompanyAccess,
+  getPeriodOfIndirectLaborChartResignByYear
+)
+
+
 module.exports = router

@@ -90,6 +90,37 @@
         </v-expansion-panel-text>
       </v-expansion-panel>
 
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          Yearly Resign 
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-col cols="12" class="dashboard-card card-summary">
+            <PeroidOfDirectLaborResignByYear :year="selectYear"/>
+          </v-col>
+        </v-expansion-panel-text>
+
+        <v-expansion-panel-text>
+          <v-col cols="12" class="dashboard-card card-summary">
+            <PeriodOfDirectLaborChartResignByYear :year="selectYear"/>
+          </v-col>
+        </v-expansion-panel-text>
+
+        <v-expansion-panel-text>
+          <v-col cols="12" class="dashboard-card card-summary">
+            <PeriodOfIndirectLaborResignByYear :year="selectYear"/>
+          </v-col>
+        </v-expansion-panel-text>
+
+        <v-expansion-panel-text>
+          <v-col cols="12" class="dashboard-card card-summary">
+            <PeriodOfIndirectLaborChartResignByYear :year="selectYear"/>
+          </v-col>
+        </v-expansion-panel-text>
+
+
+      </v-expansion-panel>
+
     </v-expansion-panels>
     
   </v-container>
@@ -108,7 +139,10 @@ import ReasonResignDirectTable from './excome/ReasonResignDirectTable.vue'
 import ReasonResignIndirectTable from './excome/ReasonResignIndirectTable.vue'
 import ReasonResignDirectLabor from './excome/ReasonResignDirectLabor.vue'
 import ReasonResignIndirectLabor from './excome/ReasonResignIndirectLabor.vue'
-
+import PeroidOfDirectLaborResignByYear from './excome/PeroidOfDirectLaborResignByYear.vue'
+import PeriodOfIndirectLaborResignByYear from './excome/PeriodOfIndirectLaborResignByYear.vue'
+import PeriodOfDirectLaborChartResignByYear from './excome/PeriodOfDirectLaborChartResignByYear.vue'
+import PeriodOfIndirectLaborChartResignByYear from './excome/PeriodOfIndirectLaborChartResignByYear.vue'
 
 export default {
   name: 'ExcomeDashboard',
@@ -123,6 +157,10 @@ export default {
     ReasonResignIndirectTable,
     ReasonResignDirectLabor,
     ReasonResignIndirectLabor,
+    PeroidOfDirectLaborResignByYear,
+    PeriodOfIndirectLaborResignByYear,
+    PeriodOfDirectLaborChartResignByYear,
+    PeriodOfIndirectLaborChartResignByYear
   },
   data() {
     const currentYear = new Date().getFullYear()

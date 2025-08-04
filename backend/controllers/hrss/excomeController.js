@@ -458,3 +458,315 @@ exports.getResignReasonIndirectLabor = async (req, res) => {
     res.status(500).json({ message: 'Server error' })
   }
 }
+
+// GET /api/hrss/excome/period-of-direct-resign?year=2025
+exports.getPeriodOfDirectLaborResignByYear = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year)
+    const company = req.company
+
+    if (!year || !company) {
+      return res.status(400).json({ message: 'Year and company required' })
+    }
+
+    const directPositions = ['Sewer', 'Jumper']
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+    // Fetch resigned direct labor this year
+    const resigns = await Employee.find({
+      company: { $in: Array.isArray(company) ? company : [company] },
+      status: 'Resign',
+      position: { $in: directPositions },
+      resignDate: {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`)
+      },
+      joinDate: { $ne: null }
+    })
+
+    console.log(`📦 Resigned Direct Labor (${year}):`, resigns.length)
+
+    // Buckets
+    const groups = [
+      { label: '< 2 M', test: d => d < 2 },
+      { label: '2 - 6 Months', test: d => d >= 2 && d < 6 },
+      { label: '6 Months- 1 Year', test: d => d >= 6 && d < 12 },
+      { label: '1 Year- 2 Year', test: d => d >= 12 && d < 24 },
+      { label: '2-5 Years', test: d => d >= 24 && d < 60 },
+      { label: '> 5 Years', test: d => d >= 60 }
+    ]
+
+    // Summary format
+    const summary = {}
+    for (const group of groups) {
+      summary[group.label] = {
+        group: group.label,
+        total: 0
+      }
+      monthLabels.forEach(m => summary[group.label][m] = 0)
+    }
+
+    // Process each resignation
+    for (const emp of resigns) {
+      const join = new Date(emp.joinDate)
+      const resign = new Date(emp.resignDate)
+      const diffInMonths =
+        (resign.getFullYear() - join.getFullYear()) * 12 +
+        (resign.getMonth() - join.getMonth())
+
+      const monthIdx = resign.getMonth()
+      const monthLabel = monthLabels[monthIdx]
+
+      const group = groups.find(g => g.test(diffInMonths))
+      if (!group) continue
+
+      const key = group.label
+      summary[key][monthLabel] += 1
+      summary[key].total += 1
+    }
+
+    // Build final result
+    const result = Object.values(summary)
+    const grandTotal = result.reduce((sum, r) => sum + r.total, 0)
+
+    for (const row of result) {
+      row.percent = grandTotal > 0 ? (row.total / grandTotal * 100).toFixed(2) + '%' : '0%'
+    }
+
+    // Add total row
+    const totalRow = { group: 'Total', total: grandTotal }
+    monthLabels.forEach(m => {
+      totalRow[m] = result.reduce((sum, r) => sum + r[m], 0)
+    })
+    totalRow.percent = '100%'
+
+    res.json({
+      year,
+      table: result,
+      total: totalRow
+    })
+
+  } catch (err) {
+    console.error('❌ Error in getPeriodOfDirectLaborResignByYear:', err)
+    res.status(500).json({ message: 'Server error' })
+  }
+}
+
+
+// GET /api/hrss/excome/period-of-indirect-resign?year=2025
+exports.getPeriodOfIndirectLaborResignByYear = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year)
+    const company = req.company
+
+    if (!year || !company) {
+      return res.status(400).json({ message: 'Year and company required' })
+    }
+
+    const directPositions = ['Sewer', 'Jumper']
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+    // Fetch resigned INDIRECT labor (exclude direct positions)
+    const resigns = await Employee.find({
+      company: { $in: Array.isArray(company) ? company : [company] },
+      status: 'Resign',
+      position: { $nin: directPositions }, // exclude direct labor
+      resignDate: {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`)
+      },
+      joinDate: { $ne: null }
+    })
+
+    console.log(`📦 Resigned Indirect Labor (${year}):`, resigns.length)
+
+    const groups = [
+      { label: '< 2 M', test: d => d < 2 },
+      { label: '2 - 6 Months', test: d => d >= 2 && d < 6 },
+      { label: '6 Months- 1 Year', test: d => d >= 6 && d < 12 },
+      { label: '1 Year- 2 Year', test: d => d >= 12 && d < 24 },
+      { label: '2-5 Years', test: d => d >= 24 && d < 60 },
+      { label: '> 5 Years', test: d => d >= 60 }
+    ]
+
+    const summary = {}
+    for (const group of groups) {
+      summary[group.label] = {
+        group: group.label,
+        total: 0
+      }
+      monthLabels.forEach(m => summary[group.label][m] = 0)
+    }
+
+    for (const emp of resigns) {
+      const join = new Date(emp.joinDate)
+      const resign = new Date(emp.resignDate)
+      const diffInMonths =
+        (resign.getFullYear() - join.getFullYear()) * 12 +
+        (resign.getMonth() - join.getMonth())
+
+      const monthIdx = resign.getMonth()
+      const monthLabel = monthLabels[monthIdx]
+
+      const group = groups.find(g => g.test(diffInMonths))
+      if (!group) continue
+
+      const key = group.label
+      summary[key][monthLabel] += 1
+      summary[key].total += 1
+    }
+
+    const result = Object.values(summary)
+    const grandTotal = result.reduce((sum, r) => sum + r.total, 0)
+
+    for (const row of result) {
+      row.percent = grandTotal > 0 ? (row.total / grandTotal * 100).toFixed(2) + '%' : '0%'
+    }
+
+    const totalRow = { group: 'Total', total: grandTotal }
+    monthLabels.forEach(m => {
+      totalRow[m] = result.reduce((sum, r) => sum + r[m], 0)
+    })
+    totalRow.percent = '100%'
+
+    res.json({
+      year,
+      table: result,
+      total: totalRow
+    })
+
+  } catch (err) {
+    console.error('❌ Error in getPeriodOfIndirectLaborResignByYear:', err)
+    res.status(500).json({ message: 'Server error' })
+  }
+}
+
+
+
+// GET /api/hrss/excome/period-of-direct-chart-resign?year=2025
+exports.getPeriodOfDirectLaborChartResignByYear = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year)
+    const company = req.company
+
+    if (!year || !company) {
+      return res.status(400).json({ message: 'Year and company required' })
+    }
+
+    const directPositions = ['Sewer', 'Jumper']
+
+    // Fetch resigned direct labor
+    const resigns = await Employee.find({
+      company: { $in: Array.isArray(company) ? company : [company] },
+      status: 'Resign',
+      position: { $in: directPositions },
+      resignDate: {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`)
+      },
+      joinDate: { $ne: null }
+    })
+
+    const groups = [
+      { label: '< 2 M', test: d => d < 2 },
+      { label: '2 - 6 Months', test: d => d >= 2 && d < 6 },
+      { label: '6 Months- 1 Year', test: d => d >= 6 && d < 12 },
+      { label: '1 Year- 2 Year', test: d => d >= 12 && d < 24 },
+      { label: '2-5 Years', test: d => d >= 24 && d < 60 },
+      { label: '> 5 Years', test: d => d >= 60 }
+    ]
+
+    const summary = {}
+    for (const group of groups) {
+      summary[group.label] = 0
+    }
+
+    for (const emp of resigns) {
+      const join = new Date(emp.joinDate)
+      const resign = new Date(emp.resignDate)
+      const diffInMonths =
+        (resign.getFullYear() - join.getFullYear()) * 12 +
+        (resign.getMonth() - join.getMonth())
+
+      const group = groups.find(g => g.test(diffInMonths))
+      if (!group) continue
+
+      summary[group.label] += 1
+    }
+
+    const total = Object.values(summary).reduce((sum, count) => sum + count, 0)
+
+    const chartData = groups.map(g => {
+      const count = summary[g.label]
+      const percent = total > 0 ? (count / total * 100).toFixed(2) : '0.00'
+      return {
+        group: g.label,
+        count,
+        percent
+      }
+    })
+
+    res.json({ year, total, data: chartData })
+  } catch (err) {
+    console.error('❌ Error in getPeriodOfDirectLaborChartResignByYear:', err)
+    res.status(500).json({ message: 'Server error' })
+  }
+}
+
+
+// GET /api/hrss/excome/period-of-indirect-chart-resign?year=2025
+exports.getPeriodOfIndirectLaborChartResignByYear = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year)
+    const company = req.company
+
+    if (!year || !company) {
+      return res.status(400).json({ message: 'Year and company required' })
+    }
+
+    const directPositions = ['Sewer', 'Jumper']
+
+    const resigns = await Employee.find({
+      company: { $in: Array.isArray(company) ? company : [company] },
+      status: 'Resign',
+      position: { $nin: directPositions }, // indirect only
+      resignDate: {
+        $gte: new Date(`${year}-01-01T00:00:00.000Z`),
+        $lte: new Date(`${year}-12-31T23:59:59.999Z`)
+      },
+      joinDate: { $ne: null }
+    })
+
+    const groups = [
+      { label: '< 2 M', test: d => d < 2 },
+      { label: '2 - 6 Months', test: d => d >= 2 && d < 6 },
+      { label: '6 Months- 1 Year', test: d => d >= 6 && d < 12 },
+      { label: '1 Year- 2 Year', test: d => d >= 12 && d < 24 },
+      { label: '2-5 Years', test: d => d >= 24 && d < 60 },
+      { label: '> 5 Years', test: d => d >= 60 }
+    ]
+
+    const summary = {}
+    for (const g of groups) summary[g.label] = 0
+
+    for (const emp of resigns) {
+      const join = new Date(emp.joinDate)
+      const resign = new Date(emp.resignDate)
+      const diff = (resign.getFullYear() - join.getFullYear()) * 12 + (resign.getMonth() - join.getMonth())
+      const group = groups.find(g => g.test(diff))
+      if (group) summary[group.label]++
+    }
+
+    const total = Object.values(summary).reduce((a, b) => a + b, 0)
+    const data = groups.map(g => ({
+      group: g.label,
+      count: summary[g.label],
+      percent: total > 0 ? (summary[g.label] / total * 100).toFixed(2) : '0.00'
+    }))
+
+    res.json({ year, total, data })
+  } catch (err) {
+    console.error('❌ Error in getPeriodOfIndirectLaborChartResignByYear:', err)
+    res.status(500).json({ message: 'Server error' })
+  }
+}
