@@ -68,6 +68,10 @@ app.use('/api/hrss/excome-monthly', require('./routes/hrss/excome/employeeMonthl
 
 // HRSS Attendance
 app.use('/api/attendance', require('./routes/hrss/attendanceRoutes'))
+
+// Attendance Dashboard
+app.use('/api/hrss/attendance-dashboard', require('./routes/hrss/attendanceDashboardRoutes'));
+
 // Manpower 
 app.use('/api/hrss/manpower', require('./routes/hrss/manpower'))
 

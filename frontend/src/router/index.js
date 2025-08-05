@@ -46,6 +46,8 @@ const routes = [
     { path: 'dashboard', component: () => import('@/views/hrss/dashboard/employees/EmployeeDashboard.vue') },
     { path: 'dashboard/excome', component: () => import('@/views/hrss/dashboard/employees/ExcomeDashboard.vue')},
 
+    // Attendance Dashboard
+    { path: 'dashboard/attendance', component: () => import('@/views/hrss/dashboard/attendance/AttendanceDashboard.vue') },
 
     // Chart components for optional direct view
     { path: 'dashboard/charts/monthly-join', component: () => import('@/views/hrss/dashboard/employees/charts/MonthlyJoinChart.vue') },

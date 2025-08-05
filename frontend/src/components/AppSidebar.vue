@@ -101,7 +101,15 @@
             </div>
           </template>
         </v-list-item>
-                <v-list-item :to="{ path: '/hrss/manpower/table' }">
+        <v-list-item :to="{ path: '/hrss/dashboard/attendance' }">
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
+              Attendance Dashboard
+            </div>
+          </template>
+        </v-list-item>
+        <v-list-item :to="{ path: '/hrss/manpower/table' }">
           <template #title>
             <div class="sidebar-link">
               <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
