@@ -18,6 +18,7 @@
               <YearOfService />
             </v-col>
           </v-row>
+
         </v-expansion-panel-text>
       </v-expansion-panel>
 
@@ -129,6 +130,7 @@
 
 <script>
 import axios from '@/utils/axios'
+import TotalEmployeesCard  from './charts/TotalEmployeesCard.vue'
 import TypeOfPosition      from './excome/TypeOfPosition.vue'
 import SummaryBudgetTable  from './excome/SummaryBudgetTable.vue'
 import DirectLaborChart    from './excome/DirectLaborChart.vue'

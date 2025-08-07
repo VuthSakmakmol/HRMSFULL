@@ -1,7 +1,7 @@
 <template>
   <v-card class="pa-4 mb-6 rounded-xl elevation-1">
     <h3 class="text-h6 font-weight-bold mb-4">
-    Sewing Department Attendance Summary ({{ year }}-{{ String(month).padStart(2, '0') }})
+      🏢 Indirect & Merchandising Attendance Summary ({{ year }}-{{ formattedMonth }})
     </h3>
 
     <v-table fixed-header class="elevation-1 table-scroll-x">
@@ -22,21 +22,24 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-if="sewingData">
-          <td>{{ sewingData.Department }}</td>
-          <td>{{ sewingData['Annual Leave'] }}</td>
-          <td>{{ sewingData['Maternity Leave'] }}</td>
-          <td>{{ sewingData['Sick Leave'] }}</td>
-          <td>{{ sewingData['Unpaid Leave'] }}</td>
-          <td>{{ sewingData['Absent'] }}</td>
-          <td>{{ sewingData['Grand Total'] }}</td>
-          <td>{{ sewingData['Number of Employees'] }}</td>
-          <td>{{ sewingData['Working day'] }}</td>
-          <td class="text-error">{{ sewingData['%Absent'] }}</td>
-          <td class="text-error">{{ sewingData['% AL'] }}</td>
-          <td class="text-error">{{ sewingData['Exclude AL'] }}</td>
+        <tr
+          v-for="row in indirectRows"
+          :key="row.Department"
+        >
+          <td>{{ row.Department }}</td>
+          <td>{{ row['Annual Leave'] }}</td>
+          <td>{{ row['Maternity Leave'] }}</td>
+          <td>{{ row['Sick Leave'] }}</td>
+          <td>{{ row['Unpaid Leave'] }}</td>
+          <td>{{ row['Absent'] }}</td>
+          <td>{{ row['Grand Total'] }}</td>
+          <td>{{ row['Number of Employees'] }}</td>
+          <td>{{ row['Working day'] }}</td>
+          <td class="text-error">{{ row['%Absent'] }}</td>
+          <td class="text-error">{{ row['% AL'] }}</td>
+          <td class="text-error">{{ row['Exclude AL'] }}</td>
         </tr>
-        <tr v-else>
+        <tr v-if="indirectRows.length === 0">
           <td colspan="12" class="text-center text-grey">No data available</td>
         </tr>
       </tbody>
@@ -45,7 +48,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import axios from '@/utils/axios'
 
 const props = defineProps({
@@ -53,22 +56,23 @@ const props = defineProps({
   month: Number
 })
 
-const sewingData = ref(null)
+const indirectRows = ref([])
+
+const formattedMonth = computed(() => String(props.month).padStart(2, '0'))
 
 const fetchData = async () => {
   try {
-    const res = await axios.get('/hrss/attendance-dashboard/attendance/department-summary', {
+    const res = await axios.get('/hrss/attendance-dashboard/attendance/indirect-summary', {
       params: {
         year: props.year,
         month: props.month,
-        _t: Date.now() // Prevent caching
+        _t: Date.now()
       }
     })
-    const all = Array.isArray(res.data) ? res.data : []
-    sewingData.value = all.find((d) => d.Department === 'Sewing') || null
+    indirectRows.value = Array.isArray(res.data) ? res.data : []
   } catch (err) {
-    console.error('❌ Sewing summary error:', err.message)
-    sewingData.value = null
+    console.error('❌ Indirect summary error:', err.message)
+    indirectRows.value = []
   }
 }
 

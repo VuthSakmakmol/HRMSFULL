@@ -6,6 +6,7 @@ const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware');
 
 const {
   getMonthlyDepartmentSummary,
+  getIndirectAndMerchandisingSummary
 } = require('../../controllers/hrss/AttendanceDashboardController');
 
 // 📊 Department-Level Attendance Summary (Monthly)
@@ -15,5 +16,12 @@ router.get(
   authorizeCompanyAccess,
   getMonthlyDepartmentSummary
 );
+
+
+router.get(
+  '/attendance/indirect-summary', 
+  authenticate, 
+  authorizeCompanyAccess, 
+  getIndirectAndMerchandisingSummary)
 
 module.exports = router;
