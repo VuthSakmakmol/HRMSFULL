@@ -26,18 +26,23 @@
     </v-row>
 
     <!-- 🧵 Sewing Summary -->
-    <PeriodOfSewingDepartmentAttendanceSummary
+    <!-- <PeriodOfSewingDepartmentAttendanceSummary
       :year="selectedYear"
       :month="selectedMonth"
-    />
+    /> -->
 
     <!-- 🏢 Indirect + Merchandising Summary -->
-    <PeriodOfIndirectDepartmentAttendanceSummary
+    <!-- <PeriodOfIndirectDepartmentAttendanceSummary
+      :year="selectedYear"
+      :month="selectedMonth"
+    /> -->
+
+    <CompareAbentRate
       :year="selectedYear"
       :month="selectedMonth"
     />
 
-    <CompareAbentRate
+    <TurnOver
       :year="selectedYear"
       :month="selectedMonth"
     />
@@ -49,6 +54,7 @@ import { ref } from 'vue'
 import PeriodOfSewingDepartmentAttendanceSummary from './PeriodOfSewingDepartmentAttendanceSummary.vue'
 import PeriodOfIndirectDepartmentAttendanceSummary from './PeriodOfIndirectDepartmentAttendanceSummary.vue'
 import CompareAbentRate from './CompareAbentRate.vue'
+import TurnOver from './TurnOver.vue'
 
 const selectedYear = ref(new Date().getFullYear())
 const selectedMonth = ref(new Date().getMonth() + 1)

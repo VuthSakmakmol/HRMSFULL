@@ -8,7 +8,12 @@ const {
   getMonthlyDepartmentSummary,
   getIndirectAndMerchandisingSummary,
   getMonthlyDirectAbsentRateCompare,
-  updateTarget
+  updateTarget,
+
+  // TurnOver rate
+  getMonthlyDirectLaborTurnoverRate,
+  getTurnoverTarget,
+  updateTurnoverTarget
 } = require('../../controllers/hrss/AttendanceDashboardController');
 
 // 📊 Department-Level Attendance Summary (Monthly)
@@ -39,6 +44,28 @@ router.post(
   authenticate,
   authorizeCompanyAccess,
   updateTarget
+)
+
+// 📈 Turnover: Direct Labor
+router.get(
+  '/turnover/direct-labor',
+  authenticate,
+  authorizeCompanyAccess,
+  getMonthlyDirectLaborTurnoverRate
+)
+
+router.get(
+  '/turnover/target',
+  authenticate,
+  authorizeCompanyAccess,
+  getTurnoverTarget
+)
+
+router.post(
+  '/turnover/target',
+  authenticate,
+  authorizeCompanyAccess,
+  updateTurnoverTarget
 )
   
 module.exports = router;

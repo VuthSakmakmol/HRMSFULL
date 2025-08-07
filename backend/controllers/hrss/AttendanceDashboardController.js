@@ -2,6 +2,7 @@ const Attendance = require('../../models/hrss/attendances');
 const Employee = require('../../models/hrss/employee');
 const moment = require('moment-timezone');
 const AttendanceTarget = require('../../models/hrss/AttendanceTarget');
+const TurnoverTarget = require('../../models/hrss/turnoverTarget');
 
 const isDirectLabor = emp => ['Sewer', 'Jumper'].includes(emp.position)
 
@@ -361,5 +362,129 @@ exports.getTarget = async (req, res) => {
   } catch (err) {
     console.error('Error in getTarget:', err)
     res.status(500).json({ message: 'Server error' })
+  }
+}
+
+// 📊 GET Direct Labor Monthly Turnover Rate (this year vs last year)
+exports.getMonthlyDirectLaborTurnoverRate = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year)
+    const company = req.company
+
+    if (!year || !company) {
+      return res.status(400).json({ message: 'Year and company required' })
+    }
+
+    const data = []
+
+    for (let month = 0; month < 12; month++) {
+      const startThisYear = moment.tz({ year, month, day: 1 }, 'Asia/Phnom_Penh').startOf('month')
+      const endThisYear = startThisYear.clone().endOf('month')
+
+      const startLastYear = startThisYear.clone().subtract(1, 'year')
+      const endLastYear = endThisYear.clone().subtract(1, 'year')
+
+      // This year
+      const thisYearJoined = await Employee.countDocuments({
+        company,
+        joinDate: { $gte: startThisYear.toDate(), $lte: endThisYear.toDate() },
+        $or: [{ position: 'Sewer' }, { position: 'Jumper' }]
+      })
+
+      const thisYearExits = await Employee.countDocuments({
+        company,
+        resignDate: { $gte: startThisYear.toDate(), $lte: endThisYear.toDate() },
+        $or: [{ position: 'Sewer' }, { position: 'Jumper' }]
+      })
+
+      // Last year
+      const lastYearJoined = await Employee.countDocuments({
+        company,
+        joinDate: { $gte: startLastYear.toDate(), $lte: endLastYear.toDate() },
+        $or: [{ position: 'Sewer' }, { position: 'Jumper' }]
+      })
+
+      const lastYearExits = await Employee.countDocuments({
+        company,
+        resignDate: { $gte: startLastYear.toDate(), $lte: endLastYear.toDate() },
+        $or: [{ position: 'Sewer' }, { position: 'Jumper' }]
+      })
+
+      // Calculate turnover rates
+      const thisYearRate = thisYearJoined > 0 ? (thisYearExits / thisYearJoined) * 100 : 0
+      const lastYearRate = lastYearJoined > 0 ? (lastYearExits / lastYearJoined) * 100 : 0
+
+      data.push({
+        month: startThisYear.format('MMM'),
+        thisYearJoined,
+        thisYearExits,
+        thisYearRate: parseFloat(thisYearRate.toFixed(2)),
+        lastYearJoined,
+        lastYearExits,
+        lastYearRate: parseFloat(lastYearRate.toFixed(2))
+      })
+    }
+
+    // Fetch target if available
+    const targetDoc = await AttendanceTarget.findOne({
+      company,
+      year,
+      type: 'TurnoverRate'
+    })
+
+    res.json({
+      target: targetDoc?.value || 0,
+      data
+    })
+  } catch (err) {
+    console.error('Error in getMonthlyDirectLaborTurnoverRate:', err)
+    res.status(500).json({ message: 'Server error' })
+  }
+}
+
+
+
+// 🎯 GET target for year/type
+exports.getTurnoverTarget = async (req, res) => {
+  try {
+    const { company } = req
+    const { year, type } = req.query
+
+    if (!company || !year || !type) {
+      return res.status(400).json({ message: 'Missing parameters' })
+    }
+
+    const target = await TurnoverTarget.findOne({ company, year, type })
+    res.json({
+      year,
+      type,
+      value: target?.value ?? 0
+    })
+  } catch (err) {
+    console.error('❌ getTurnoverTarget error:', err.message)
+    res.status(500).json({ message: 'Failed to fetch target', error: err.message })
+  }
+}
+
+// 🎯 UPDATE or CREATE target
+exports.updateTurnoverTarget = async (req, res) => {
+  try {
+    const { company } = req
+    const { year, type, value } = req.body
+
+    if (!company || !year || !type || value === undefined) {
+      return res.status(400).json({ message: 'Missing body data' })
+    }
+
+    const updated = await TurnoverTarget.findOneAndUpdate(
+      { company, year, type },
+      { value },
+      { upsert: true, new: true }
+    )
+
+    res.json({ message: '✅ Target updated', target: updated })
+  } catch (err) {
+    console.error('❌ updateTurnoverTarget error:', err.message)
+    res.status(500).json({ message: 'Failed to update target', error: err.message })
   }
 }
