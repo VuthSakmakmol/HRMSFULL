@@ -2,7 +2,7 @@
 
 const Employee       = require('../../models/hrss/employee')
 const ManpowerTarget = require('../../models/hrss/manpowerTarget')
-
+const moment = require('moment-timezone')
 
 
 exports.getManpowerTargets = async (req, res) => {
@@ -768,5 +768,53 @@ exports.getPeriodOfIndirectLaborChartResignByYear = async (req, res) => {
   } catch (err) {
     console.error('❌ Error in getPeriodOfIndirectLaborChartResignByYear:', err)
     res.status(500).json({ message: 'Server error' })
+  }
+}
+
+
+// ✅ Monthly summary of Direct Labor join/resign
+exports.getDirectLaborInAndOutByMonth = async (req, res) => {
+  try {
+    const { year } = req.query
+    const company = req.company
+
+    if (!year) return res.status(400).json({ message: 'Year is required' })
+    if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' })
+
+    const result = []
+
+    for (let m = 0; m < 12; m++) {
+      const start = moment.tz({ year, month: m }, 'Asia/Phnom_Penh').startOf('month').toDate()
+      const end = moment.tz({ year, month: m }, 'Asia/Phnom_Penh').endOf('month').toDate()
+
+      // ✅ Count Direct Labor JOINED (Jumper + Sewer)
+      const joined = await Employee.countDocuments({
+        company,
+        position: { $in: ['Jumper', 'Sewer'] },
+        joinDate: { $gte: start, $lte: end }
+      })
+
+      // ✅ Count Direct Labor RESIGNED (Employee model where status === 'Resign')
+      const resigned = await Employee.countDocuments({
+        company,
+        position: { $in: ['Jumper', 'Sewer'] },
+        status: 'Resign',
+        resignDate: { $gte: start, $lte: end }
+      })
+
+      const net = joined - resigned
+
+      result.push({
+        month: moment(start).format('MMM'),
+        joined,
+        resigned,
+        net
+      })
+    }
+
+    res.json({ year: parseInt(year), data: result })
+  } catch (err) {
+    console.error('❌ Error in getDirectLaborInAndOutByMonth:', err.message)
+    res.status(500).json({ message: 'Server error', error: err.message })
   }
 }

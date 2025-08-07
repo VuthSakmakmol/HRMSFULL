@@ -6,7 +6,9 @@ const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware');
 
 const {
   getMonthlyDepartmentSummary,
-  getIndirectAndMerchandisingSummary
+  getIndirectAndMerchandisingSummary,
+  getMonthlyDirectAbsentRateCompare,
+  updateTarget
 } = require('../../controllers/hrss/AttendanceDashboardController');
 
 // 📊 Department-Level Attendance Summary (Monthly)
@@ -24,4 +26,19 @@ router.get(
   authorizeCompanyAccess, 
   getIndirectAndMerchandisingSummary)
 
+
+router.get(
+  '/attendance/direct-absent-rate-compare',
+  authenticate,
+  authorizeCompanyAccess,
+  getMonthlyDirectAbsentRateCompare
+)
+
+router.post(
+  '/attendance/update-target',
+  authenticate,
+  authorizeCompanyAccess,
+  updateTarget
+)
+  
 module.exports = router;

@@ -118,8 +118,17 @@
             <PeriodOfIndirectLaborChartResignByYear :year="selectYear"/>
           </v-col>
         </v-expansion-panel-text>
-
-
+      </v-expansion-panel>
+      
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          Direct Labor In & Out
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-col cols="12" class="dashboard-card card-summary">
+            <DirectLaborInAndOut :year="selectedYear"/>
+          </v-col>
+        </v-expansion-panel-text>
       </v-expansion-panel>
 
     </v-expansion-panels>
@@ -130,7 +139,6 @@
 
 <script>
 import axios from '@/utils/axios'
-import TotalEmployeesCard  from './charts/TotalEmployeesCard.vue'
 import TypeOfPosition      from './excome/TypeOfPosition.vue'
 import SummaryBudgetTable  from './excome/SummaryBudgetTable.vue'
 import DirectLaborChart    from './excome/DirectLaborChart.vue'
@@ -145,6 +153,7 @@ import PeroidOfDirectLaborResignByYear from './excome/PeroidOfDirectLaborResignB
 import PeriodOfIndirectLaborResignByYear from './excome/PeriodOfIndirectLaborResignByYear.vue'
 import PeriodOfDirectLaborChartResignByYear from './excome/PeriodOfDirectLaborChartResignByYear.vue'
 import PeriodOfIndirectLaborChartResignByYear from './excome/PeriodOfIndirectLaborChartResignByYear.vue'
+import DirectLaborInAndOut from './excome/DirectLaborInAndOut.vue'
 
 export default {
   name: 'ExcomeDashboard',
@@ -162,7 +171,8 @@ export default {
     PeroidOfDirectLaborResignByYear,
     PeriodOfIndirectLaborResignByYear,
     PeriodOfDirectLaborChartResignByYear,
-    PeriodOfIndirectLaborChartResignByYear
+    PeriodOfIndirectLaborChartResignByYear,
+    DirectLaborInAndOut
   },
   data() {
     const currentYear = new Date().getFullYear()

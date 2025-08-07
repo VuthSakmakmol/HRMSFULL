@@ -36,6 +36,11 @@
       :year="selectedYear"
       :month="selectedMonth"
     />
+
+    <CompareAbentRate
+      :year="selectedYear"
+      :month="selectedMonth"
+    />
   </v-container>
 </template>
 
@@ -43,6 +48,7 @@
 import { ref } from 'vue'
 import PeriodOfSewingDepartmentAttendanceSummary from './PeriodOfSewingDepartmentAttendanceSummary.vue'
 import PeriodOfIndirectDepartmentAttendanceSummary from './PeriodOfIndirectDepartmentAttendanceSummary.vue'
+import CompareAbentRate from './CompareAbentRate.vue'
 
 const selectedYear = ref(new Date().getFullYear())
 const selectedMonth = ref(new Date().getMonth() + 1)

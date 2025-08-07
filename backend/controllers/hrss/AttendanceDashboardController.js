@@ -1,6 +1,9 @@
 const Attendance = require('../../models/hrss/attendances');
 const Employee = require('../../models/hrss/employee');
 const moment = require('moment-timezone');
+const AttendanceTarget = require('../../models/hrss/AttendanceTarget');
+
+const isDirectLabor = emp => ['Sewer', 'Jumper'].includes(emp.position)
 
 // 📌 Shared utility function
 const buildAttendanceSummary = (attendances, empMap, excludeDepartment = null) => {
@@ -235,3 +238,128 @@ exports.getIndirectAndMerchandisingSummary = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🎯 Compare Monthly Direct Labor Absent Rate (Last Year vs This Year)
+exports.getMonthlyDirectAbsentRateCompare = async (req, res) => {
+  try {
+    const { company } = req;
+    const year = parseInt(req.query.year);
+
+    if (!year || isNaN(year)) {
+      return res.status(400).json({ message: 'Invalid year' });
+    }
+
+    // Step 1: Get all direct labor employees
+    const directLaborEmployees = await Employee.find({ company }).lean();
+    const directLaborIds = directLaborEmployees
+      .filter(isDirectLabor)
+      .map((e) => e.employeeId);
+
+    // Step 2: Define a helper to calculate absent rate and count per month
+    const getMonthlyStats = async (targetYear) => {
+      const result = [];
+
+      for (let month = 0; month < 12; month++) {
+        const start = moment.tz({ year: targetYear, month }, 'Asia/Phnom_Penh').startOf('month').toDate();
+        const end = moment.tz({ year: targetYear, month }, 'Asia/Phnom_Penh').endOf('month').toDate();
+
+        const attendances = await Attendance.find({
+          company,
+          employeeId: { $in: directLaborIds },
+          date: { $gte: start, $lte: end }
+        });
+
+        // Get unique employeeId per month (total direct labor)
+        const totalDirectLaborThisMonth = new Set(
+          attendances.map((r) => r.employeeId)
+        ).size;
+
+        const absentCount = attendances.filter((a) => a.status === 'Absent').length;
+
+        const rate = totalDirectLaborThisMonth > 0
+          ? Math.round((absentCount / totalDirectLaborThisMonth) * 1000) / 10
+          : 0;
+
+        result.push({
+          month: moment().month(month).format('MMM'),
+          absentCount,
+          rate
+        });
+      }
+
+      return result;
+    };
+
+    // Step 3: Get data for this year and last year
+    const lastYearData = await getMonthlyStats(year - 1);
+    const thisYearData = await getMonthlyStats(year);
+
+    // Step 4: Merge data into final format
+    const combined = Array.from({ length: 12 }, (_, i) => ({
+      month: lastYearData[i].month,
+      lastYearAbsentRate: lastYearData[i].rate,
+      lastYearAbsentCount: lastYearData[i].absentCount,
+      thisYearAbsentRate: thisYearData[i].rate,
+      thisYearAbsentCount: thisYearData[i].absentCount
+    }));
+
+    // Step 5: Get target
+    const target = await AttendanceTarget.findOne({
+      company,
+      year,
+      type: 'AbsentRate'
+    });
+
+    res.json({
+      target: target?.value ?? 0,
+      data: combined
+    });
+  } catch (err) {
+    console.error('❌ Error in getMonthlyDirectAbsentRateCompare:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// 🎯 Update Attendance Target
+exports.updateTarget = async (req, res) => {
+  try {
+    const { company } = req
+    const { year, type, value } = req.body
+
+    if (!year || !type || value === undefined) {
+      return res.status(400).json({ message: 'Missing parameters' })
+    }
+
+    const updated = await AttendanceTarget.findOneAndUpdate(
+      { company, year, type },
+      { value },
+      { upsert: true, new: true }
+    )
+
+    res.json({ message: 'Target updated', target: updated })
+  } catch (err) {
+    console.error('Error updating target:', err)
+    res.status(500).json({ message: 'Failed to update target' })
+  }
+}
+
+// (Optional) 🎯 Get Current Target Only
+exports.getTarget = async (req, res) => {
+  try {
+    const { company } = req
+    const { year = 2025, type = 'AbsentRate' } = req.query
+
+    const target = await AttendanceTarget.findOne({ company, year, type })
+
+    res.json({
+      year,
+      type,
+      value: target?.value ?? 0
+    })
+  } catch (err) {
+    console.error('Error in getTarget:', err)
+    res.status(500).json({ message: 'Server error' })
+  }
+}
