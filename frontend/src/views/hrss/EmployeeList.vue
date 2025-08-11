@@ -2,7 +2,6 @@
   <v-container fluid class="pa-4">
     <h2 class="text-h6 font-weight-bold mb-4">{{ $t('employeeManagement') }}</h2>
 
-
     <!-- Top Bar -->
     <v-row class="mb-4" align-center justify="space-between">
       <v-col cols="auto">
@@ -10,7 +9,7 @@
           <v-icon start>mdi-plus</v-icon> {{ $t('addEmployee') }}
         </v-btn>
       </v-col>
-      
+
       <v-col cols="12" md="auto">
         <v-row class="flex-wrap" dense>
           <v-col cols="auto">
@@ -31,23 +30,18 @@
               :disabled="!selected.length"
               @click="deleteSelected"
             >
-              <v-icon start>mdi-delete</v-icon> {{$t('delete')}}
+              <v-icon start>mdi-delete</v-icon> {{ $t('delete') }}
             </v-btn>
           </v-col>
 
           <v-col cols="auto">
-            <v-btn
-              color="indigo"
-              variant="flat"
-              @click="triggerImportFile"
-            >
-              <v-icon start>mdi-file-import"></v-icon> {{$t('import')}}
+            <v-btn color="indigo" variant="flat" @click="triggerImportFile">
+              <v-icon start>mdi-file-import"></v-icon> {{ $t('import') }}
             </v-btn>
             <input
               ref="fileInput"
               type="file"
               accept=".xlsx"
-              multiple
               @change="handleImportExcel"
               style="display: none"
             />
@@ -61,30 +55,30 @@
               @click="exportToExcel"
             >
               <v-icon start>mdi-file-excel"></v-icon> {{ $t('export') }}
-              
             </v-btn>
           </v-col>
         </v-row>
       </v-col>
-
     </v-row>
-
-    
 
     <!-- Employee Table -->
     <v-card>
       <div class="table-scroll-wrapper" ref="scrollWrapper">
         <div v-if="isLoading" class="d-flex justify-center pa-8">
-        <DotLottieVue
-          style="height: 200px; width: 200px;"
-          autoplay
-          loop
-          src="https://lottie.host/b3e4008f-9dbd-4b76-b13e-e1cdb52f6190/3JhAvD9aX1.json" />
-      </div>
-        <table class="scrollable-table">
+          <DotLottieVue
+            style="height: 200px; width: 200px"
+            autoplay
+            loop
+            src="https://lottie.host/b3e4008f-9dbd-4b76-b13e-e1cdb52f6190/3JhAvD9aX1.json"
+          />
+        </div>
+
+        <table class="scrollable-table" v-else>
           <thead>
             <tr>
-              <th><v-checkbox v-model="selectAll" @change="toggleSelectAll" hide-details density="compact" /></th>
+              <th>
+                <v-checkbox v-model="selectAll" @change="toggleSelectAll" hide-details density="compact" />
+              </th>
               <th>No</th>
               <th>Info</th>
               <th>Profile</th>
@@ -94,7 +88,9 @@
           </thead>
           <tbody>
             <tr v-for="(emp, index) in employees" :key="emp._id">
-              <td><v-checkbox v-model="selected" :value="emp._id" hide-details density="compact" /></td>
+              <td>
+                <v-checkbox v-model="selected" :value="emp._id" hide-details density="compact" />
+              </td>
               <td>{{ getRowNumber(index) }}</td>
               <td>{{ getCompletionRate(emp) }}%</td>
               <td class="img-cell">
@@ -106,14 +102,14 @@
                 </div>
               </td>
               <td class="bg-action align-top">
-                <div class="d-flex flex-column align-center pa-1" style="gap: 6px; height: 100%;">                
+                <div class="d-flex flex-column align-center pa-1" style="gap: 6px; height: 100%">
                   <v-textarea
                     v-model="emp.note"
                     auto-grow
                     variant="outlined"
                     hide-details
                     placeholder="Write note..."
-                    style="width: 100%; font-size: 7px; min-height: 40px;"
+                    style="width: 100%; font-size: 7px; min-height: 40px"
                     :counter="60"
                     maxlength="60"
                     @change="updateNote(emp)"
@@ -124,6 +120,7 @@
           </tbody>
         </table>
       </div>
+
       <!-- Pagination Footer -->
       <v-sheet elevation="2" class="d-flex justify-end align-center mt-4 pa-4">
         <span class="me-2">Rows per page:</span>
@@ -149,7 +146,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onActivated, onDeactivated, nextTick } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
@@ -161,6 +158,7 @@ defineOptions({ name: 'EmployeeList' })
 
 const router = useRouter()
 
+/* ───────────────────────── state ───────────────────────── */
 const employees = ref([])
 const selected = ref([])
 const selectAll = ref(false)
@@ -168,7 +166,7 @@ const totalEmployees = ref(0)
 const scrollWrapper = ref(null)
 const defaultImage = '/default_images/girl_default_pf.jpg'
 const hasLoaded = ref(false)
-const isLoading = ref(true);
+const isLoading = ref(true)
 const fileInput = ref(null)
 
 // pagination
@@ -176,7 +174,7 @@ const page = ref(1)
 const itemsPerPage = ref(10) // number or "all"
 const totalPages = ref(1)
 
-
+/* ───────────────────────── lifecycle ───────────────────────── */
 onMounted(async () => {
   if (!hasLoaded.value) {
     await fetchEmployees()
@@ -184,16 +182,25 @@ onMounted(async () => {
   }
 })
 
-const getRowNumber = index => {
+/* ───────────────────────── helpers ───────────────────────── */
+const getRowNumber = (index) => {
   const perPage = itemsPerPage.value === 'all' ? totalEmployees.value : parseInt(itemsPerPage.value)
   return (page.value - 1) * perPage + index + 1
 }
 
+const formatDate = (val) => (val ? dayjs(val).format('YYYY-MM-DD') : '')
+const getImageUrl = (url) => {
+  const backendBase = axios.defaults.baseURL?.replace(/\/api$/, '') || ''
+  if (!url || url === '') return defaultImage
+  if (url.startsWith('/upload')) return `${backendBase}${url}`
+  if (url.startsWith('http')) return url
+  return defaultImage
+}
 
-
+/* ───────────────────────── data fetch ───────────────────────── */
 const fetchEmployees = async () => {
   const params = {}
-  isLoading.value = true;
+  isLoading.value = true
 
   if (itemsPerPage.value !== 'all') {
     params.page = page.value
@@ -210,50 +217,41 @@ const fetchEmployees = async () => {
 
     if (!res.data.employees.length && page.value > 1) {
       page.value = Math.max(1, page.value - 1)
-      fetchEmployees() // refetch
+      fetchEmployees()
     }
   } catch (err) {
-    console.error('❌ Failed to fetch employees:', err.message)
-  }
-    finally {
-    isLoading.value = false;
+    console.error('❌ Failed to fetch employees:', err?.message || err)
+  } finally {
+    isLoading.value = false
   }
 }
 
-
-
+/* ───────────────────────── selection ───────────────────────── */
 const toggleSelectAll = () => {
-  const currentPageIds = employees.value.map(emp => emp._id)
+  const currentPageIds = employees.value.map((emp) => emp._id)
   if (selectAll.value) {
     selected.value = [...new Set([...selected.value, ...currentPageIds])]
   } else {
-    selected.value = selected.value.filter(id => !currentPageIds.includes(id))
+    selected.value = selected.value.filter((id) => !currentPageIds.includes(id))
   }
 }
 
 watch([selected, employees], () => {
-  const currentPageIds = employees.value.map(emp => emp._id)
-  selectAll.value = currentPageIds.every(id => selected.value.includes(id))
+  const currentPageIds = employees.value.map((emp) => emp._id)
+  selectAll.value = currentPageIds.length > 0 && currentPageIds.every((id) => selected.value.includes(id))
 })
 
-const goToAddEmployee = () => {
-  router.push('/hrss/addemployee')
-}
+/* ───────────────────────── nav & actions ───────────────────────── */
+const goToAddEmployee = () => router.push('/hrss/addemployee')
 
 const editSelectedEmployee = () => {
   if (selected.value.length !== 1) {
     return Swal.fire({ icon: 'warning', title: 'Please select exactly 1 employee to edit.' })
   }
-
-  const employeeIdToEdit = selected.value[0]
-  router.push({
-    path: '/hrss/addemployee',
-    query: { id: employeeIdToEdit }
-  })
+  router.push({ path: '/hrss/addemployee', query: { id: selected.value[0] } })
 }
 
 const deleteSelected = async () => {
-  isLoading.value = true;
   if (!selected.value.length) {
     return Swal.fire({ icon: 'warning', title: 'No employees selected' })
   }
@@ -261,73 +259,73 @@ const deleteSelected = async () => {
   const confirm = await Swal.fire({
     icon: 'warning',
     title: `Delete ${selected.value.length} employees?`,
-    text: "This action cannot be undone.",
+    text: 'This action cannot be undone.',
     showCancelButton: true,
     confirmButtonText: 'Yes, delete',
     cancelButtonText: 'Cancel',
     confirmButtonColor: '#e53935'
   })
+  if (!confirm.isConfirmed) return
 
-  if (confirm.isConfirmed) {
-    try {
-      await Promise.all(selected.value.map(id => axios.delete(`/employees/${id}`)))
-      selected.value = []
-      selectAll.value = false
-      Swal.fire({ icon: 'success', title: 'Deleted successfully' })
-      await fetchEmployees()
-    } catch (err) {
-      console.error('❌ Deletion failed:', err)
-      Swal.fire({ icon: 'error', title: 'Failed to delete', text: err.message })
-    } finally {
-      isLoading.value = false;
-    }
+  isLoading.value = true
+  try {
+    await Promise.all(selected.value.map((id) => axios.delete(`/employees/${id}`)))
+    selected.value = []
+    selectAll.value = false
+    await Swal.fire({ icon: 'success', title: 'Deleted successfully' })
+    await fetchEmployees()
+  } catch (err) {
+    console.error('❌ Deletion failed:', err)
+    Swal.fire({ icon: 'error', title: 'Failed to delete', text: err.message })
+  } finally {
+    isLoading.value = false
   }
 }
 
+/* ───────────────────────── export ───────────────────────── */
 const exportToExcel = () => {
-  isLoading.value = true;
   if (!selected.value.length) {
     return Swal.fire({ icon: 'warning', title: 'Please select at least one employee to export.' })
   }
 
   const exportData = employees.value
-    .filter(emp => selected.value.includes(emp._id))
-    .map(emp => ({
+    .filter((emp) => selected.value.includes(emp._id))
+    .map((emp) => ({
       'Employee ID': emp.employeeId,
       'Khmer Name': `${emp.khmerFirstName} ${emp.khmerLastName}`,
       'English Name': `${emp.englishFirstName} ${emp.englishLastName}`,
-      'Gender': emp.gender,
+      Gender: emp.gender,
       'Date of Birth': formatDate(emp.dob),
-      'Age': emp.age,
-      'Email': emp.email,
+      Age: emp.age,
+      Email: emp.email,
       'Phone Number': emp.phoneNumber,
       'Agent Phone': emp.agentPhoneNumber,
       'Agent Person': emp.agentPerson,
       'Married Status': emp.marriedStatus,
       'Spouse Name': emp.spouseName,
       'Spouse Contact': emp.spouseContactNumber,
-      'Education': emp.education,
-      'Religion': emp.religion,
-      'Nationality': emp.nationality,
+      Education: emp.education,
+      Religion: emp.religion,
+      Nationality: emp.nationality,
       'Introducer ID': emp.introducerId,
       'Join Date': formatDate(emp.joinDate),
-      'Department': emp.department,
-      'Position': emp.position,
-      'Line': emp.line,
-      'Team': emp.team,
-      'Section': emp.section,
-      'Shift': emp.shift,
-      'Status': emp.status,
+      Department: emp.department,
+      Position: emp.position,
+      Line: emp.line,
+      Team: emp.team,
+      Section: emp.section,
+      Shift: emp.shift,
+      Status: emp.status,
       'Source of Hiring': emp.sourceOfHiring,
       'Single Needle': emp.singleNeedle,
-      'Overlock': emp.overlock,
-      'Coverstitch': emp.coverstitch,
+      Overlock: emp.overlock,
+      Coverstitch: emp.coverstitch,
       'Total Machines': emp.totalMachine,
       'Education Level': emp.education,
       'ID Card': emp.idCard,
       'ID Expire': formatDate(emp.idCardExpireDate),
-      'NSSF': emp.nssf,
-      'Passport': emp.passport,
+      NSSF: emp.nssf,
+      Passport: emp.passport,
       'Passport Expire Date': formatDate(emp.passportExpireDate),
       'Visa Expire Date': formatDate(emp.visaExpireDate),
       'Medical Check': emp.medicalCheck,
@@ -341,7 +339,7 @@ const exportToExcel = () => {
       'Place of Living - District': emp.placeOfLiving?.districtNameKh || '',
       'Place of Living - Commune': emp.placeOfLiving?.communeNameKh || '',
       'Place of Living - Village': emp.placeOfLiving?.villageNameKh || '',
-      'Remark': emp.remark,
+      Remark: emp.remark,
       'Created At': formatDate(emp.createdAt),
       'Updated At': formatDate(emp.updatedAt)
     }))
@@ -350,92 +348,134 @@ const exportToExcel = () => {
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Employees')
   XLSX.writeFile(workbook, 'Employees.xlsx')
-  isLoading.value = false;
 }
 
-const triggerImportFile = () => {
-  fileInput.value?.click()
-}
+/* ───────────────────────── import ───────────────────────── */
+const triggerImportFile = () => fileInput.value?.click()
+
+// pretty HTML list for errors
+const renderIssuesHtml = (items, getTitle, getList) =>
+  items
+    .slice(0, 12)
+    .map((it) => `
+      <div style="text-align:left;margin-bottom:6px">
+        <strong>${getTitle(it)}</strong>
+        <ul style="margin:4px 0 0 18px">
+          ${getList(it).map((e) => `<li>${e}</li>`).join('')}
+        </ul>
+      </div>
+    `)
+    .join('')
 
 const handleImportExcel = async (event) => {
-  
-  const file = event.target.files[0];
-  if (!file) return;
+  const file = event.target.files?.[0]
+  if (!file) return
 
-  const form = new FormData();
-  form.append('file', file);
-  isLoading.value = true;
+  const form = new FormData()
+  form.append('file', file)
+
+  isLoading.value = true
   try {
-    const previewRes = await axios.post('/employees/import-excel', form);
-    const { toImport, duplicates } = previewRes.data;
+    // Call preview endpoint (same route may return preview or direct-import result)
+    const res = await axios.post('/employees/import-excel', form, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
 
-    if (!toImport.length) {
-      return Swal.fire({
-        icon: 'info',
-        title: 'No new data found',
-        text: `${duplicates.length} duplicates skipped.`
-      });
+    const hasPreviewPayload = Array.isArray(res?.data?.toImport) || Array.isArray(res?.data?.invalid)
+
+    if (hasPreviewPayload) {
+      const { toImport = [], duplicates = [], invalid = [] } = res.data || {}
+
+      // Show invalid rows with all reasons
+      if (invalid.length) {
+        const html = renderIssuesHtml(
+          invalid,
+          (b) => `Row ${b.row}${b.employeeId ? ` (${b.employeeId})` : ''}`,
+          (b) => b.errors || []
+        )
+        await Swal.fire({
+          icon: 'error',
+          title: 'Some rows have issues — please fix and retry',
+          html: `${html}${invalid.length > 12 ? `<em>…and ${invalid.length - 12} more rows</em>` : ''}`
+        })
+        return
+      }
+
+      if (!toImport.length) {
+        await Swal.fire({
+          icon: 'info',
+          title: 'No new data found',
+          text: `${duplicates.length} duplicate(s) detected.`
+        })
+        return
+      }
+
+      const confirm = await Swal.fire({
+        icon: 'question',
+        title: `Import ${toImport.length} new employees?`,
+        text: `${duplicates.length} duplicate(s) will be ignored.`,
+        showCancelButton: true,
+        confirmButtonText: 'Yes, import',
+        cancelButtonText: 'Cancel'
+      })
+      if (!confirm.isConfirmed) return
+
+      const finalRes = await axios.post('/employees/import-confirmed', { toImport })
+      const { message, failedCount = 0, failed = [] } = finalRes.data || {}
+
+      if (failedCount) {
+        const html = renderIssuesHtml(
+          failed,
+          (f) => `Row ${f.row}${f.employeeId ? ` (${f.employeeId})` : ''}`,
+          (f) => Array.isArray(f.reason) ? f.reason : [String(f.reason || 'Unknown error')]
+        )
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Some rows failed to save',
+          html: `${html}${failedCount > 12 ? `<em>…and ${failedCount - 12} more rows</em>` : ''}`
+        })
+      }
+
+      await Swal.fire({ icon: 'success', title: 'Import Complete', text: message || 'Done' })
+      await fetchEmployees()
+      return
     }
 
-    const confirm = await Swal.fire({
-      icon: 'question',
-      title: `Import ${toImport.length} new employees?`,
-      text: `${duplicates.length} duplicate(s) will be ignored.`,
-      showCancelButton: true,
-      confirmButtonText: 'Yes, import',
-      cancelButtonText: 'Cancel'
-    });
-
-    if (!confirm.isConfirmed) return;
-
-    const importRes = await axios.post('/api/employees/import-confirmed', { toImport });
-
-    Swal.fire({
+    // Fallback: direct import response (already saved)
+    await Swal.fire({
       icon: 'success',
       title: 'Import Complete',
-      text: `✅ ${importRes.data.message} ❌ Failed: ${importRes.data.failedCount}`
-    });
-
-    await fetchEmployees();
+      text: `✅ ${res.data?.message || 'Imported'}${
+        typeof res.data?.failedCount === 'number' ? ` ❌ Failed: ${res.data.failedCount}` : ''
+      }`
+    })
+    await fetchEmployees()
   } catch (err) {
-    console.error('❌ Import failed:', err);
-    Swal.fire({
+    console.error('❌ Import failed:', err)
+    await Swal.fire({
       icon: 'error',
       title: 'Import Failed',
-      text: err.response?.data?.message || err.message
-    });
-  } 
-  finally {
-    isLoading.value = false;
+      text: err?.response?.data?.message || err.message || 'Unknown error'
+    })
+  } finally {
+    isLoading.value = false
+    // reset input so choosing the same file again triggers change
+    if (event?.target) event.target.value = ''
   }
-};
+}
 
-
-
+/* ───────────────────────── per-row note ───────────────────────── */
 const updateNote = async (emp) => {
-  isLoading.value = true;
   try {
     await axios.put(`/employees/${emp._id}`, { note: emp.note })
     console.log(`📝 Note saved for ${emp.employeeId}`)
   } catch (err) {
-    console.error('❌ Failed to save note:', err.message)
-  }
-  finally {
-    isLoading.value = false;
+    console.error('❌ Failed to save note:', err?.message || err)
   }
 }
 
-const formatDate = val => (val ? dayjs(val).format('YYYY-MM-DD') : '')
-
-const getImageUrl = (url) => {
-  const backendBase = axios.defaults.baseURL?.replace(/\/api$/, '') || ''
-  if (!url || url === '') return defaultImage
-  if (url.startsWith('/upload')) return `${backendBase}${url}`
-  if (url.startsWith('http')) return url
-  return defaultImage
-}
-
-const employeeFields = emp => [
+/* ───────────────────────── table helpers ───────────────────────── */
+const employeeFields = (emp) => [
   { label: 'Employee ID', value: emp.employeeId },
   { label: 'Khmer Name', value: `${emp.khmerFirstName} ${emp.khmerLastName}` },
   { label: 'English Name', value: `${emp.englishFirstName} ${emp.englishLastName}` },
@@ -483,10 +523,10 @@ const employeeFields = emp => [
   { label: 'PoL - District', value: emp.placeOfLiving?.districtNameKh },
   { label: 'PoL - Commune', value: emp.placeOfLiving?.communeNameKh },
   { label: 'PoL - Village', value: emp.placeOfLiving?.villageNameKh },
-  { label: 'Remark', value: emp.remark },
+  { label: 'Remark', value: emp.remark }
 ]
 
-const chunkedEmployeeInfo = emp => {
+const chunkedEmployeeInfo = (emp) => {
   const info = employeeFields(emp)
   const chunked = []
   for (let i = 0; i < info.length; i += 10) chunked.push(info.slice(i, i + 10))
@@ -494,22 +534,18 @@ const chunkedEmployeeInfo = emp => {
   return chunked
 }
 
-const getCompletionRate = emp => {
-  const values = Object.values(emp).flatMap(v =>
-    typeof v === 'object' && v !== null ? Object.values(v) : [v]
-  )
-  const filled = values.filter(v => v !== '' && v !== null && v !== undefined)
+const getCompletionRate = (emp) => {
+  const values = Object.values(emp).flatMap((v) => (typeof v === 'object' && v !== null ? Object.values(v) : [v]))
+  const filled = values.filter((v) => v !== '' && v !== null && v !== undefined)
   return Math.min(Math.round((filled.length / 48) * 100), 100)
 }
 
+/* ───────────────────────── watchers ───────────────────────── */
 watch([page, itemsPerPage], async ([newPage, newLimit], [oldPage, oldLimit]) => {
-  if (newLimit !== oldLimit) page.value = 1;
-  await fetchEmployees();
-});
-
+  if (newLimit !== oldLimit) page.value = 1
+  await fetchEmployees()
+})
 </script>
-
-
 
 
 <style scoped>
