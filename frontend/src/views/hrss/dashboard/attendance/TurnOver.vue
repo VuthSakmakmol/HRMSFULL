@@ -19,19 +19,27 @@
       </div>
 
       <v-btn color="primary" @click="openTargetDialog">
-        🎯 Target: <strong>{{ currentTarget }}%</strong>
+        🎯 Target: <strong>{{ currentTarget ?? 0 }}%</strong>
       </v-btn>
     </div>
 
-    <!-- Chart -->
+    <!-- Thin progress while fetching -->
+    <v-progress-linear
+      v-if="isFetching"
+      indeterminate
+      height="3"
+      class="mb-2"
+    />
+
+    <!-- Chart stays mounted; no flashing -->
     <VueApexCharts
-      v-if="chartSeries.length"
+      v-show="hasSeries"
       type="bar"
       height="400"
       :options="chartOptions"
       :series="chartSeries"
     />
-    <v-alert v-else type="info" class="mt-4">
+    <v-alert v-if="!hasSeries" type="info" class="mt-4">
       No turnover data available for this period.
     </v-alert>
 
@@ -97,7 +105,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import VueApexCharts from 'vue3-apexcharts'
@@ -108,27 +116,21 @@ const yearOptions = Array.from({ length: 5 }, (_, i) => selectedYear.value - i)
 const summary = ref([])
 const chartSeries = ref([])
 const chartOptions = ref({})
-const currentTarget = ref(0)
+const currentTarget = ref(null)     // null = hide target line until loaded
 const newTarget = ref(0)
 const showTargetDialog = ref(false)
+const isFetching = ref(false)
+
+const hasSeries = computed(() => chartSeries.value.length > 0)
 
 const openTargetDialog = () => {
-  newTarget.value = currentTarget.value
+  newTarget.value = Number(currentTarget.value ?? 0)
   showTargetDialog.value = true
 }
 
-const buildChart = () => {
-  const months = summary.value.map(m => m.month)
-  const thisYearRates = summary.value.map(m => m.thisYearRate)
-  const lastYearRates = summary.value.map(m => m.lastYearRate)
-
-  chartSeries.value = [
-    { name: 'This Year (%)', type: 'column', data: thisYearRates },
-    { name: 'Last Year (%)', type: 'column', data: lastYearRates },
-    { name: 'Target (%)', type: 'line', data: Array(12).fill(currentTarget.value) }
-  ]
-
-  chartOptions.value = {
+const buildOptions = (rows, t) => {
+  const months = rows.map(m => m.month)
+  return {
     chart: { type: 'line', stacked: false, toolbar: { show: false } },
     xaxis: { categories: months },
     yaxis: {
@@ -139,20 +141,21 @@ const buildChart = () => {
     colors: ['#1E88E5', '#43A047', '#e53935'],
     legend: { position: 'top' },
     dataLabels: { enabled: false },
-    annotations: {
-      yaxis: [
-        {
-          y: currentTarget.value,
-          strokeDashArray: 4,
-          borderColor: 'red',
-          label: {
+    // Hide target annotation while fetching or when target is null
+    annotations: (!isFetching.value && t != null)
+      ? {
+          yaxis: [{
+            y: t,
+            strokeDashArray: 4,
             borderColor: 'red',
-            style: { color: '#fff', background: 'red' },
-            text: `🎯 Target: ${currentTarget.value}%`
-          }
+            label: {
+              borderColor: 'red',
+              style: { color: '#fff', background: 'red' },
+              text: `🎯 Target: ${t}%`
+            }
+          }]
         }
-      ]
-    },
+      : { yaxis: [] },
     tooltip: {
       shared: true,
       intersect: false,
@@ -161,18 +164,44 @@ const buildChart = () => {
   }
 }
 
+const buildSeries = (rows, t) => {
+  const thisYearRates = rows.map(m => m.thisYearRate)
+  const lastYearRates = rows.map(m => m.lastYearRate)
+  const line = Array(12).fill(Number(t ?? 0))
+  return [
+    { name: 'This Year (%)', type: 'column', data: thisYearRates },
+    { name: 'Last Year (%)', type: 'column', data: lastYearRates },
+    { name: 'Target (%)', type: 'line', data: line }
+  ]
+}
+
 const fetchData = async () => {
+  // keep chart as-is, show thin loader
+  isFetching.value = true
   try {
     const { data } = await axios.get(
       `/hrss/attendance-dashboard/turnover/direct-labor?year=${selectedYear.value}`
     )
-    summary.value = data?.data ?? []
+    const rows = Array.isArray(data?.data) ? data.data : []
+    summary.value = rows
     currentTarget.value = data?.target ?? 0
-    buildChart()
+
+    if (rows.length) {
+      chartSeries.value = buildSeries(rows, currentTarget.value)
+      chartOptions.value = buildOptions(rows, currentTarget.value)
+    } else {
+      // if empty, keep old series to avoid flashing; only clear if nothing exists
+      if (!hasSeries.value) chartSeries.value = []
+      chartOptions.value = buildOptions(summary.value, currentTarget.value)
+    }
   } catch (err) {
     console.error('❌ Failed to fetch turnover data:', err)
-    summary.value = []
-    chartSeries.value = []
+    // keep previous view on error
+    chartOptions.value = buildOptions(summary.value, currentTarget.value)
+  } finally {
+    isFetching.value = false
+    // rebuild once more to re-enable target line after loading
+    chartOptions.value = buildOptions(summary.value, currentTarget.value)
   }
 }
 
@@ -181,9 +210,9 @@ const updateTarget = async () => {
     await axios.put('/hrss/attendance-dashboard/turnover/target', {
       year: selectedYear.value,
       type: 'TurnoverRate',
-      value: parseFloat(newTarget.value)
+      value: Number(newTarget.value)
     })
-    currentTarget.value = parseFloat(newTarget.value) || 0
+    currentTarget.value = Number(newTarget.value)
     showTargetDialog.value = false
 
     Swal.fire({
@@ -193,7 +222,12 @@ const updateTarget = async () => {
       showConfirmButton: false
     })
 
-    await fetchData() // refresh data + rebuild chart with new target
+    // reflect target change immediately without waiting for refetch
+    chartSeries.value = buildSeries(summary.value, currentTarget.value)
+    chartOptions.value = buildOptions(summary.value, currentTarget.value)
+
+    // optional: refetch fresh data
+    fetchData()
   } catch (err) {
     console.error('❌ Failed to update target:', err)
     Swal.fire({ icon: 'error', text: 'Failed to update target' })
@@ -203,3 +237,11 @@ const updateTarget = async () => {
 onMounted(fetchData)
 watch(selectedYear, fetchData)
 </script>
+
+<style scoped>
+.table-scroll-x {
+  overflow-x: auto;
+  display: block;
+  white-space: nowrap;
+}
+</style>

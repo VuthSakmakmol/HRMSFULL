@@ -57,9 +57,65 @@
               <v-icon start>mdi-file-excel"></v-icon> {{ $t('export') }}
             </v-btn>
           </v-col>
+
+          <v-col cols="auto">
+            <v-btn
+              color="teal"
+              variant="flat"
+              :disabled="selected.length !== 1"
+              @click="openCardDialog"
+            >
+              <v-icon start>mdi-card-account-details</v-icon> Generate Card
+            </v-btn>
+          </v-col>
+
         </v-row>
       </v-col>
     </v-row>
+
+
+    <!-- ID Card Preview / Export -->
+    <v-dialog v-model="showCardDialog" width="880">
+      <v-card class="pa-4">
+        <div class="d-flex align-center justify-space-between">
+          <h3 class="text-h6 font-weight-bold">
+            Employee ID Card
+            <span v-if="selectedEmployee">— {{ selectedEmployee.employeeId }}</span>
+          </h3>
+          <div class="d-flex ga-2">
+            <v-btn variant="tonal" @click="downloadPNG">
+              <v-icon start>mdi-image</v-icon> PNG
+            </v-btn>
+            <v-btn color="primary" @click="downloadPDF">
+              <v-icon start>mdi-file-pdf-box</v-icon> PDF
+            </v-btn>
+            <v-btn variant="text" @click="showCardDialog=false">Close</v-btn>
+          </div>
+        </div>
+
+        <v-divider class="my-3" />
+
+        <!-- Scaled preview so it fits nicely -->
+        <div style="overflow:auto; padding:6px">
+          <div id="cardPreviewScale" style="transform: scale(0.55); transform-origin: top left;">
+            <EmployeeCard
+              v-if="selectedEmployee"
+              ref="cardRef"
+              :key="selectedEmployee._id"     
+              :employee="selectedEmployee"
+              :companyName="companyName"
+              :logoSrc="logoSrc"
+              :qrSrc="''"
+              :footerText="footerText"
+              :backendBase="backendBase"
+              :defaultImage="defaultImage"
+            />
+          </div>
+        </div>
+      </v-card>
+    </v-dialog>
+
+
 
     <!-- Employee Table -->
     <v-card>
@@ -146,17 +202,28 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { DotLottieVue } from '@lottiefiles/dotlottie-vue'
+import EmployeeCard from '@/components/hrss/EmployeeCard.vue'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 
 defineOptions({ name: 'EmployeeList' })
 
 const router = useRouter()
+
+// ------------------------- Card -----------------------------
+const showCardDialog = ref(false)
+const cardRef = ref(null)
+const backendBase = (axios.defaults.baseURL?.replace(/\/api$/, '')) || ''
+const companyName = 'Trax Apparel Cambodia'
+const logoSrc = '/logos/trax_logo.png'    // point to your real logo asset
+const footerText = 'Factory Phone: 023 880 453 • HR: 011 996 498'
 
 /* ───────────────────────── state ───────────────────────── */
 const employees = ref([])
@@ -197,7 +264,72 @@ const getImageUrl = (url) => {
   return defaultImage
 }
 
+//========================== Employee Card ========================
+const captureCard = async () => {
+  const el = cardRef.value?.cardEl
+  if (!el) return null
+
+  // Temporarily remove preview scale for sharp capture
+  const scaleWrap = document.getElementById('cardPreviewScale')
+  const prevTransform = scaleWrap?.style.transform
+  if (scaleWrap) scaleWrap.style.transform = 'none'
+
+  try {
+    const canvas = await html2canvas(el, {
+      scale: 2,               // supersample for crisp export
+      backgroundColor: '#ffffff',
+      useCORS: true
+    })
+    return canvas
+  } finally {
+    if (scaleWrap) scaleWrap.style.transform = prevTransform || ''
+  }
+}
+
+const downloadPNG = async () => {
+  const canvas = await captureCard()
+  if (!canvas) return
+  const link = document.createElement('a')
+  const emp = selectedEmployee.value
+  link.download = `IDCard_${emp?.employeeId || 'employee'}.png`
+  link.href = canvas.toDataURL('image/png')
+  link.click()
+}
+
+const downloadPDF = async () => {
+  const canvas = await captureCard()
+  if (!canvas) return
+  const imgData = canvas.toDataURL('image/png')
+
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+  const pageW = pdf.internal.pageSize.getWidth()
+  const pageH = pdf.internal.pageSize.getHeight()
+  const margin = 24
+  const w = pageW - margin * 2
+  const h = w * (canvas.height / canvas.width)
+
+  pdf.addImage(imgData, 'PNG', margin, (pageH - h) / 2, w, h, undefined, 'FAST')
+  const emp = selectedEmployee.value
+  pdf.save(`IDCard_${emp?.employeeId || 'employee'}.pdf`)
+}
+
+
+
 /* ───────────────────────── data fetch ───────────────────────── */
+
+
+// selected employee for the card preview
+const selectedEmployee = computed(
+  () => employees.value.find(e => e._id === selected.value[0]) || null
+)
+
+// open dialog (only if one selected)
+const openCardDialog = () => {
+  if (selected.value.length !== 1) return
+  showCardDialog.value = true
+}
+
+
 const fetchEmployees = async () => {
   const params = {}
   isLoading.value = true

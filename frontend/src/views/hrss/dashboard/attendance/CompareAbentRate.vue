@@ -18,21 +18,29 @@
         />
       </div>
       <v-btn color="primary" @click="openDialog">
-        🎯 Target: <strong>{{ target }}%</strong>
+        🎯 Target: <strong>{{ target ?? 0 }}%</strong>
       </v-btn>
     </div>
 
-    <!-- Chart -->
+    <!-- Thin progress while fetching, chart stays visible -->
+    <v-progress-linear
+      v-if="isFetching"
+      indeterminate
+      height="3"
+      class="mb-2"
+    />
+
+    <!-- Chart (never unmounted while fetching) -->
     <VueApexCharts
-      v-if="chartSeries.length"
+      v-show="hasSeries"
       type="bar"
       height="400"
       :options="chartOptions"
       :series="chartSeries"
     />
 
-    <!-- Fallback -->
-    <v-alert v-else type="error" class="mt-4">
+    <!-- Fallback only if we truly have no data ever -->
+    <v-alert v-if="!hasSeries" type="error" class="mt-4">
       No absent data available for this period.
     </v-alert>
 
@@ -52,11 +60,7 @@
             {{ row.lastYearAbsentCount }}
           </td>
           <td class="text-primary font-weight-medium">
-            {{
-              (
-                rawData.reduce((sum, row) => sum + row.lastYearAbsentCount, 0) / rawData.length
-              ).toFixed(1)
-            }}
+            {{ avgLastYearCount.toFixed(1) }}
           </td>
         </tr>
         <tr>
@@ -65,11 +69,7 @@
             {{ row.thisYearAbsentCount }}
           </td>
           <td class="text-primary font-weight-medium">
-            {{
-              (
-                rawData.reduce((sum, row) => sum + row.thisYearAbsentCount, 0) / rawData.length
-              ).toFixed(1)
-            }}
+            {{ avgThisYearCount.toFixed(1) }}
           </td>
         </tr>
       </tbody>
@@ -99,7 +99,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import VueApexCharts from 'vue3-apexcharts'
@@ -107,16 +107,30 @@ import VueApexCharts from 'vue3-apexcharts'
 const selectedYear = ref(new Date().getFullYear())
 const yearOptions = Array.from({ length: 6 }, (_, i) => 2020 + i)
 
-const target = ref(0)
+const target = ref(null)        // <-- null so no red line before data
 const newTarget = ref(0)
 const dialog = ref(false)
 
 const chartSeries = ref([])
 const chartOptions = ref({})
 const rawData = ref([])
+const isFetching = ref(false)
+
+const hasSeries = computed(() => chartSeries.value.length > 0)
+
+const avgLastYearCount = computed(() =>
+  rawData.value.length
+    ? rawData.value.reduce((s, r) => s + r.lastYearAbsentCount, 0) / rawData.value.length
+    : 0
+)
+const avgThisYearCount = computed(() =>
+  rawData.value.length
+    ? rawData.value.reduce((s, r) => s + r.thisYearAbsentCount, 0) / rawData.value.length
+    : 0
+)
 
 const openDialog = () => {
-  newTarget.value = target.value
+  newTarget.value = target.value ?? 0
   dialog.value = true
 }
 
@@ -125,10 +139,9 @@ const updateTargetValue = async () => {
     await axios.post('/hrss/attendance-dashboard/attendance/update-target', {
       year: selectedYear.value,
       type: 'AbsentRate',
-      value: newTarget.value
+      value: Number(newTarget.value)
     })
-
-    target.value = newTarget.value
+    target.value = Number(newTarget.value)
     dialog.value = false
 
     Swal.fire({
@@ -138,105 +151,106 @@ const updateTargetValue = async () => {
       showConfirmButton: false
     })
 
-    fetchData()
+    // Rebuild options to move the target line immediately
+    chartOptions.value = buildOptions(rawData.value, target.value)
   } catch (err) {
     Swal.fire({ icon: 'error', text: 'Failed to update target' })
   }
 }
 
+function buildOptions(data, t) {
+  const months = data.map(m => m.month)
+  return {
+    chart: { stacked: false, toolbar: { show: false } },
+    xaxis: {
+      categories: [...months, 'Avg'],
+      labels: { style: { fontSize: '13px' } }
+    },
+    yaxis: {
+      min: 0,
+      max: 100,
+      labels: { formatter: val => `${val.toFixed(1)}%` },
+      title: { text: 'Absent Rate (%)' }
+    },
+    dataLabels: {
+      enabled: true,
+      formatter: val => `${val.toFixed(1)}%`,
+      style: { colors: ['#000000'] }
+    },
+    colors: ['#9E9E9E', '#2196F3'],
+    // Hide target line while loading OR when target is null
+    annotations: (!isFetching.value && t != null)
+      ? {
+          yaxis: [{
+            y: t,
+            strokeDashArray: 4,
+            borderColor: 'red',
+            label: {
+              borderColor: 'red',
+              style: { color: '#fff', background: 'red' },
+              text: `🎯 Target: ${t}%`
+            }
+          }]
+        }
+      : { yaxis: [] },
+    tooltip: {
+      shared: true,
+      intersect: false,
+      y: {
+        formatter: (val, { seriesIndex, dataPointIndex }) => {
+          const row = rawData.value[dataPointIndex]
+          if (!row) return `${val.toFixed(1)}%`
+          const absents = seriesIndex === 0 ? row.lastYearAbsentCount : row.thisYearAbsentCount
+          return `${val.toFixed(1)}% (${absents} absents)`
+        }
+      }
+    },
+    legend: { position: 'top' }
+  }
+}
+
 const fetchData = async () => {
+  // Keep current chart visible; just show thin loader + update when ready
+  isFetching.value = true
   try {
     const res = await axios.get('/hrss/attendance-dashboard/attendance/direct-absent-rate-compare', {
       params: { year: selectedYear.value }
     })
 
     const { data, target: fetchedTarget } = res.data || {}
-    if (!Array.isArray(data)) {
-      chartSeries.value = []
-      rawData.value = []
-      return
-    }
 
-    rawData.value = data
-    target.value = fetchedTarget ?? 0
+    if (Array.isArray(data) && data.length) {
+      rawData.value = data
+      target.value = (fetchedTarget ?? 0)
 
-    const months = data.map(m => m.month)
-    const lastYearRates = data.map(m => m.lastYearAbsentRate)
-    const thisYearRates = data.map(m => m.thisYearAbsentRate)
+      const lastYearRates = data.map(m => m.lastYearAbsentRate)
+      const thisYearRates = data.map(m => m.thisYearAbsentRate)
+      const avgLastYearRate = lastYearRates.reduce((a, b) => a + b, 0) / lastYearRates.length
+      const avgThisYearRate = thisYearRates.reduce((a, b) => a + b, 0) / thisYearRates.length
 
-    const avgLastYearRate = lastYearRates.reduce((a, b) => a + b, 0) / lastYearRates.length
-    const avgThisYearRate = thisYearRates.reduce((a, b) => a + b, 0) / thisYearRates.length
+      // Update series in-place (no flashing)
+      chartSeries.value = [
+        { name: `${selectedYear.value - 1}`, data: [...lastYearRates, avgLastYearRate] },
+        { name: `${selectedYear.value}`,     data: [...thisYearRates,  avgThisYearRate] }
+      ]
 
-    chartSeries.value = [
-      {
-        name: `${selectedYear.value - 1}`,
-        data: [...lastYearRates, avgLastYearRate]
-      },
-      {
-        name: `${selectedYear.value}`,
-        data: [...thisYearRates, avgThisYearRate]
+      chartOptions.value = buildOptions(data, target.value)
+    } else {
+      // Keep old series if fetch returns empty; only show alert if there's truly never any data
+      if (!hasSeries.value) {
+        chartSeries.value = []
       }
-    ]
-
-    chartOptions.value = {
-      chart: {
-        stacked: false,
-        toolbar: { show: false }
-      },
-      xaxis: {
-        categories: [...months, 'Avg'],
-        labels: { style: { fontSize: '13px' } }
-      },
-      yaxis: {
-        min: 0,
-        max: 100,
-        labels: {
-          formatter: val => `${val.toFixed(1)}%`
-        },
-        title: { text: 'Absent Rate (%)' }
-      },
-      dataLabels: {
-        enabled: true,
-        formatter: val => `${val.toFixed(1)}%`,
-        style: {
-          colors: ['#000000']
-        }
-      },
-      colors: ['#9E9E9E', '#2196F3'],
-      annotations: {
-        yaxis: [
-          {
-            y: target.value,
-            strokeDashArray: 4,
-            borderColor: 'red',
-            label: {
-              borderColor: 'red',
-              style: { color: '#fff', background: 'red' },
-              text: `🎯 Target: ${target.value}%`
-            }
-          }
-        ]
-      },
-      tooltip: {
-        shared: true,
-        intersect: false,
-        y: {
-          formatter: (val, { seriesIndex, dataPointIndex }) => {
-            const row = rawData.value[dataPointIndex]
-            if (!row) return `${val.toFixed(1)}%`
-            const absents = seriesIndex === 0
-              ? row.lastYearAbsentCount
-              : row.thisYearAbsentCount
-            return `${val.toFixed(1)}% (${absents} absents)`
-          }
-        }
-      },
-      legend: { position: 'top' }
+      // Keep previous target line; or hide if none exists
+      chartOptions.value = buildOptions(rawData.value, target.value)
     }
   } catch (err) {
+    // On error, do not wipe the chart; keep last good view
     console.error('❌ Error fetching data:', err)
-    chartSeries.value = []
-    rawData.value = []
+    chartOptions.value = buildOptions(rawData.value, target.value)
+  } finally {
+    isFetching.value = false
+    // Rebuild options once more to re-enable target line after loading
+    chartOptions.value = buildOptions(rawData.value, target.value)
   }
 }
 
