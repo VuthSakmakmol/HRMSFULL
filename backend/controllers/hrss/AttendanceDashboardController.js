@@ -43,6 +43,8 @@ const buildAttendanceSummary = (attendances, empMap, excludeDepartment = null) =
   return departmentStats;
 };
 
+
+// GET Sewing(Blue) monthly department summary
 exports.getMonthlyDepartmentSummary = async (req, res) => {
   try {
     const { year, month } = req.query;
@@ -52,43 +54,38 @@ exports.getMonthlyDepartmentSummary = async (req, res) => {
       return res.status(400).json({ message: 'Missing year or month' });
     }
 
-    const startDate = moment.tz({ year, month: month - 1 }, 'Asia/Phnom_Penh').startOf('month').toDate();
-    const endDate = moment(startDate).endOf('month').toDate();
+    const startDate = moment.tz({ year: +year, month: +month - 1 }, 'Asia/Phnom_Penh').startOf('month').toDate();
+    const endDate   = moment.tz({ year: +year, month: +month - 1 }, 'Asia/Phnom_Penh').endOf('month').toDate();
 
-    // Step 1: Get all employees (only Sewing)
-    const employees = await Employee.find({ company, department: 'Sewing' }).select('employeeId department');
-    const empMap = {};
-    const sewingEmployeeIds = new Set();
+    // 1) Fetch employees in Sewing(Blue) and take headcount from Employee collection
+    const sewingEmployees = await Employee.find({
+      company,
+      department: 'Sewing(Blue)',
+      status: 'Working', // <- adjust if you want to include non-working
+    }).select('employeeId');
 
-    for (const emp of employees) {
-      empMap[emp.employeeId] = 'Sewing';
-      sewingEmployeeIds.add(emp.employeeId);
-    }
+    const sewingIds = sewingEmployees.map(e => e.employeeId);
+    const headcount = sewingEmployees.length; // <- always shown even without attendance
 
-    // Step 2: Get all attendances in range
+    // 2) Fetch attendance only for those employees in the month
     const attendances = await Attendance.find({
       company,
+      employeeId: { $in: sewingIds.length ? sewingIds : ['__none__'] }, // safe fallback
       date: { $gte: startDate, $lte: endDate },
-      employeeId: { $in: Array.from(sewingEmployeeIds) }
-    });
+    }).lean();
 
-    // Step 3: Build stats and working days
+    // 3) Aggregate leave/absent + working days from attendance when present
     const stat = {
-      department: 'Sewing',
       annualLeave: 0,
       maternityLeave: 0,
       sickLeave: 0,
       unpaidLeave: 0,
       absent: 0,
-      employeeIds: new Set()
     };
-
-    const workingDateSet = new Set(); // unique attendance days
+    const workingDateSet = new Set(); // unique YYYY-MM-DD
 
     for (const att of attendances) {
-      stat.employeeIds.add(att.employeeId);
-      workingDateSet.add(att.date.toISOString().slice(0, 10)); // YYYY-MM-DD
-
+      workingDateSet.add(att.date.toISOString().slice(0, 10));
       if (att.status === 'Leave') {
         const type = (att.leaveType || '').toLowerCase();
         if (type === 'annual leave') stat.annualLeave++;
@@ -100,38 +97,38 @@ exports.getMonthlyDepartmentSummary = async (req, res) => {
       }
     }
 
-    const numEmployees = stat.employeeIds.size;
-    const workingDays = workingDateSet.size;
-    const grandTotal = stat.annualLeave + stat.maternityLeave + stat.sickLeave + stat.unpaidLeave + stat.absent;
-    const totalWorkSlots = numEmployees * workingDays;
+    const workingDays = workingDateSet.size; // 0 if no attendance imported
+    const grandTotal =
+      stat.annualLeave + stat.maternityLeave + stat.sickLeave + stat.unpaidLeave + stat.absent;
 
-    const percentAbsent = totalWorkSlots ? ((stat.absent / totalWorkSlots) * 100).toFixed(2) + '%' : '0.00%';
-    const percentAL = totalWorkSlots ? ((stat.annualLeave / totalWorkSlots) * 100).toFixed(2) + '%' : '0.00%';
-    const excludeAL = totalWorkSlots ? (((grandTotal - stat.annualLeave) / totalWorkSlots) * 100).toFixed(2) + '%' : '0.00%';
+    // 4) Denominator is headcount * workingDays
+    const totalWorkSlots = headcount * workingDays;
+    const pct = (n) => (totalWorkSlots ? ((n / totalWorkSlots) * 100).toFixed(2) + '%' : '0.00%');
 
     const result = [
       {
-        Department: 'Sewing',
+        Department: 'Sewing(Blue)',
         'Annual Leave': stat.annualLeave,
         'Maternity Leave': stat.maternityLeave,
         'Sick Leave': stat.sickLeave,
         'Unpaid Leave': stat.unpaidLeave,
         'Absent': stat.absent,
         'Grand Total': grandTotal,
-        'Number of Employees': numEmployees,
+        'Number of Employees': headcount, // <- always > 0 if employees exist
         'Working day': workingDays,
-        '%Absent': percentAbsent,
-        '% AL': percentAL,
-        'Exclude AL': excludeAL
-      }
+        '%Absent': pct(stat.absent),
+        '% AL': pct(stat.annualLeave),
+        'Exclude AL': pct(grandTotal - stat.annualLeave),
+      },
     ];
 
     res.json(result);
   } catch (err) {
-    console.error('❌ Error in getMonthlyDepartmentSummary:', err.message);
+    console.error('❌ Error in getMonthlyDepartmentSummary:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
 
 
 exports.getIndirectAndMerchandisingSummary = async (req, res) => {
@@ -153,7 +150,8 @@ exports.getIndirectAndMerchandisingSummary = async (req, res) => {
 
     for (const emp of employees) {
       const dept = emp.department || 'Unknown';
-      if (dept === 'Sewing') continue;
+      if (dept === 'Sewing(Blue)') continue; // exclude Sewing(Blue) from indirect summary
+
 
       empMap[emp.employeeId] = dept;
       if (!departmentEmployees[dept]) departmentEmployees[dept] = new Set();

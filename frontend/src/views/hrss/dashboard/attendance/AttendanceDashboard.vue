@@ -55,6 +55,9 @@
           <PeriodOfIndirectDepartmentAttendanceSummary
             :year="selectedYear"
             :month="selectedMonth"
+            :departments="[
+              'IE','Cutting','Finishing','Packing','HRSS','QA','Maintenance','Merchandising'
+            ]"
           />
         </v-card>
       </v-window-item>

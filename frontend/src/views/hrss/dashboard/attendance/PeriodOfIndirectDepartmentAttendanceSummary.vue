@@ -1,7 +1,7 @@
 <template>
   <v-card class="pa-4 mb-6 rounded-xl elevation-1">
     <h3 class="text-h6 font-weight-bold mb-4">
-    Indirect & Merchandising Attendance Summary ({{ year }}-{{ formattedMonth }})
+      Indirect & Merchandising Attendance Summary ({{ year }}-{{ formattedMonth }})
     </h3>
 
     <v-table fixed-header class="elevation-1 table-scroll-x">
@@ -23,7 +23,7 @@
       </thead>
       <tbody>
         <tr
-          v-for="row in indirectRows"
+          v-for="row in filledRows"
           :key="row.Department"
         >
           <td>{{ row.Department }}</td>
@@ -39,7 +39,7 @@
           <td class="text-error">{{ row['% AL'] }}</td>
           <td class="text-error">{{ row['Exclude AL'] }}</td>
         </tr>
-        <tr v-if="indirectRows.length === 0">
+        <tr v-if="!filledRows.length">
           <td colspan="12" class="text-center text-grey">No data available</td>
         </tr>
       </tbody>
@@ -52,13 +52,31 @@ import { ref, onMounted, watch, computed } from 'vue'
 import axios from '@/utils/axios'
 
 const props = defineProps({
-  year: Number,
-  month: Number
+  year: { type: Number, required: true },
+  month: { type: Number, required: true },
+  // Optional: provide your full list of departments to always display
+  // (excluding Sewing(Blue) – the component will also filter it out)
+  departments: { type: Array, default: () => [] }
 })
 
-const indirectRows = ref([])
+const rawRows = ref([])
 
 const formattedMonth = computed(() => String(props.month).padStart(2, '0'))
+
+const defaultRow = (dept) => ({
+  Department: dept,
+  'Annual Leave': 0,
+  'Maternity Leave': 0,
+  'Sick Leave': 0,
+  'Unpaid Leave': 0,
+  'Absent': 0,
+  'Grand Total': 0,
+  'Number of Employees': 0,
+  'Working day': 0,
+  '%Absent': '0.00%',
+  '% AL': '0.00%',
+  'Exclude AL': '0.00%'
+})
 
 const fetchData = async () => {
   try {
@@ -69,12 +87,32 @@ const fetchData = async () => {
         _t: Date.now()
       }
     })
-    indirectRows.value = Array.isArray(res.data) ? res.data : []
+    const list = Array.isArray(res.data) ? res.data : []
+    // Backend *should* already exclude Sewing(Blue). We also guard here.
+    rawRows.value = list.filter(r => r?.Department !== 'Sewing(Blue)')
   } catch (err) {
     console.error('❌ Indirect summary error:', err.message)
-    indirectRows.value = []
+    rawRows.value = []
   }
 }
+
+// Merge API rows with the full department list so all show up (zeros if missing)
+const filledRows = computed(() => {
+  // Set of departments to display:
+  //   1) use props.departments if provided
+  //   2) otherwise derive from API
+  const apiDepts = new Set(rawRows.value.map(r => r.Department))
+  const baseDepts = (props.departments.length
+    ? props.departments
+    : Array.from(apiDepts)
+  ).filter(d => d && d !== 'Sewing(Blue)') // ensure Sewing(Blue) hidden here too
+
+  // Map API rows by department
+  const map = new Map(rawRows.value.map(r => [r.Department, r]))
+
+  // Build final list with defaults for missing departments
+  return baseDepts.map(dept => map.get(dept) || defaultRow(dept))
+})
 
 onMounted(fetchData)
 watch(() => [props.year, props.month], fetchData, { immediate: true })

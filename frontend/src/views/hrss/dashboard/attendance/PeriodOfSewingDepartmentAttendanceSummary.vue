@@ -1,7 +1,7 @@
 <template>
   <v-card class="pa-4 mb-6 rounded-xl elevation-1">
     <h3 class="text-h6 font-weight-bold mb-4">
-    Sewing Department Attendance Summary ({{ year }}-{{ String(month).padStart(2, '0') }})
+      Sewing(Blue) Department Attendance Summary ({{ year }}-{{ String(month).padStart(2, '0') }})
     </h3>
 
     <v-table fixed-header class="elevation-1 table-scroll-x">
@@ -22,7 +22,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-if="sewingData">
+        <tr>
           <td>{{ sewingData.Department }}</td>
           <td>{{ sewingData['Annual Leave'] }}</td>
           <td>{{ sewingData['Maternity Leave'] }}</td>
@@ -36,9 +36,6 @@
           <td class="text-error">{{ sewingData['% AL'] }}</td>
           <td class="text-error">{{ sewingData['Exclude AL'] }}</td>
         </tr>
-        <tr v-else>
-          <td colspan="12" class="text-center text-grey">No data available</td>
-        </tr>
       </tbody>
     </v-table>
   </v-card>
@@ -49,11 +46,27 @@ import { ref, watch, onMounted } from 'vue'
 import axios from '@/utils/axios'
 
 const props = defineProps({
-  year: Number,
-  month: Number
+  year: { type: Number, required: true },
+  month: { type: Number, required: true }
 })
 
-const sewingData = ref(null)
+// Default object so table always shows
+const defaultData = {
+  Department: 'Sewing(Blue)',
+  'Annual Leave': 0,
+  'Maternity Leave': 0,
+  'Sick Leave': 0,
+  'Unpaid Leave': 0,
+  'Absent': 0,
+  'Grand Total': 0,
+  'Number of Employees': 0,
+  'Working day': 0,
+  '%Absent': '0.00%',
+  '% AL': '0.00%',
+  'Exclude AL': '0.00%'
+}
+
+const sewingData = ref({ ...defaultData })
 
 const fetchData = async () => {
   try {
@@ -61,14 +74,14 @@ const fetchData = async () => {
       params: {
         year: props.year,
         month: props.month,
-        _t: Date.now() // Prevent caching
+        _t: Date.now()
       }
     })
     const all = Array.isArray(res.data) ? res.data : []
-    sewingData.value = all.find((d) => d.Department === 'Sewing') || null
+    sewingData.value = all.find((d) => d.Department === 'Sewing(Blue)') || { ...defaultData }
   } catch (err) {
     console.error('❌ Sewing summary error:', err.message)
-    sewingData.value = null
+    sewingData.value = { ...defaultData }
   }
 }
 
