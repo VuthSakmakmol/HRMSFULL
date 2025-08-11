@@ -1,51 +1,84 @@
 <template>
   <v-container fluid class="pa-4">
-    <h2 class="text-h5 font-weight-bold mb-6">📊 Attendance Dashboard</h2>
+    <!-- Header -->
+    <div class="d-flex justify-space-between align-center mb-4">
+      <h2 class="text-h5 font-weight-bold">📊 Attendance Dashboard</h2>
 
-    <!-- 🌐 Global Filters -->
-    <v-row class="mb-6">
-      <v-col cols="12" sm="3">
+      <!-- 🌐 Global Filters -->
+      <div class="d-flex gap-3">
         <v-select
           v-model="selectedYear"
           :items="yearOptions"
           label="Select Year"
           variant="outlined"
           density="comfortable"
+          hide-details
+          style="max-width: 160px"
         />
-      </v-col>
-
-      <v-col cols="12" sm="3">
         <v-select
           v-model="selectedMonth"
           :items="monthOptions"
           label="Select Month"
           variant="outlined"
           density="comfortable"
+          hide-details
+          style="max-width: 160px"
         />
-      </v-col>
-    </v-row>
+      </div>
+    </div>
 
-    <!-- 🧵 Sewing Summary -->
-    <!-- <PeriodOfSewingDepartmentAttendanceSummary
-      :year="selectedYear"
-      :month="selectedMonth"
-    /> -->
+    <!-- Section Switcher -->
+    <div class="mb-4">
+      <v-btn-toggle v-model="activeSection" mandatory divided>
+        <v-btn :value="'sewing'" variant="flat">🧵 Sewing Summary</v-btn>
+        <v-btn :value="'indirect'" variant="flat">🏢 Indirect + Merchandising</v-btn>
+        <v-btn :value="'absentCompare'" variant="flat">📉 Compare Absent Rate</v-btn>
+        <v-btn :value="'turnover'" variant="flat">🔄 Turnover</v-btn>
+      </v-btn-toggle>
+    </div>
 
-    <!-- 🏢 Indirect + Merchandising Summary -->
-    <!-- <PeriodOfIndirectDepartmentAttendanceSummary
-      :year="selectedYear"
-      :month="selectedMonth"
-    /> -->
+    <!-- Content -->
+    <v-window v-model="activeSection" class="rounded-xl">
+      <!-- 🧵 Sewing Summary -->
+      <v-window-item value="sewing">
+        <v-card class="pa-4 mb-4">
+          <PeriodOfSewingDepartmentAttendanceSummary
+            :year="selectedYear"
+            :month="selectedMonth"
+          />
+        </v-card>
+      </v-window-item>
 
-    <CompareAbentRate
-      :year="selectedYear"
-      :month="selectedMonth"
-    />
+      <!-- 🏢 Indirect + Merchandising Summary -->
+      <v-window-item value="indirect">
+        <v-card class="pa-4 mb-4">
+          <PeriodOfIndirectDepartmentAttendanceSummary
+            :year="selectedYear"
+            :month="selectedMonth"
+          />
+        </v-card>
+      </v-window-item>
 
-    <TurnOver
-      :year="selectedYear"
-      :month="selectedMonth"
-    />
+      <!-- 📉 Compare Absent Rate -->
+      <v-window-item value="absentCompare">
+        <v-card class="pa-4 mb-4">
+          <CompareAbentRate
+            :year="selectedYear"
+            :month="selectedMonth"
+          />
+        </v-card>
+      </v-window-item>
+
+      <!-- 🔄 Turnover -->
+      <v-window-item value="turnover">
+        <v-card class="pa-4 mb-4">
+          <TurnOver
+            :year="selectedYear"
+            :month="selectedMonth"
+          />
+        </v-card>
+      </v-window-item>
+    </v-window>
   </v-container>
 </template>
 
@@ -61,4 +94,14 @@ const selectedMonth = ref(new Date().getMonth() + 1)
 
 const yearOptions = Array.from({ length: 6 }, (_, i) => 2020 + i)
 const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
+
+// default visible section
+const activeSection = ref('absentCompare') // or 'sewing' if you prefer
 </script>
+
+<style scoped>
+.v-btn-toggle .v-btn {
+  text-transform: none;
+  font-weight: 600;
+}
+</style>

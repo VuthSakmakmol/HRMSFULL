@@ -1,14 +1,37 @@
 <template>
   <v-container fluid class="dashboard-container">
+    <!-- Header -->
+    <div class="d-flex justify-space-between align-center mb-4">
+      <h2 class="text-h6 font-weight-bold">📊 Excome Dashboard</h2>
 
-    <v-expansion-panels multiple>
+      <v-select
+        v-model="selectedYear"
+        :items="yearOptions"
+        label="Select Year"
+        variant="outlined"
+        density="comfortable"
+        hide-details
+        style="max-width: 180px"
+      />
+    </div>
 
-      <!-- Section 1: Age and Year of Service -->
-      <v-expansion-panel>
-        <v-expansion-panel-title>
-          📊 Age & Year of Service
-        </v-expansion-panel-title>
-        <v-expansion-panel-text>
+    <!-- Button Row (one-at-a-time view) -->
+    <div class="section-buttons mb-4">
+      <v-btn-toggle v-model="activeSection" mandatory divided>
+        <v-btn :value="'ageService'" variant="flat">📊 Age & Service</v-btn>
+        <v-btn :value="'headcount'"  variant="flat">👷 Headcount by Type</v-btn>
+        <v-btn :value="'charts'"     variant="flat">📈 Direct/Indirect + Budget</v-btn>
+        <v-btn :value="'resign'"     variant="flat">📉 Resign Reasons</v-btn>
+        <v-btn :value="'yearlyResign'" variant="flat">🗓️ Yearly Resign</v-btn>
+        <v-btn :value="'inOut'"      variant="flat">🔄 Direct Labor In & Out</v-btn>
+      </v-btn-toggle>
+    </div>
+
+    <!-- Content -->
+    <v-window v-model="activeSection" class="rounded-xl elevation-1">
+      <!-- Age & Year of Service -->
+      <v-window-item value="ageService">
+        <v-card class="pa-4">
           <v-row dense class="chart-section">
             <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-age">
               <AvgAgeCard />
@@ -18,42 +41,23 @@
               <YearOfService />
             </v-col>
           </v-row>
+        </v-card>
+      </v-window-item>
 
-        </v-expansion-panel-text>
-      </v-expansion-panel>
-
-      <!-- Section 2: Headcount by Position -->
-      <v-expansion-panel>
-        <v-expansion-panel-title>
-          👷 Headcount by Type
-        </v-expansion-panel-title>
-        <v-expansion-panel-text>
+      <!-- Headcount by Position -->
+      <v-window-item value="headcount">
+        <v-card class="pa-4">
           <v-row dense class="headcount-section">
             <v-col cols="12" class="dashboard-card">
               <TypeOfPosition />
             </v-col>
           </v-row>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
+        </v-card>
+      </v-window-item>
 
-      <!-- Section 3: Charts -->
-      <v-expansion-panel>
-        <v-expansion-panel-title>
-          📈 Direct & Indirect Labor Charts + Budget Summary
-        </v-expansion-panel-title>
-        <v-expansion-panel-text>
-          <v-row class="mb-4" align="center">
-            <v-col cols="12" sm="4">
-              <v-select
-                v-model="selectedYear"
-                :items="yearOptions"
-                label="Select Year"
-                variant="outlined"
-                density="comfortable"
-              />
-            </v-col>
-          </v-row>
-
+      <!-- Direct/Indirect Charts + Budget Summary -->
+      <v-window-item value="charts">
+        <v-card class="pa-4">
           <v-row dense class="chart-section">
             <v-col cols="12" sm="6" class="pa-2 dashboard-card card-direct-chart">
               <DirectLaborChart :year="selectedYear" />
@@ -65,15 +69,12 @@
               <SummaryBudgetTable :year="selectedYear" />
             </v-col>
           </v-row>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
+        </v-card>
+      </v-window-item>
 
-      <!-- Section 4: Resign Reasons -->
-      <v-expansion-panel>
-        <v-expansion-panel-title>
-          📉 Resign Reason Summary
-        </v-expansion-panel-title>
-        <v-expansion-panel-text class="gap-2 flex">
+      <!-- Resign Reasons -->
+      <v-window-item value="resign">
+        <v-card class="pa-4">
           <v-row dense class="chart-section">
             <v-col cols="12" class="dashboard-card card-summary">
               <ReasonResignDirectTable :year="selectedYear" />
@@ -88,63 +89,48 @@
               <ReasonResignIndirectLabor :year="selectedYear" />
             </v-col>
           </v-row>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
+        </v-card>
+      </v-window-item>
 
-      <v-expansion-panel>
-        <v-expansion-panel-title>
-          Yearly Resign 
-        </v-expansion-panel-title>
-        <v-expansion-panel-text>
-          <v-col cols="12" class="dashboard-card card-summary">
-            <PeroidOfDirectLaborResignByYear :year="selectYear"/>
-          </v-col>
-        </v-expansion-panel-text>
+      <!-- Yearly Resign -->
+      <v-window-item value="yearlyResign">
+        <v-card class="pa-4">
+          <v-row dense>
+            <v-col cols="12" class="dashboard-card card-summary">
+              <PeroidOfDirectLaborResignByYear :year="selectedYear" />
+            </v-col>
+            <v-col cols="12" class="dashboard-card card-summary">
+              <PeriodOfDirectLaborChartResignByYear :year="selectedYear" />
+            </v-col>
+            <v-col cols="12" class="dashboard-card card-summary">
+              <PeriodOfIndirectLaborResignByYear :year="selectedYear" />
+            </v-col>
+            <v-col cols="12" class="dashboard-card card-summary">
+              <PeriodOfIndirectLaborChartResignByYear :year="selectedYear" />
+            </v-col>
+          </v-row>
+        </v-card>
+      </v-window-item>
 
-        <v-expansion-panel-text>
+      <!-- Direct Labor In & Out -->
+      <v-window-item value="inOut">
+        <v-card class="pa-4">
           <v-col cols="12" class="dashboard-card card-summary">
-            <PeriodOfDirectLaborChartResignByYear :year="selectYear"/>
+            <DirectLaborInAndOut :year="selectedYear" />
           </v-col>
-        </v-expansion-panel-text>
-
-        <v-expansion-panel-text>
-          <v-col cols="12" class="dashboard-card card-summary">
-            <PeriodOfIndirectLaborResignByYear :year="selectYear"/>
-          </v-col>
-        </v-expansion-panel-text>
-
-        <v-expansion-panel-text>
-          <v-col cols="12" class="dashboard-card card-summary">
-            <PeriodOfIndirectLaborChartResignByYear :year="selectYear"/>
-          </v-col>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
-      
-      <v-expansion-panel>
-        <v-expansion-panel-title>
-          Direct Labor In & Out
-        </v-expansion-panel-title>
-        <v-expansion-panel-text>
-          <v-col cols="12" class="dashboard-card card-summary">
-            <DirectLaborInAndOut :year="selectedYear"/>
-          </v-col>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
-
-    </v-expansion-panels>
-    
+        </v-card>
+      </v-window-item>
+    </v-window>
   </v-container>
 </template>
 
-
 <script>
-import axios from '@/utils/axios'
-import TypeOfPosition      from './excome/TypeOfPosition.vue'
-import SummaryBudgetTable  from './excome/SummaryBudgetTable.vue'
-import DirectLaborChart    from './excome/DirectLaborChart.vue'
-import IndirectLaborChart  from './excome/IndirectLaborChart.vue'
-import AvgAgeCard          from './excome/AvgAgeCard.vue'
-import YearOfService       from './excome/YearOfService.vue'
+import TypeOfPosition from './excome/TypeOfPosition.vue'
+import SummaryBudgetTable from './excome/SummaryBudgetTable.vue'
+import DirectLaborChart from './excome/DirectLaborChart.vue'
+import IndirectLaborChart from './excome/IndirectLaborChart.vue'
+import AvgAgeCard from './excome/AvgAgeCard.vue'
+import YearOfService from './excome/YearOfService.vue'
 import ReasonResignDirectTable from './excome/ReasonResignDirectTable.vue'
 import ReasonResignIndirectTable from './excome/ReasonResignIndirectTable.vue'
 import ReasonResignDirectLabor from './excome/ReasonResignDirectLabor.vue'
@@ -178,47 +164,10 @@ export default {
     const currentYear = new Date().getFullYear()
     return {
       selectedYear: currentYear,
-      yearOptions: Array.from({ length: 5 }, (_, i) => currentYear - i),
-      selectedMonth: this.formatMonth(new Date()),
-
-      counts: {
-        directLabor: 0,
-        marketing: 0,
-        indirectLabor: 0
-      }
+      yearOptions: Array.from({ length: 6 }, (_, i) => currentYear - i),
+      // Default visible section
+      activeSection: 'ageService'
     }
-  },
-  methods: {
-    formatMonth(date) {
-      const y = date.getFullYear()
-      const m = String(date.getMonth() + 1).padStart(2, '0')
-      return `${y}-${m}`
-    },
-
-    async fetchCounts() {
-      try {
-        const res = await axios.get('/hrss/excome/employee-count', {
-          params: { month: this.selectedMonth }
-        })
-
-        const isHTML = typeof res.data === 'string' && res.data.startsWith('<!DOCTYPE')
-        if (isHTML) {
-          console.warn('⚠️ API returned HTML instead of JSON')
-          return
-        }
-
-        if (res.data?.counts) {
-          this.counts = res.data.counts
-        } else {
-          console.warn('⚠️ Excome API returned no counts:', res.data)
-        }
-      } catch (err) {
-        console.error('❌ Failed to load Excome headcount:', err)
-      }
-    }
-  },
-  mounted() {
-    this.fetchCounts()
   }
 }
 </script>
@@ -230,13 +179,14 @@ export default {
   padding: 1.5rem;
 }
 
-/* Month selector */
-.month-selector {
-  margin-bottom: 1.5rem;
+/* Button row */
+.section-buttons {
+  display: flex;
+  overflow-x: auto;
 }
-.month-selector .v-text-field input {
-  background-color: #ffffff;
-  border-radius: 4px;
+.section-buttons .v-btn {
+  text-transform: none;
+  font-weight: 600;
 }
 
 /* Base card styling */
@@ -257,12 +207,9 @@ export default {
 .card-summary        { border-top: 4px solid #8b5cf6; background-color: #f5f3ff; }
 .card-avg-service    { border-top: 4px solid #6366f1; background-color: #eef2ff; }
 
-/* Section spacing */
-.headcount-section        { margin-bottom: 2rem; }
-.avg-age-section          { margin-bottom: 2rem; }
-.chart-section            { margin-bottom: 2rem; }
-.summary-table-section    { margin-bottom: 2rem; }
-.avg-service-section      { margin-bottom: 2rem; }
+/* Spacing */
+.headcount-section     { margin-bottom: 2rem; }
+.chart-section         { margin-bottom: 2rem; }
 
 /* Typography tweaks */
 .dashboard-container .v-label,
@@ -278,5 +225,4 @@ export default {
 .chart-section .v-col {
   padding: 12px !important;
 }
-
 </style>
