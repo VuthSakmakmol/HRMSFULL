@@ -365,82 +365,66 @@ exports.getTarget = async (req, res) => {
   }
 }
 
-// 📊 GET Direct Labor Monthly Turnover Rate (this year vs last year)
+// 📊 GET Direct Labor Monthly Turnover Rate
 exports.getMonthlyDirectLaborTurnoverRate = async (req, res) => {
   try {
-    const year = parseInt(req.query.year)
-    const company = req.company
+    const year = parseInt(req.query.year);
+    const company = req.company;
 
     if (!year || !company) {
-      return res.status(400).json({ message: 'Year and company required' })
+      return res.status(400).json({ message: 'Year and company required' });
     }
 
-    const data = []
+    const monthsData = [];
 
     for (let month = 0; month < 12; month++) {
-      const startThisYear = moment.tz({ year, month, day: 1 }, 'Asia/Phnom_Penh').startOf('month')
-      const endThisYear = startThisYear.clone().endOf('month')
+      const startThisYear = moment.tz({ year, month, day: 1 }, 'Asia/Phnom_Penh').startOf('month');
+      const endThisYear = startThisYear.clone().endOf('month');
 
-      const startLastYear = startThisYear.clone().subtract(1, 'year')
-      const endLastYear = endThisYear.clone().subtract(1, 'year')
+      const startLastYear = startThisYear.clone().subtract(1, 'year');
+      const endLastYear = endThisYear.clone().subtract(1, 'year');
 
-      // This year
-      const thisYearJoined = await Employee.countDocuments({
-        company,
-        joinDate: { $gte: startThisYear.toDate(), $lte: endThisYear.toDate() },
-        $or: [{ position: 'Sewer' }, { position: 'Jumper' }]
-      })
+      const filterPositions = { position: { $in: ['Sewer', 'Jumper'] } };
 
-      const thisYearExits = await Employee.countDocuments({
-        company,
-        resignDate: { $gte: startThisYear.toDate(), $lte: endThisYear.toDate() },
-        $or: [{ position: 'Sewer' }, { position: 'Jumper' }]
-      })
+      // Helper to count
+      const countInRange = (dateField, start, end) =>
+        Employee.countDocuments({
+          company,
+          [dateField]: { $gte: start.toDate(), $lte: end.toDate() },
+          ...filterPositions
+        });
 
-      // Last year
-      const lastYearJoined = await Employee.countDocuments({
-        company,
-        joinDate: { $gte: startLastYear.toDate(), $lte: endLastYear.toDate() },
-        $or: [{ position: 'Sewer' }, { position: 'Jumper' }]
-      })
+      const thisYearJoined = await countInRange('joinDate', startThisYear, endThisYear);
+      const thisYearExits = await countInRange('resignDate', startThisYear, endThisYear);
 
-      const lastYearExits = await Employee.countDocuments({
-        company,
-        resignDate: { $gte: startLastYear.toDate(), $lte: endLastYear.toDate() },
-        $or: [{ position: 'Sewer' }, { position: 'Jumper' }]
-      })
+      const lastYearJoined = await countInRange('joinDate', startLastYear, endLastYear);
+      const lastYearExits = await countInRange('resignDate', startLastYear, endLastYear);
 
-      // Calculate turnover rates
-      const thisYearRate = thisYearJoined > 0 ? (thisYearExits / thisYearJoined) * 100 : 0
-      const lastYearRate = lastYearJoined > 0 ? (lastYearExits / lastYearJoined) * 100 : 0
+      const thisYearRate = thisYearJoined > 0 ? (thisYearExits / thisYearJoined) * 100 : 0;
+      const lastYearRate = lastYearJoined > 0 ? (lastYearExits / lastYearJoined) * 100 : 0;
 
-      data.push({
+      monthsData.push({
         month: startThisYear.format('MMM'),
         thisYearJoined,
         thisYearExits,
-        thisYearRate: parseFloat(thisYearRate.toFixed(2)),
+        thisYearRate: +thisYearRate.toFixed(2),
         lastYearJoined,
         lastYearExits,
-        lastYearRate: parseFloat(lastYearRate.toFixed(2))
-      })
+        lastYearRate: +lastYearRate.toFixed(2)
+      });
     }
 
-    // Fetch target if available
-    const targetDoc = await AttendanceTarget.findOne({
-      company,
-      year,
-      type: 'TurnoverRate'
-    })
+    const targetDoc = await TurnoverTarget.findOne({ company, year, type: 'TurnoverRate' });
 
     res.json({
       target: targetDoc?.value || 0,
-      data
-    })
+      data: monthsData
+    });
   } catch (err) {
-    console.error('Error in getMonthlyDirectLaborTurnoverRate:', err)
-    res.status(500).json({ message: 'Server error' })
+    console.error('Error in getMonthlyDirectLaborTurnoverRate:', err);
+    res.status(500).json({ message: 'Server error' });
   }
-}
+};
 
 
 
