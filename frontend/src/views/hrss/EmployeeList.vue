@@ -3,73 +3,81 @@
     <h2 class="text-h6 font-weight-bold mb-4">{{ $t('employeeManagement') }}</h2>
 
     <!-- Top Bar -->
-    <v-row class="mb-4" align-center justify="space-between">
+    <v-row class="mb-4" align="center" justify="space-between" no-gutters>
+      <!-- Buttons -->
       <v-col cols="auto">
         <v-btn color="primary" @click="goToAddEmployee">
           <v-icon start>mdi-plus</v-icon> {{ $t('addEmployee') }}
         </v-btn>
       </v-col>
 
-      <v-col cols="12" md="auto">
-        <v-row class="flex-wrap" dense>
-          <v-col cols="auto">
-            <v-btn
-              color="blue"
-              variant="flat"
-              :disabled="selected.length !== 1"
-              @click="editSelectedEmployee"
-            >
-              <v-icon start>mdi-pencil</v-icon> {{ $t('edit') }}
-            </v-btn>
-          </v-col>
+      <!-- Global Filter -->
+      <v-col cols="12" md="3">
+        <v-text-field
+          v-model="q"
+          label="Search employees…"
+          variant="outlined"
+          density="compact"
+          clearable
+          hide-details
+        />
+      </v-col>
 
-          <v-col cols="auto">
-            <v-btn
-              color="error"
-              variant="flat"
-              :disabled="!selected.length"
-              @click="deleteSelected"
-            >
-              <v-icon start>mdi-delete</v-icon> {{ $t('delete') }}
-            </v-btn>
-          </v-col>
+      <v-col cols="auto">
+        <v-btn
+          color="blue"
+          variant="flat"
+          :disabled="selected.length !== 1"
+          @click="editSelectedEmployee"
+        >
+          <v-icon start>mdi-pencil</v-icon> {{ $t('edit') }}
+        </v-btn>
+      </v-col>
 
-          <v-col cols="auto">
-            <v-btn color="indigo" variant="flat" @click="triggerImportFile">
-              <v-icon start>mdi-file-import"></v-icon> {{ $t('import') }}
-            </v-btn>
-            <input
-              ref="fileInput"
-              type="file"
-              accept=".xlsx"
-              @change="handleImportExcel"
-              style="display: none"
-            />
-          </v-col>
+      <v-col cols="auto">
+        <v-btn
+          color="error"
+          variant="flat"
+          :disabled="!selected.length"
+          @click="deleteSelected"
+        >
+          <v-icon start>mdi-delete</v-icon> {{ $t('delete') }}
+        </v-btn>
+      </v-col>
 
-          <v-col cols="auto">
-            <v-btn
-              color="success"
-              variant="flat"
-              :disabled="!selected.length"
-              @click="exportToExcel"
-            >
-              <v-icon start>mdi-file-excel"></v-icon> {{ $t('export') }}
-            </v-btn>
-          </v-col>
+      <v-col cols="auto">
+        <v-btn color="indigo" variant="flat" @click="triggerImportFile">
+          <v-icon start>mdi-file-import"></v-icon> {{ $t('import') }}
+        </v-btn>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".xlsx"
+          @change="handleImportExcel"
+          style="display: none"
+        />
+      </v-col>
 
-          <v-col cols="auto">
-            <v-btn
-              color="teal"
-              variant="flat"
-              :disabled="selected.length !== 1"
-              @click="openCardDialog"
-            >
-              <v-icon start>mdi-card-account-details</v-icon> Generate Card
-            </v-btn>
-          </v-col>
+      <v-col cols="auto">
+        <v-btn
+          color="success"
+          variant="flat"
+          :disabled="!selected.length"
+          @click="exportToExcel"
+        >
+          <v-icon start>mdi-file-excel"></v-icon> {{ $t('export') }}
+        </v-btn>
+      </v-col>
 
-        </v-row>
+      <v-col cols="auto">
+        <v-btn
+          color="teal"
+          variant="flat"
+          :disabled="selected.length !== 1"
+          @click="openCardDialog"
+        >
+          <v-icon start>mdi-card-account-details</v-icon> Generate Card
+        </v-btn>
       </v-col>
     </v-row>
 
@@ -101,7 +109,7 @@
             <EmployeeCard
               v-if="selectedEmployee"
               ref="cardRef"
-              :key="selectedEmployee._id"     
+              :key="selectedEmployee._id"
               :employee="selectedEmployee"
               :companyName="companyName"
               :logoSrc="logoSrc"
@@ -114,8 +122,6 @@
         </div>
       </v-card>
     </v-dialog>
-
-
 
     <!-- Employee Table -->
     <v-card>
@@ -143,7 +149,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(emp, index) in employees" :key="emp._id">
+            <tr v-for="(emp, index) in paginatedEmployees" :key="emp._id">
               <td>
                 <v-checkbox v-model="selected" :value="emp._id" hide-details density="compact" />
               </td>
@@ -192,8 +198,8 @@
         <v-btn icon :disabled="page === 1" @click="page--">
           <v-icon>mdi-chevron-left</v-icon>
         </v-btn>
-        <span class="mx-2">{{ page }} / {{ totalPages }}</span>
-        <v-btn icon :disabled="page === totalPages" @click="page++">
+        <span class="mx-2">{{ page }} / {{ totalPagesLocal }}</span>
+        <v-btn icon :disabled="page === totalPagesLocal" @click="page++">
           <v-icon>mdi-chevron-right</v-icon>
         </v-btn>
       </v-sheet>
@@ -222,24 +228,24 @@ const showCardDialog = ref(false)
 const cardRef = ref(null)
 const backendBase = (axios.defaults.baseURL?.replace(/\/api$/, '')) || ''
 const companyName = 'Trax Apparel Cambodia'
-const logoSrc = '/logos/trax_logo.png'    // point to your real logo asset
+const logoSrc = '/logos/CAM-TAC.jpg'
 const footerText = 'Factory Phone: 023 880 453 • HR: 011 996 498'
 
 /* ───────────────────────── state ───────────────────────── */
 const employees = ref([])
 const selected = ref([])
 const selectAll = ref(false)
-const totalEmployees = ref(0)
+const totalEmployees = ref(0) // kept for compatibility
 const scrollWrapper = ref(null)
 const defaultImage = '/default_images/girl_default_pf.jpg'
 const hasLoaded = ref(false)
 const isLoading = ref(true)
 const fileInput = ref(null)
 
-// pagination
+// pagination (client-side over filtered set)
 const page = ref(1)
 const itemsPerPage = ref(10) // number or "all"
-const totalPages = ref(1)
+const q = ref('')            // global search text
 
 /* ───────────────────────── lifecycle ───────────────────────── */
 onMounted(async () => {
@@ -250,16 +256,11 @@ onMounted(async () => {
 })
 
 /* ───────────────────────── helpers ───────────────────────── */
-const getRowNumber = (index) => {
-  const perPage = itemsPerPage.value === 'all' ? totalEmployees.value : parseInt(itemsPerPage.value)
-  return (page.value - 1) * perPage + index + 1
-}
-
 const formatDate = (val) => (val ? dayjs(val).format('YYYY-MM-DD') : '')
 const getImageUrl = (url) => {
-  const backendBase = axios.defaults.baseURL?.replace(/\/api$/, '') || ''
+  const base = axios.defaults.baseURL?.replace(/\/api$/, '') || ''
   if (!url || url === '') return defaultImage
-  if (url.startsWith('/upload')) return `${backendBase}${url}`
+  if (url.startsWith('/upload')) return `${base}${url}`
   if (url.startsWith('http')) return url
   return defaultImage
 }
@@ -276,7 +277,7 @@ const captureCard = async () => {
 
   try {
     const canvas = await html2canvas(el, {
-      scale: 2,               // supersample for crisp export
+      scale: 2,
       backgroundColor: '#ffffff',
       useCORS: true
     })
@@ -313,10 +314,21 @@ const downloadPDF = async () => {
   pdf.save(`IDCard_${emp?.employeeId || 'employee'}.pdf`)
 }
 
-
-
 /* ───────────────────────── data fetch ───────────────────────── */
-
+// Fetch ALL for client-side filter + pagination (change if dataset is too large)
+const fetchEmployees = async () => {
+  isLoading.value = true
+  try {
+    const res = await axios.get('/employees', { params: { limit: 'all' } })
+    employees.value = res.data.employees || []
+    totalEmployees.value = res.data.total || employees.value.length
+    if (page.value > totalPagesLocal.value) page.value = 1
+  } catch (err) {
+    console.error('❌ Failed to fetch employees:', err?.message || err)
+  } finally {
+    isLoading.value = false
+  }
+}
 
 // selected employee for the card preview
 const selectedEmployee = computed(
@@ -329,38 +341,57 @@ const openCardDialog = () => {
   showCardDialog.value = true
 }
 
-
-const fetchEmployees = async () => {
-  const params = {}
-  isLoading.value = true
-
-  if (itemsPerPage.value !== 'all') {
-    params.page = page.value
-    params.limit = itemsPerPage.value
-  } else {
-    params.limit = 'all'
-  }
-
-  try {
-    const res = await axios.get('/employees', { params })
-    employees.value = res.data.employees
-    totalEmployees.value = res.data.total || res.data.employees.length
-    totalPages.value = res.data.totalPages || 1
-
-    if (!res.data.employees.length && page.value > 1) {
-      page.value = Math.max(1, page.value - 1)
-      fetchEmployees()
-    }
-  } catch (err) {
-    console.error('❌ Failed to fetch employees:', err?.message || err)
-  } finally {
-    isLoading.value = false
-  }
+/* ───────────────────────── global filter & pagination (client) ───────────────────────── */
+const toSearchable = (emp) => {
+  const parts = [
+    emp.employeeId,
+    emp.khmerFirstName, emp.khmerLastName,
+    emp.englishFirstName, emp.englishLastName,
+    emp.gender, emp.email,
+    emp.phoneNumber, emp.agentPhoneNumber, emp.agentPerson,
+    emp.marriedStatus, emp.spouseName, emp.spouseContactNumber,
+    emp.religion, emp.nationality, emp.introducerId,
+    emp.department, emp.position, emp.employeeType,
+    emp.line, emp.team, emp.section, emp.shift, emp.status,
+    emp.sourceOfHiring,
+    emp.singleNeedle, emp.overlock, emp.coverstitch, emp.totalMachine,
+    emp.education, emp.idCard, emp.nssf, emp.passport,
+    emp.remark,
+    emp.placeOfBirth?.provinceNameKh, emp.placeOfBirth?.districtNameKh,
+    emp.placeOfBirth?.communeNameKh, emp.placeOfBirth?.villageNameKh,
+    emp.placeOfLiving?.provinceNameKh, emp.placeOfLiving?.districtNameKh,
+    emp.placeOfLiving?.communeNameKh, emp.placeOfLiving?.villageNameKh,
+  ]
+  return parts
+    .flatMap(v => (v && typeof v === 'object') ? Object.values(v) : [v])
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
 }
+
+const filteredEmployees = computed(() => {
+  const term = q.value.trim().toLowerCase()
+  if (!term) return employees.value
+  return employees.value.filter(emp => toSearchable(emp).includes(term))
+})
+
+const totalPagesLocal = computed(() => {
+  if (itemsPerPage.value === 'all') return 1
+  const perPage = parseInt(itemsPerPage.value)
+  if (!perPage || perPage <= 0) return 1
+  return Math.max(1, Math.ceil(filteredEmployees.value.length / perPage))
+})
+
+const paginatedEmployees = computed(() => {
+  if (itemsPerPage.value === 'all') return filteredEmployees.value
+  const perPage = parseInt(itemsPerPage.value)
+  const start = (page.value - 1) * perPage
+  return filteredEmployees.value.slice(start, start + perPage)
+})
 
 /* ───────────────────────── selection ───────────────────────── */
 const toggleSelectAll = () => {
-  const currentPageIds = employees.value.map((emp) => emp._id)
+  const currentPageIds = paginatedEmployees.value.map((emp) => emp._id)
   if (selectAll.value) {
     selected.value = [...new Set([...selected.value, ...currentPageIds])]
   } else {
@@ -368,9 +399,10 @@ const toggleSelectAll = () => {
   }
 }
 
-watch([selected, employees], () => {
-  const currentPageIds = employees.value.map((emp) => emp._id)
-  selectAll.value = currentPageIds.length > 0 && currentPageIds.every((id) => selected.value.includes(id))
+watch([selected, paginatedEmployees], () => {
+  const currentPageIds = paginatedEmployees.value.map((emp) => emp._id)
+  selectAll.value = currentPageIds.length > 0 &&
+    currentPageIds.every((id) => selected.value.includes(id))
 })
 
 /* ───────────────────────── nav & actions ───────────────────────── */
@@ -485,7 +517,6 @@ const exportToExcel = () => {
 /* ───────────────────────── import ───────────────────────── */
 const triggerImportFile = () => fileInput.value?.click()
 
-// pretty HTML list for errors
 const renderIssuesHtml = (items, getTitle, getList) =>
   items
     .slice(0, 12)
@@ -508,7 +539,6 @@ const handleImportExcel = async (event) => {
 
   isLoading.value = true
   try {
-    // Call preview endpoint (same route may return preview or direct-import result)
     const res = await axios.post('/employees/import-excel', form, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
@@ -518,7 +548,6 @@ const handleImportExcel = async (event) => {
     if (hasPreviewPayload) {
       const { toImport = [], duplicates = [], invalid = [] } = res.data || {}
 
-      // Show invalid rows with all reasons
       if (invalid.length) {
         const html = renderIssuesHtml(
           invalid,
@@ -591,7 +620,6 @@ const handleImportExcel = async (event) => {
     })
   } finally {
     isLoading.value = false
-    // reset input so choosing the same file again triggers change
     if (event?.target) event.target.value = ''
   }
 }
@@ -658,6 +686,15 @@ const employeeFields = (emp) => [
   { label: 'Remark', value: emp.remark }
 ]
 
+const getRowNumber = (index) => {
+  const perPage =
+    itemsPerPage.value === 'all'
+      ? filteredEmployees.value.length || 1
+      : parseInt(itemsPerPage.value)
+  return (page.value - 1) * perPage + index + 1
+}
+
+
 const chunkedEmployeeInfo = (emp) => {
   const info = employeeFields(emp)
   const chunked = []
@@ -673,12 +710,16 @@ const getCompletionRate = (emp) => {
 }
 
 /* ───────────────────────── watchers ───────────────────────── */
-watch([page, itemsPerPage], async ([newPage, newLimit], [oldPage, oldLimit]) => {
-  if (newLimit !== oldLimit) page.value = 1
-  await fetchEmployees()
+// Reset to page 1 when the filter changes
+watch(q, () => {
+  page.value = 1
+})
+
+// Recompute locally when page size changes (no refetch needed)
+watch(itemsPerPage, () => {
+  page.value = 1
 })
 </script>
-
 
 <style scoped>
 .table-scroll-wrapper {

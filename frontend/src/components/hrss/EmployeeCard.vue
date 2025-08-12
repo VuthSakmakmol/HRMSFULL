@@ -120,16 +120,37 @@ defineExpose({ cardEl })
 /* Header */
 .header {
   display: grid;
-  grid-template-columns: 220px 1fr 160px;
-  align-items: center;
+  grid-template-columns: auto 1fr auto; /* flexible logo size */
+  align-items: center; /* ✅ vertically center all three columns */
   gap: 24px;
   background: #0c2a66;
   color: #fff;
   padding: 18px 24px;
 }
-.logo { height: 72px; object-fit: contain; }
-.title .brand { font-size: 40px; font-weight: 800; letter-spacing: .5px; }
-.title .sub { font-size: 20px; opacity: .9; margin-top: 2px; }
+
+.logo {
+  height: 72px;
+  object-fit: contain;
+  display: block;
+}
+
+.title {
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* ✅ center title vertically with logo */
+}
+.title .brand {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  line-height: 1.2;
+}
+.title .sub {
+  font-size: 20px;
+  opacity: .9;
+  margin-top: 2px;
+}
+
 .qr img {
   width: 140px; height: 140px; object-fit: contain;
   background: #fff; border-radius: 10px;
