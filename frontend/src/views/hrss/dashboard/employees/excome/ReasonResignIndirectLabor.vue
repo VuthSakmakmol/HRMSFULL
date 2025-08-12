@@ -1,7 +1,7 @@
 <template>
   <v-card class="pa-4 mb-6 rounded-xl elevation-1">
     <h3 class="text-h6 font-weight-bold mb-2">
-      📊 Indirect Labor Resign Reasons ({{ year }})
+      Indirect Labor Resign Reasons ({{ year }})
     </h3>
 
     <v-row class="mb-4" dense>

@@ -1,8 +1,8 @@
 <template>
   <v-card class="pa-4">
-    <v-row class="mb-4" align="center" justify="space-between">
+    <v-row class="mb-4" align-center="center" justify="space-between">
       <v-col cols="12" sm="6">
-        <h3 class="text-h6 font-weight-bold">📊 Monthly Headcount by Position</h3>
+        <h3 class="text-h6 font-weight-bold">Monthly Headcount by Position</h3>
       </v-col>
       <v-col cols="12" sm="3">
         <v-select

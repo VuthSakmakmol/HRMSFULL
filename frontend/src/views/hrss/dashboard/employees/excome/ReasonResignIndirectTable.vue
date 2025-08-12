@@ -1,7 +1,7 @@
 <template>
   <v-card class="pa-4">
     <h3 class="text-h6 font-weight-bold mb-4">
-      📉 Monthly Resign Reason Summary — Indirect Labor ({{ year }})
+      Monthly Resign Reason Summary — Indirect Labor ({{ year }})
     </h3>
 
     <v-table fixed-header class="table-scroll-x elevation-1">

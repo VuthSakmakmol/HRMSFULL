@@ -1,7 +1,7 @@
 <template>
   <v-card class="pa-4 mb-6 rounded-xl elevation-1">
     <h3 class="text-h6 font-weight-bold mb-4">
-      📊 Monthly Resign Reason Summary ({{ year }})
+      Monthly Resign Reason Summary ({{ year }})
     </h3>
 
     <v-row class="mb-4" dense>

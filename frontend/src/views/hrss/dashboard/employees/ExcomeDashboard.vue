@@ -2,14 +2,14 @@
   <v-container fluid class="dashboard-container">
     <!-- Header -->
     <div class="d-flex justify-space-between align-center mb-4">
-      <h2 class="text-h6 font-weight-bold">📊 Excome Dashboard</h2>
+      <h2 class="text-h6 font-weight-bold">Excome Dashboard</h2>
 
       <v-select
         v-model="selectedYear"
         :items="yearOptions"
         label="Select Year"
         variant="outlined"
-        density="comfortable"
+        density="compact"
         hide-details
         style="max-width: 180px"
       />

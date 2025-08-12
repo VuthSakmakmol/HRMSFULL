@@ -2,7 +2,7 @@
   <v-container fluid class="pa-4">
     <!-- Header -->
     <div class="d-flex justify-space-between align-center mb-4">
-      <h2 class="text-h5 font-weight-bold">📊 Attendance Dashboard</h2>
+      <h2 class="text-h5 font-weight-bold">Attendance Dashboard</h2>
 
       <!-- 🌐 Global Filters -->
       <div class="d-flex gap-3">
@@ -11,16 +11,18 @@
           :items="yearOptions"
           label="Select Year"
           variant="outlined"
-          density="comfortable"
+          density="compact"
           hide-details
           style="max-width: 160px"
         />
         <v-select
           v-model="selectedMonth"
           :items="monthOptions"
+          item-title="title"
+          item-value="value"
           label="Select Month"
           variant="outlined"
-          density="comfortable"
+          density="compact"
           hide-details
           style="max-width: 160px"
         />
@@ -96,10 +98,24 @@ const selectedYear = ref(new Date().getFullYear())
 const selectedMonth = ref(new Date().getMonth() + 1)
 
 const yearOptions = Array.from({ length: 6 }, (_, i) => 2020 + i)
-const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
 
-// default visible section
-const activeSection = ref('absentCompare') // or 'sewing' if you prefer
+// 📅 Month options with abbreviations
+const monthOptions = [
+  { title: 'Jan', value: 1 },
+  { title: 'Feb', value: 2 },
+  { title: 'Mar', value: 3 },
+  { title: 'Apr', value: 4 },
+  { title: 'May', value: 5 },
+  { title: 'Jun', value: 6 },
+  { title: 'Jul', value: 7 },
+  { title: 'Aug', value: 8 },
+  { title: 'Sep', value: 9 },
+  { title: 'Oct', value: 10 },
+  { title: 'Nov', value: 11 },
+  { title: 'Dec', value: 12 }
+]
+
+const activeSection = ref('absentCompare') // default section
 </script>
 
 <style scoped>

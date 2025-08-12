@@ -1,6 +1,6 @@
 <template>
   <div>
-    <strong>📊 Direct Labor Headcount</strong>
+    <strong>Direct Labor Headcount</strong>
     <apexchart
       v-if="seriesHeadcount.length"
       type="line"
@@ -11,7 +11,7 @@
 
     <br />
 
-    <strong>📈 Fill Rate and Variance</strong>
+    <strong>Fill Rate and Variance</strong>
     <apexchart
       v-if="seriesFillRate.length"
       type="line"

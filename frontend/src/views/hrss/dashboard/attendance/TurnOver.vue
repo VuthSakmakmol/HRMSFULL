@@ -4,14 +4,14 @@
     <div class="d-flex justify-space-between align-center mb-2">
       <div>
         <h3 class="text-h6 font-weight-bold">
-          🧾 Direct Labor Turnover Rate ({{ selectedYear }})
+          Direct Labor Turnover Rate ({{ selectedYear }})
         </h3>
         <v-select
           v-model="selectedYear"
           :items="yearOptions"
           label="Select Year"
           variant="outlined"
-          density="comfortable"
+          density="compact"
           hide-details
           class="mt-2"
           style="max-width: 150px"

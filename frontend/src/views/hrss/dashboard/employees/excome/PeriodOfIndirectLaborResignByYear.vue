@@ -1,7 +1,7 @@
 <template>
   <v-card class="pa-4 mb-6 rounded-xl elevation-1">
     <h3 class="text-h6 font-weight-bold mb-4">
-      🧾 Period of Indirect Labor Resignation Summary ({{ selectedYear }})
+      Period of Indirect Labor Resignation Summary ({{ selectedYear }})
     </h3>
 
     <v-row class="mb-4">
@@ -11,7 +11,7 @@
           :items="yearOptions"
           label="Select Year"
           variant="outlined"
-          density="comfortable"
+          density="compact"
         />
       </v-col>
     </v-row>
