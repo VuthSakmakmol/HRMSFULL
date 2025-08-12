@@ -3,7 +3,7 @@
     <h2 class="text-h6 font-weight-bold mb-4">{{ $t('employeeManagement') }}</h2>
 
     <!-- Top Bar -->
-    <v-row class="mb-4" align="center" justify="space-between" no-gutters>
+    <v-row class="mb-4" align-center="center" justify="space-between" no-gutters>
       <!-- Buttons -->
       <v-col cols="auto">
         <v-btn color="primary" @click="goToAddEmployee">
