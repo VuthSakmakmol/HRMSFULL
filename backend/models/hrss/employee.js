@@ -1,3 +1,4 @@
+// models/hrss/employee.js
 const mongoose = require('mongoose');
 
 const addressSchema = new mongoose.Schema({
@@ -13,7 +14,7 @@ const employeeSchema = new mongoose.Schema({
 
   // 🔖 Identification
   employeeId: { type: String, default: '' },
-  company: { type: String, default: '' }, // 
+  company: { type: String, default: '' },
 
   // 🧑‍💼 Personal Info
   khmerFirstName: { type: String, default: '' },
@@ -29,7 +30,6 @@ const employeeSchema = new mongoose.Schema({
   agentPerson: { type: String, default: '' },
   note: { type: String, default: '' },
 
-
   // 👪 Family
   marriedStatus: { type: String, enum: ['Single', 'Married', 'Divorced', ''], default: '' },
   spouseName: { type: String, default: '' },
@@ -39,11 +39,12 @@ const employeeSchema = new mongoose.Schema({
   education: { type: String, enum: ['Primary School','Secondary School','High School', 'Bacherlor Degree', 'Master', 'Doctor', ''], default: '' },
   religion: { type: String, enum: [ 'Buddhism', 'Islam' ,'Christianity', 'Hinduism', ''], default: '' },
   nationality: { type: String, enum: ['Khmer', 'Thai', 'Vietnamese', 'Filipino', 'Sri Lankan', 'Bangladehi', 'Indian', ''], default: '' },
-  resignReason: {type: String, enum: ['Could not Contact', 'Take care of child/children', 'Heath Issue', 'Family Issue',
+  resignReason: { type: String, enum: ['Could not Contact', 'Take care of child/children', 'Heath Issue', 'Family Issue',
     'Change Carrer', 'Take care of the parent', 'Personal Issue',
     'Back to homland', 'Family-owned business/farm', 'Supervisor/Leader Attitude', 'Contract not renwed', 'Go to work oversea',
     'Teamwork Issue', 'Distance of the workplace', 'Transportation Issue', ''
   ], default: ''},
+
   // 📍 Address
   placeOfBirth: { type: addressSchema, default: () => ({}) },
   placeOfLiving: { type: addressSchema, default: () => ({}) },
@@ -55,11 +56,15 @@ const employeeSchema = new mongoose.Schema({
   line: { type: String, default: '' },
   team: { type: String, default: '' },
   section: { type: String, default: '' },
+
+  // 🔁 Shift (canonical + legacy)
   defaultShift: { type: String, enum: ['Day Shift', 'Night Shift'], default: 'Day Shift' },
+  shift:       { type: String, default: '' },  // legacy field you already store, e.g. "Night Shift"
+  shiftName:   { type: String, default: '' },  // another legacy variant some DBs use
+
   status: { type: String, enum: ['Working', 'Resign', 'Terminate', 'Abandon', 'Pass Away', 'Retirement', ''], default: 'Working' },
   resignDate: { type: Date, default: null },
   remark: { type: String, default: '' },
-
 
   // 📄 Documents
   idCard: { type: String, default: '' },

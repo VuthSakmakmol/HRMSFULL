@@ -70,7 +70,7 @@ app.use('/api/hrss/excome-monthly', require('./routes/hrss/excome/employeeMonthl
 app.use('/api/attendance', require('./routes/hrss/attendanceRoutes'))
 
 // HRSS Calendar
-app.use('/api/calendar',  require('./routes/hrss/calendarRoutes'));
+app.use('/api/work-calendar',  require('./routes/hrss/calendarRoutes'));
 
 // Attendance Dashboard
 app.use('/api/hrss/attendance-dashboard', require('./routes/hrss/attendanceDashboardRoutes'));

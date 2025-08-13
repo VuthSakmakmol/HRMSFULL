@@ -14,5 +14,6 @@ declare module 'vue' {
     EmployeeCard: typeof import('./src/components/hrss/EmployeeCard.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    WorkCalendarDialog: typeof import('./src/components/hrss/WorkCalendarDialog.vue')['default']
   }
 }

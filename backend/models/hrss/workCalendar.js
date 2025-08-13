@@ -1,10 +1,11 @@
+// models/hrss/workCalendar.js
 const mongoose = require('mongoose');
 
 const workCalendarSchema = new mongoose.Schema({
-  company:   { type: String, required: true, index: true },
-  date:      { type: Date,   required: true }, // store as 00:00:00 local
-  dayType:   { type: String, enum: ['Working', 'Sunday', 'Holiday', 'SpecialWorking'], default: 'Working' },
-  description: { type: String, default: '' }
+  company: { type: String, required: true, index: true },
+  date:    { type: Date, required: true }, // stored at Phnom Penh midnight
+  dayType: { type: String, enum: ['Working', 'Sunday', 'Holiday', 'SpecialWorking'], required: true },
+  note:    { type: String, default: '' }
 }, { timestamps: true });
 
 workCalendarSchema.index({ company: 1, date: 1 }, { unique: true });

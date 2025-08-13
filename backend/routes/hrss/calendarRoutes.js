@@ -7,13 +7,18 @@ const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware');
 const {
   setCalendarDay,
   getCalendarDayTypes,
-} = require('../../controllers/hrss/calendar');
+  getMonthCalendar,
+  bulkUpsert,
+  bulkDelete,
+} = require('../../controllers/hrss/calendarController');
 
-
-// 🗓️ Upsert a single day’s type (Working / Sunday / Holiday / SpecialWorking)
+// Single day set / range read
 router.put('/day', authenticate, authorizeCompanyAccess, setCalendarDay);
-
-// 🗓️ Fetch day types for a range
 router.get('/day-types', authenticate, authorizeCompanyAccess, getCalendarDayTypes);
+
+// Month + bulk ops
+router.get('/month', authenticate, authorizeCompanyAccess, getMonthCalendar);
+router.post('/bulk-upsert', authenticate, authorizeCompanyAccess, bulkUpsert);
+router.post('/bulk-delete', authenticate, authorizeCompanyAccess, bulkDelete);
 
 module.exports = router;

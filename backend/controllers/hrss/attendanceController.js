@@ -1,3 +1,4 @@
+// controllers/hrss/attendanceController.js
 const Attendance   = require('../../models/hrss/attendances');
 const Employee     = require('../../models/hrss/employee');
 const WorkCalendar = require('../../models/hrss/workCalendar');
@@ -10,18 +11,22 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 const TZ = 'Asia/Phnom_Penh';
 
-/* ───────────────────────── helpers (TZ-aware) ───────────────────────── */
-function toMinutes(time) { const [h, m] = String(time).split(':').map(Number); return h * 60 + m; }
+/* ───────────────────────── helpers ───────────────────────── */
+const toMinutes = (time) => {
+  if (!time) return 0;
+  const [h, m] = String(time).split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
 
-function startOfDayTZ(dLike) { return dayjs.tz(dLike, TZ).startOf('day'); }
+const startOfDayTZ = (dLike) => dayjs.tz(dLike, TZ).startOf('day');
 
-function parseTimeToDateTZ(baseDateStr, timeStr) {
+const parseTimeToDateTZ = (baseDateStr, timeStr) => {
   if (!timeStr) return null;
   const [h, m] = String(timeStr).split(':').map(Number);
-  return dayjs.tz(baseDateStr, TZ).hour(h).minute(m).second(0).millisecond(0).toDate();
-}
+  return dayjs.tz(baseDateStr, TZ).hour(h || 0).minute(m || 0).second(0).millisecond(0).toDate();
+};
 
-function formatExcelDate(value) {
+const formatExcelDate = (value) => {
   if (typeof value === 'number') {
     const parsed = XLSX.SSF.parse_date_code(value);
     if (parsed) {
@@ -31,9 +36,17 @@ function formatExcelDate(value) {
   }
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   return null;
-}
+};
 
-function evaluateStatus(startTime, endTime, shiftType) {
+const normalizeShift = (s) => {
+  if (!s) return null;
+  const v = String(s).trim().toLowerCase();
+  if (['day', 'day shift', 'dayshift', 'd', 'day_shift'].includes(v)) return 'Day Shift';
+  if (['night', 'night shift', 'nightshift', 'n', 'night_shift'].includes(v)) return 'Night Shift';
+  return null;
+};
+
+const evaluateStatus = (startTime, endTime, shiftType) => {
   if (!startTime || !endTime) return { status: 'Absent', overtimeMinutes: 0 };
 
   let startMin = toMinutes(startTime);
@@ -59,9 +72,9 @@ function evaluateStatus(startTime, endTime, shiftType) {
   }
 
   return { status: 'Absent', overtimeMinutes: 0 };
-}
+};
 
-function guessShiftFromTimes(startTime, endTime) {
+const guessShiftFromTimes = (startTime, endTime) => {
   if (!startTime && !endTime) return null;
   if (startTime) {
     const sm = toMinutes(startTime);
@@ -73,23 +86,34 @@ function guessShiftFromTimes(startTime, endTime) {
     if (em >= toMinutes('00:00') && em <= toMinutes('06:00')) return 'Night Shift';
   }
   return null;
-}
+};
 
-async function getDayType(company, dateOnly) {
-  const d0 = startOfDayTZ(dateOnly).toDate(); // store & query by local midnight
-  const cal = await WorkCalendar.findOne({ company, date: d0 });
-  if (cal) return cal.dayType;
-  const dow = dayjs.tz(d0, TZ).day(); // 0=Sunday (PHN)
+const getDayType = async (company, dateOnly) => {
+  const d0 = startOfDayTZ(dateOnly).toDate();
+  const cal = await WorkCalendar.findOne({ company, date: d0 }).lean();
+  if (cal?.dayType) return cal.dayType;
+  const dow = dayjs.tz(d0, TZ).day(); // 0=Sunday
   return dow === 0 ? 'Sunday' : 'Working';
-}
+};
 
-/* ─────────────────────── import (validate/commit) ─────────────────────── */
+/* ───────────────────── Import attendance (validate/commit) ─────────────────────
+Body:
+{
+  mode?: 'validate' | 'commit'                // default 'commit'
+  allowMismatch?: boolean                     // default false
+  allowNonWorking?: boolean                   // default false
+  mismatchPolicy?: 'expected' | 'scanned'     // default 'expected'
+  shiftType?: 'Day Shift' | 'Night Shift'     // optional UI assumption
+  rows: [{ employeeId?, fullName?, date, startTime, endTime, leaveType? }]
+}
+*/
 exports.importAttendance = async (req, res) => {
   try {
     const {
       mode = 'commit',
       allowMismatch = false,
       allowNonWorking = false,
+      mismatchPolicy = 'expected',
       shiftType,
       rows = []
     } = req.body;
@@ -99,35 +123,55 @@ exports.importAttendance = async (req, res) => {
       return res.status(400).json({ message: 'Missing company or empty rows' });
     }
 
-    // detect date from first valid row
+    // Detect date of import
     const firstValidDateStr = rows.map(r => formatExcelDate(r.date)).find(Boolean);
-    if (!firstValidDateStr) return res.status(400).json({ message: 'Cannot detect date from file.' });
-
-    const dateOnlyLocal = startOfDayTZ(firstValidDateStr); // PHN
-    const dayType  = await getDayType(company, dateOnlyLocal.toDate());
+    if (!firstValidDateStr) {
+      return res.status(400).json({ message: 'Cannot detect date from file.' });
+    }
+    const dateOnly = startOfDayTZ(firstValidDateStr).toDate();
+    const dayType  = await getDayType(company, dateOnly);
     const isNonWorking = (dayType === 'Sunday' || dayType === 'Holiday');
 
-    // build employee cache (by id)
+    // Employee cache by ID (lean -> keep legacy fields like "shift")
     const ids = [...new Set(rows.map(r => (r.employeeId || '').trim()).filter(Boolean))];
     const empsById = {};
     if (ids.length) {
       const empDocs = await Employee.find({ company, employeeId: { $in: ids } })
-        .select('employeeId englishFirstName englishLastName department position line defaultShift company');
-      for (const e of empDocs) empsById[e.employeeId.trim()] = e;
-    }
+        .select('employeeId englishFirstName englishLastName department position line defaultShift shift shiftName')
+        .lean();
 
-    // fallback by full name
-    const wantNames = rows.some(r => !r.employeeId && r.fullName);
-    const empsByName = {};
-    if (wantNames) {
-      const allDocs = await Employee.find({ company })
-        .select('employeeId englishFirstName englishLastName department position line defaultShift company');
-      for (const e of allDocs) {
-        const key = `${(e.englishFirstName||'').trim()} ${(e.englishLastName||'').trim()}`.trim().toLowerCase();
-        empsByName[key] = e;
+      for (const e of empDocs) {
+        const empShift =
+          normalizeShift(e.defaultShift) ||
+          normalizeShift(e.shift) ||
+          normalizeShift(e.shiftName) ||
+          null;
+
+        empsById[e.employeeId.trim()] = { ...e, __empShift: empShift };
       }
     }
 
+    // Name-based cache (only if needed)
+    const needNameLookup = rows.some(r => !r.employeeId && r.fullName);
+    const empsByName = {};
+    if (needNameLookup) {
+      const allDocs = await Employee.find({ company })
+        .select('employeeId englishFirstName englishLastName department position line defaultShift shift shiftName')
+        .lean();
+
+      for (const e of allDocs) {
+        const key = `${(e.englishFirstName||'').trim()} ${(e.englishLastName||'').trim()}`.trim().toLowerCase();
+        const empShift =
+          normalizeShift(e.defaultShift) ||
+          normalizeShift(e.shift) ||
+          normalizeShift(e.shiftName) ||
+          null;
+
+        if (key) empsByName[key] = { ...e, __empShift: empShift };
+      }
+    }
+
+    // Build prepared rows & mismatch list
     const mismatches = [];
     const prepared = [];
 
@@ -152,11 +196,11 @@ exports.importAttendance = async (req, res) => {
         ? `${empDoc.englishFirstName || ''} ${empDoc.englishLastName || ''}`.trim()
         : (r.fullName || 'Unknown');
 
-      // expected vs scanned shift
-      const empDefault = empDoc?.defaultShift;
-      const guessed    = guessShiftFromTimes(startTime, endTime);
-      const expected   = empDefault || guessed || shiftType || 'Day Shift';
-      const scanned    = shiftType || guessed || expected;
+      // Expected = employee saved shift (wins) → UI shiftType → guessed → Day
+      const empShift = empDoc?.__empShift || null;
+      const guessed  = guessShiftFromTimes(startTime, endTime);
+      const expected = empShift || shiftType || guessed || 'Day Shift';
+      const scanned  = guessed || shiftType || expected;
 
       if (expected && scanned && expected !== scanned) {
         mismatches.push({
@@ -170,7 +214,8 @@ exports.importAttendance = async (req, res) => {
       prepared.push({
         employeeId: resolvedId,
         dateStr, startTime, endTime, leaveType,
-        finalShift: scanned,
+        expectedShift: expected,
+        scannedShift: scanned,
         fullName,
         department: empDoc?.department || '',
         position:   empDoc?.position   || '',
@@ -178,6 +223,7 @@ exports.importAttendance = async (req, res) => {
       });
     }
 
+    // VALIDATE only
     if (mode === 'validate') {
       return res.json({
         ok: true,
@@ -188,6 +234,7 @@ exports.importAttendance = async (req, res) => {
       });
     }
 
+    // Gates
     if (isNonWorking && !allowNonWorking) {
       return res.status(409).json({
         ok: false,
@@ -206,17 +253,23 @@ exports.importAttendance = async (req, res) => {
       });
     }
 
-    // UPSERTS (PHN-correct)
+    // COMMIT
     const summary = [];
+
     for (const p of prepared) {
       if (!p.employeeId) continue;
 
-      const date    = startOfDayTZ(p.dateStr).toDate();                 // local midnight
-      const timeIn  = parseTimeToDateTZ(p.dateStr, p.startTime);        // local → UTC
+      const date    = startOfDayTZ(p.dateStr).toDate();
+      const timeIn  = parseTimeToDateTZ(p.dateStr, p.startTime);
       const timeOut = parseTimeToDateTZ(p.dateStr, p.endTime);
 
-      const { status, overtimeMinutes } = evaluateStatus(p.startTime, p.endTime, p.finalShift);
-      const overtimeHours = overtimeMinutes > 0 ? parseFloat((overtimeMinutes/60).toFixed(2)) : 0;
+      const isMismatch = p.expectedShift && p.scannedShift && p.expectedShift !== p.scannedShift;
+      const finalShift = isMismatch
+        ? (mismatchPolicy === 'scanned' ? p.scannedShift : p.expectedShift)
+        : (p.expectedShift || p.scannedShift || 'Day Shift');
+
+      const { status, overtimeMinutes } = evaluateStatus(p.startTime, p.endTime, finalShift);
+      const overtimeHours = overtimeMinutes > 0 ? parseFloat((overtimeMinutes / 60).toFixed(2)) : 0;
       const finalStatus = (!p.startTime && !p.endTime && p.leaveType) ? 'Leave' : status;
 
       const updated = await Attendance.findOneAndUpdate(
@@ -224,7 +277,7 @@ exports.importAttendance = async (req, res) => {
         {
           employeeId: p.employeeId,
           date,
-          shiftType: p.finalShift,
+          shiftType: finalShift,
           timeIn,
           timeOut,
           status: finalStatus,
@@ -241,55 +294,68 @@ exports.importAttendance = async (req, res) => {
         { upsert: true, new: true }
       );
 
+      // Sync employee status on presence
       if (['OnTime','Late','Overtime'].includes(updated.status)) {
-        await Employee.findOneAndUpdate({ employeeId: p.employeeId, company }, { status: 'Working' });
+        await Employee.findOneAndUpdate(
+          { employeeId: p.employeeId, company },
+          { status: 'Working' }
+        );
       }
 
-      // consecutive absence risk logic
+      // Consecutive absence → risk flags
       if (updated.status === 'Absent') {
-        const currentDate = startOfDayTZ(updated.date); // local day
+        const currentDate = new Date(updated.date);
         let consecutiveAbsent = 1;
 
         for (let i = 1; i <= 10; i++) {
-          const prevStart = currentDate.subtract(i, 'day').toDate();
-          const prevEnd   = currentDate.subtract(i - 1, 'day').toDate();
+          const prevDate = new Date(currentDate);
+          prevDate.setDate(currentDate.getDate() - i);
 
           const prev = await Attendance.findOne({
             employeeId: p.employeeId,
             company,
-            date: { $gte: prevStart, $lt: prevEnd },
+            date: {
+              $gte: new Date(prevDate.setHours(0,0,0,0)),
+              $lt:  new Date(prevDate.setHours(23,59,59,999))
+            },
           });
           if (prev?.status === 'Absent') consecutiveAbsent++; else break;
         }
 
         if (consecutiveAbsent >= 6) {
-          const start = currentDate.subtract(5, 'day').toDate();
+          const start = new Date(currentDate);
+          start.setDate(currentDate.getDate() - 5);
           await Attendance.updateMany(
-            { employeeId: p.employeeId, company, date: { $gte: start, $lt: currentDate.add(1,'day').toDate() }, status: 'Absent' },
+            { employeeId: p.employeeId, company, date: { $gte: start, $lte: currentDate }, status: 'Absent' },
             { riskStatus: 'Abandon' }
           );
           await Employee.findOneAndUpdate({ employeeId: p.employeeId, company }, { status: 'Abandon' });
         } else if (consecutiveAbsent >= 3) {
-          const start = currentDate.subtract(consecutiveAbsent - 1, 'day').toDate();
+          const start = new Date(currentDate);
+          start.setDate(currentDate.getDate() - (consecutiveAbsent - 1));
           await Attendance.updateMany(
-            { employeeId: p.employeeId, company, date: { $gte: start, $lt: currentDate.add(1,'day').toDate() }, status: 'Absent' },
+            { employeeId: p.employeeId, company, date: { $gte: start, $lte: currentDate }, status: 'Absent' },
             { riskStatus: 'NearlyAbandon' }
           );
         }
       }
 
+      // Comeback risk
       if (['OnTime', 'Late'].includes(updated.status)) {
-        const currentDate = startOfDayTZ(updated.date);
+        const currentDate = new Date(updated.date);
         let wasRisk = false;
 
         for (let i = 1; i <= 10; i++) {
-          const prevStart = currentDate.subtract(i, 'day').toDate();
-          const prevEnd   = currentDate.subtract(i - 1, 'day').toDate();
+          const prevDate = new Date(currentDate);
+          prevDate.setDate(currentDate.getDate() - i);
 
           const prev = await Attendance.findOne({
             employeeId: p.employeeId,
             company,
-            date: { $gte: prevStart, $lt: prevEnd },
+            date: {
+              $gte: new Date(prevDate.setHours(0,0,0,0)),
+              $lt:  new Date(prevDate.setHours(23,59,59,999))
+            },
           });
           if (['NearlyAbandon','Abandon'].includes(prev?.riskStatus)) { wasRisk = true; break; }
         }
@@ -348,7 +414,7 @@ exports.updateLeavePermission = async (req, res) => {
         await existing.save();
         result.push({ employeeId, date: formattedDateStr, updated: true });
       } else {
-        const emp = await Employee.findOne({ employeeId, company });
+        const emp = await Employee.findOne({ employeeId, company }).lean();
         const fullName = emp ? `${emp.englishFirstName} ${emp.englishLastName}` : 'Unknown';
         const newLeave = new Attendance({
           employeeId, date, shiftType, status: 'Leave', leaveType, company, fullName
@@ -369,32 +435,22 @@ exports.updateLeavePermission = async (req, res) => {
 exports.getAttendanceDotSummary = async (req, res) => {
   try {
     const company = req.company;
-    const yearRaw = req.query.year;
-    const monthRaw = req.query.month; // 1..12 as string or number
-
-    // Robust parsing
-    const year  = Number.parseInt(yearRaw, 10);
-    const month = Number.parseInt(monthRaw, 10);
-
+    const year  = Number.parseInt(req.query.year, 10);
+    const month = Number.parseInt(req.query.month, 10);
     if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
       return res.status(400).json({ message: 'year and month are required (month 1..12)' });
     }
 
-    // Build PHN-local month window using string form (more reliable than object form)
-    const monthStr = String(month).padStart(2, '0');
+    const monthStr   = String(month).padStart(2, '0');
     const startLocal = dayjs.tz(`${year}-${monthStr}-01 00:00:00`, TZ).startOf('day');
-
     if (!startLocal.isValid()) {
       return res.status(400).json({ message: 'Invalid year/month after parsing' });
     }
 
     const endLocal = startLocal.add(1, 'month');
-
-    // Convert to JS Date for Mongo (these are instants bounding the local month)
     const start = startLocal.toDate();
     const end   = endLocal.toDate();
 
-    // Attendance counts grouped by PHN-local day
     const att = await Attendance.aggregate([
       { $match: { company, date: { $gte: start, $lt: end } } },
       { $project: { d: { $dateTrunc: { date: "$date", unit: "day", timezone: TZ } } } },
@@ -402,26 +458,23 @@ exports.getAttendanceDotSummary = async (req, res) => {
     ]);
     const attMap = new Map(att.map(a => [new Date(a._id).toISOString(), a.c]));
 
-    // Calendar rows in range (Holiday/Sunday overrides)
     const calDocs = await WorkCalendar.find({ company, date: { $gte: start, $lt: end } }).lean();
     const calMap = new Map(
       (calDocs || []).map(c => [
         dayjs.tz(c.date, TZ).startOf('day').toDate().toISOString(),
-        c.dayType // 'Working' | 'Holiday' | 'Sunday' | 'SpecialWorking'
+        c.dayType
       ])
     );
 
     const daysInMonth = startLocal.daysInMonth();
     const dots = [];
-
     for (let i = 0; i < daysInMonth; i++) {
       const dLocal = startLocal.add(i, 'day');
       const keyIso = dLocal.startOf('day').toDate().toISOString();
       const count  = attMap.get(keyIso) || 0;
 
-      // Holiday > Sunday > Missing > Working
-      const calType = calMap.get(keyIso) || null;
       let status;
+      const calType = calMap.get(keyIso) || null;
       if (calType === 'Holiday') status = 'holiday';
       else if (calType === 'Sunday' || (!calType && dLocal.day() === 0)) status = 'sunday';
       else if (count === 0) status = 'missing';
@@ -437,7 +490,6 @@ exports.getAttendanceDotSummary = async (req, res) => {
   }
 };
 
-
 /* ───────────────────── Basic fetch endpoints ───────────────────── */
 exports.getAllAttendance = async (req, res) => {
   try {
@@ -445,7 +497,7 @@ exports.getAllAttendance = async (req, res) => {
     const records = await Attendance.find({ company }).sort({ date: -1 });
     const employeeIds = [...new Set(records.map(r => r.employeeId))];
     const employees = await Employee.find({ employeeId: { $in: employeeIds }, company })
-      .select('employeeId department position line');
+      .select('employeeId department position line').lean();
     const employeeMap = {};
     employees.forEach(emp => { employeeMap[emp.employeeId] = {
       department: emp.department || '', position: emp.position || '', line: emp.line || '',
@@ -467,7 +519,7 @@ exports.getDayShiftAttendance = async (req, res) => {
     const records = await Attendance.find({ shiftType: 'Day Shift', company }).sort({ date: -1 });
     const employeeIds = [...new Set(records.map(r => r.employeeId))];
     const employees = await Employee.find({ employeeId: { $in: employeeIds }, company })
-      .select('employeeId department position line');
+      .select('employeeId department position line').lean();
     const employeeMap = {};
     employees.forEach(emp => { employeeMap[emp.employeeId] = {
       department: emp.department || '', position: emp.position || '', line: emp.line || '',
@@ -489,7 +541,7 @@ exports.getNightShiftAttendance = async (req, res) => {
     const records = await Attendance.find({ shiftType: 'Night Shift', company }).sort({ date: -1 });
     const employeeIds = [...new Set(records.map(r => r.employeeId))];
     const employees = await Employee.find({ employeeId: { $in: employeeIds }, company })
-      .select('employeeId department position line');
+      .select('employeeId department position line').lean();
     const employeeMap = {};
     employees.forEach(emp => { employeeMap[emp.employeeId] = {
       department: emp.department || '', position: emp.position || '', line: emp.line || '',
@@ -514,8 +566,8 @@ exports.getPaginatedAttendance = async (req, res) => {
 
     const query = { company };
     if (date) {
-      const start = startOfDayTZ(date).toDate();                // ✅ PHN start
-      const end   = startOfDayTZ(date).add(1, 'day').toDate();  // ✅ PHN end
+      const start = startOfDayTZ(date).toDate();
+      const end   = startOfDayTZ(date).add(1, 'day').toDate();
       query.date = { $gte: start, $lt: end };
     }
 
@@ -529,7 +581,7 @@ exports.getPaginatedAttendance = async (req, res) => {
 
     const employeeIds = [...new Set(records.map(r => r.employeeId?.trim().toUpperCase()).filter(Boolean))];
     const employees = await Employee.find({ employeeId: { $in: employeeIds }, company })
-      .select('employeeId englishFirstName englishLastName department position line');
+      .select('employeeId englishFirstName englishLastName department position line').lean();
 
     const employeeMap = {};
     employees.forEach(emp => {
