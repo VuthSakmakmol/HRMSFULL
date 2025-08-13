@@ -55,7 +55,7 @@ const employeeSchema = new mongoose.Schema({
   line: { type: String, default: '' },
   team: { type: String, default: '' },
   section: { type: String, default: '' },
-  shift: { type: String, enum: ['Day Shift', 'Night Shift', ''], default: '' },
+  defaultShift: { type: String, enum: ['Day Shift', 'Night Shift'], default: 'Day Shift' },
   status: { type: String, enum: ['Working', 'Resign', 'Terminate', 'Abandon', 'Pass Away', 'Retirement', ''], default: 'Working' },
   resignDate: { type: Date, default: null },
   remark: { type: String, default: '' },

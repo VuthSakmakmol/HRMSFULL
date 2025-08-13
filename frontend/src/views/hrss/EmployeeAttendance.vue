@@ -1,6 +1,6 @@
 <template>
   <v-container fluid class="pa-4">
-    <h2 class="text-h6 font-weight-bold mb-4">🗓️ Attendance Record</h2>
+    <h2 class="text-h6 font-weight-bold mb-4">Attendance Record</h2>
 
     <!-- Top Bar -->
     <v-row class="mb-4" align-center="center" justify="space-between" dense>
@@ -58,35 +58,8 @@
       </v-col>
     </v-row>
 
-    
-    <!-- Import Leave Permission -->
-    <!-- <v-row class="mb-4" align-center justify="space-between">
-      <v-col cols="12" sm="4" md="4">
-        <v-file-input
-          v-model="leaveFile"
-          accept=".xlsx"
-          label="Update Leave File"
-          variant="outlined"
-          prepend-icon="mdi-upload"
-          dense
-          hide-details
-          show-size
-        />
-      </v-col>
-      <v-col cols="12" sm="4" md="3">
-        <v-btn
-          color="info"
-          block
-          :disabled="!leaveFile"
-          @click="handleLeaveUpdate"
-        >
-          <v-icon start>mdi-calendar-check</v-icon> Update Leave
-        </v-btn>
-      </v-col>
-    </v-row> -->
-
     <!-- Filters -->
-    <v-row class="mb-4" dense>
+    <v-row class="mb-2" dense>
       <v-col cols="12" sm="3">
         <v-select
           v-model="selectedShift"
@@ -131,6 +104,9 @@
       </v-col>
     </v-row>
 
+    <!-- Monthly “dot” view -->
+    <AttendanceHeatmap :date="selectedDate" />
+
     <!-- Edit Attendance Dialog -->
     <v-dialog v-model="editDialog" max-width="600">
       <v-card>
@@ -170,7 +146,6 @@
 
     <!-- Attendance Table -->
     <v-card>
-      
       <div class="table-scroll-wrapper">
         <table class="scrollable-table">
           <thead>
@@ -202,8 +177,11 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(item, index) in filteredAttendance" :key="item._id" :class="animateRow(item.status)">
-
+            <tr
+              v-for="(item, index) in filteredAttendance"
+              :key="item._id"
+              :class="animateRow(item.status)"
+            >
               <td>
                 <v-checkbox
                   v-model="selectedRows"
@@ -213,9 +191,9 @@
                 />
               </td>
               <td>{{ index + 1 }}</td>
-              <td>{{ formatDate(item.date) }}</td>                                
-              <td>{{ item.employeeId }}</td>                                 
-              <td>{{ item.fullName }}</td>                                 
+              <td>{{ formatDate(item.date) }}</td>
+              <td>{{ item.employeeId }}</td>
+              <td>{{ item.fullName }}</td>
               <td>{{ item.department || '-' }}</td>
               <td>{{ item.position || '-' }}</td>
               <td>{{ item.line || '-' }}</td>
@@ -241,8 +219,9 @@
               src="https://lottie.host/b3e4008f-9dbd-4b76-b13e-e1cdb52f6190/3JhAvD9aX1.json" />
           </div>
         </table>
-      </div> 
+      </div>
     </v-card>
+
     <v-row align="center" justify="space-between" class="mt-2">
       <v-col cols="12" sm="6">
         <v-select
@@ -273,11 +252,13 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import axios from '@/utils/axios'
-import dayjs from 'dayjs'
+import dayjs from '@/plugins/dayjs'
 import * as XLSX from 'xlsx'
 import { DotLottieVue } from '@lottiefiles/dotlottie-vue'
 import Swal from 'sweetalert2'
-import { useRouter } from 'vue-router';
+import { useRouter } from 'vue-router'
+
+import AttendanceHeatmap from '@/components/hrss/AttendanceHeatmap.vue'
 
 const router = useRouter();
 const excelFile = ref(null)
@@ -288,7 +269,10 @@ const datePicker = ref(false)
 const selectedRows = ref([]);
 const isLoading = ref(true)
 const editDialog = ref(false);
-const selectedDate = ref(dayjs().format('YYYY-MM-DD')); // default to today
+const editLoading = ref(false);
+
+const selectedDate = ref(dayjs().format('YYYY-MM-DD')); // PHN local today
+
 const editForm = ref({
   _id: '',
   employeeId: '',
@@ -296,6 +280,8 @@ const editForm = ref({
   date: '',
   status: '',
   leaveType: '',
+  riskStatus: 'None',
+  overtimeHours: 0,
   note: ''
 });
 const currentPage = ref(1);
@@ -308,7 +294,6 @@ const animateRow = (status) => {
   if (status === 'Risk') return 'risk-highlight';
   return '';
 };
-
 
 // leave
 const leaveFile = ref(null)
@@ -339,28 +324,34 @@ const fetchData = async () => {
   }
 };
 
-
-
 const onPageChange = (newPage) => {
   currentPage.value = newPage;
   fetchData();
 };
 
-const onPageSizeChange = (newSize) => {
-  currentPage.value = 1; // reset to first page
+const onPageSizeChange = (/* newSize */) => {
+  currentPage.value = 1;
   fetchData();
 };
 
 const onDateChange = () => {
-  datePicker.value = false; // close the menu
+  datePicker.value = false;
   console.log(`📅 Date filter changed: ${selectedDate.value}`);
-  fetchData(); // reload attendance for the new date
+  fetchData();
 };
-
 
 onMounted(() => {
   fetchData()
+  window.addEventListener('companyChanged', onCompanyChange)
 })
+onBeforeUnmount(() => {
+  window.removeEventListener('companyChanged', onCompanyChange)
+})
+
+const onCompanyChange = () => {
+  console.log('🔄 Company changed, reloading attendance data...')
+  fetchData()
+}
 
 const filteredAttendance = computed(() =>
   attendance.value.filter(row => {
@@ -382,13 +373,12 @@ const statusColor = status => {
     case 'Overtime': return 'purple';
     case 'Absent': return 'red';
     case 'Leave': return 'blue';
-    case 'NearlyAbandon': return 'yellow darken-2';   // bright warning
-    case 'Abandon': return 'deep-orange accent-4';    // urgent red
-    case 'Risk': return 'pink accent-4';              // eye-catching pink
+    case 'NearlyAbandon': return 'yellow darken-2';
+    case 'Abandon': return 'deep-orange accent-4';
+    case 'Risk': return 'pink accent-4';
     default: return 'grey';
   }
 };
-
 
 const formatStatus = status => {
   switch (status) {
@@ -423,7 +413,6 @@ const formatRiskStatus = (riskStatus) => {
 };
 
 // Evaluate
-
 const startEvaluation = () => {
   if (selectedRows.value.length === 1) {
     const id = selectedRows.value[0];
@@ -432,8 +421,6 @@ const startEvaluation = () => {
     alert('Please select exactly one record to evaluate.');
   }
 };
-
-
 
 const evaluateColor = (evaluate) => {
   switch (evaluate) {
@@ -449,8 +436,7 @@ const formatEvaluate = (evaluate) => {
   return evaluate.replace('Evaluate', 'Evaluation ');
 };
 
-
-
+// PHN-late/OT helpers
 const getLateMinutes = (timeIn, shiftType) => {
   if (!timeIn) return '-'
   const actual = dayjs(timeIn)
@@ -467,10 +453,14 @@ const getLateMinutes = (timeIn, shiftType) => {
 const getOvertimeHours = (timeOut, shiftType) => {
   if (!timeOut) return '-'
   const actual = dayjs(timeOut)
-  const expected = shiftType === 'Night Shift'
+  let expected = shiftType === 'Night Shift'
     ? dayjs(timeOut).hour(3).minute(0).add(1, 'minute')
     : dayjs(timeOut).hour(16).minute(0).add(1, 'minute')
-  if (shiftType === 'Night Shift' && actual.hour() < 12) actual.add(1, 'day')
+
+  // For night shift, if actual is before noon, it is next calendar day in PHN
+  if (shiftType === 'Night Shift' && actual.hour() < 12) {
+    // (No need to mutate actual; dayjs is immutable)
+  }
   const diff = actual.diff(expected, 'minute')
   if (diff <= 0) return 'No'
   const h = Math.floor(diff / 60)
@@ -478,6 +468,7 @@ const getOvertimeHours = (timeOut, shiftType) => {
   return h > 0 ? `${h} hr ${m} min` : `${m} min`
 }
 
+/* ====== VALIDATE ➜ CONFIRM ➜ COMMIT importer (PHN) ====== */
 const handleImport = async () => {
   try {
     const file = excelFile.value;
@@ -491,90 +482,137 @@ const handleImport = async () => {
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet);
 
-      if (rows.length === 0) {
-        console.warn('⚠️ Import file is empty.');
+      if (!rows.length) {
         isLoading.value = false;
-        return;
+        return Swal.fire('Empty file', 'There are no rows to import.', 'warning');
       }
 
-      // 🟢 Auto-select date from first row of the Excel file
-      if (rows[0].date) {
-      let firstDateParsed;
-
-      // Check if date is a number (Excel serial date)
-      if (!isNaN(rows[0].date)) {
-        firstDateParsed = dayjs(new Date(Math.round((rows[0].date - 25569) * 86400 * 1000))); 
-      } else {
-        firstDateParsed = dayjs(rows[0].date);
+      // Auto set filter date from first row (PHN)
+      const first = rows[0]?.date;
+      if (first) {
+        let parsed;
+        if (!isNaN(first)) {
+          const jsDate = new Date(Math.round((first - 25569) * 86400 * 1000));
+          parsed = dayjs(jsDate); // already default PHN
+        } else {
+          parsed = dayjs(first);
+        }
+        if (parsed.isValid()) selectedDate.value = parsed.format('YYYY-MM-DD');
       }
 
-      if (firstDateParsed.isValid()) {
-        const firstDate = firstDateParsed.format('YYYY-MM-DD');
-        selectedDate.value = firstDate;
-        console.log(`📅 Auto-set filter date to imported date: ${firstDate}`);
-      } else {
-        console.warn('⚠️ First row date invalid or missing, falling back to today.');
-        selectedDate.value = dayjs().format('YYYY-MM-DD'); // fallback to today
-      }
-    } else {
-      console.warn('⚠️ First row date missing, falling back to today.');
-      selectedDate.value = dayjs().format('YYYY-MM-DD'); // fallback to today
-    }
-
-
-      // Prepare data rows for API
       const preparedRows = rows.map(r => ({
         employeeId: r.employeeId?.trim() || '',
-        date: r.date,
-        startTime: r.startTime?.trim() || '',
-        endTime: r.endTime?.trim() || '',
-        leaveType: r.leaveType?.trim() || '',
+        fullName:   r.fullName?.trim()   || '',
+        date:       r.date,
+        startTime:  r.startTime?.trim()  || '',
+        endTime:    r.endTime?.trim()    || '',
+        leaveType:  r.leaveType?.trim()  || '',
       }));
 
-      // Chunk rows: 500 rows per request
+      // 1) VALIDATE (no writes)
+      const validatePayload = {
+        mode: 'validate',
+        shiftType: selectedShift.value === 'All' ? undefined : selectedShift.value,
+        rows: preparedRows
+      };
+      const v = await axios.post('/attendance/import', validatePayload);
+      const nonWorkingDay = v.data.nonWorkingDay; // 'Sunday' | 'Holiday' | null
+      const mismatches    = v.data.shiftMismatches || [];
+
+      // Warn on Holiday/Sunday
+      let allowNonWorking = false;
+      if (nonWorkingDay) {
+        const { isConfirmed } = await Swal.fire({
+          icon: 'warning',
+          title: `This date is ${nonWorkingDay}`,
+          html: `<p>Please change the day type in <b>Work Calendar</b> if needed, then re-import.</p>`,
+          showCancelButton: true,
+          confirmButtonText: 'Import anyway',
+          cancelButtonText: 'Cancel'
+        });
+        if (!isConfirmed) { isLoading.value = false; return; }
+        allowNonWorking = true;
+      }
+
+      // Show mismatches
+      let allowMismatch = true;
+      if (mismatches.length) {
+        const htmlRows = mismatches.slice(0, 15).map(m => `
+          <tr>
+            <td>${m.employeeId}</td>
+            <td>${m.fullName}</td>
+            <td>${m.startTime || '-'}</td>
+            <td>${m.endTime || '-'}</td>
+            <td>${m.expectedShift}</td>
+            <td>${m.scannedShift}</td>
+          </tr>
+        `).join('');
+        const extra = mismatches.length > 15
+          ? `<tr><td colspan="6">...and ${mismatches.length - 15} more</td></tr>`
+          : '';
+        const { isConfirmed } = await Swal.fire({
+          width: 800,
+          icon: 'warning',
+          title: 'Shift mismatch detected',
+          html: `
+            <p>The following employees scanned a different shift than expected. Continue?</p>
+            <div style="max-height:300px; overflow:auto; border:1px solid #ddd">
+              <table style="width:100%; font-size:12px">
+                <thead>
+                  <tr><th>ID</th><th>Name</th><th>In</th><th>Out</th><th>Expected</th><th>Scanned</th></tr>
+                </thead>
+                <tbody>${htmlRows}${extra}</tbody>
+              </table>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: 'Import anyway',
+          cancelButtonText: 'Cancel'
+        });
+        if (!isConfirmed) { isLoading.value = false; return; }
+        allowMismatch = true;
+      }
+
+      // 2) COMMIT (write, chunked)
       const chunkArray = (array, size) => {
         const result = [];
-        for (let i = 0; i < array.length; i += size) {
-          result.push(array.slice(i, i + size));
-        }
+        for (let i = 0; i < array.length; i += size) result.push(array.slice(i, i + size));
         return result;
       };
-
       const chunks = chunkArray(preparedRows, 500);
-
       let totalImported = 0;
 
       for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        console.log(`🚚 Sending chunk ${i + 1}/${chunks.length} (${chunk.length} rows)`);
-
+        const payload = {
+          mode: 'commit',
+          allowMismatch,
+          allowNonWorking,
+          shiftType: selectedShift.value === 'All' ? undefined : selectedShift.value,
+          rows: chunks[i]
+        };
         try {
-          const res = await axios.post('/attendance/import', {
-            shiftType: selectedShift.value === 'All' ? 'Day Shift' : selectedShift.value,
-            rows: chunk,
-          });
-          console.log(`✅ Chunk ${i + 1} imported:`, res.data);
-          totalImported += res.data.summary.length;
+          const res = await axios.post('/attendance/import', payload);
+          totalImported += (res.data.summary || []).length;
         } catch (err) {
-          console.error(`❌ Chunk ${i + 1} failed:`, err.message);
+          console.error(`❌ Chunk ${i + 1} failed:`, err?.response?.data || err.message);
         }
       }
 
-      console.log(`✅ Total attendance records imported: ${totalImported}`);
       await fetchData();
       excelFile.value = null;
+      Swal.fire('Done', `Imported ${totalImported} rows.`, 'success');
     };
 
     reader.readAsArrayBuffer(file);
   } catch (err) {
     console.error('❌ Import failed:', err.message);
+    Swal.fire('Import failed', err.message, 'error');
   } finally {
     isLoading.value = false;
   }
 };
 
-
-
+/* ====== Leave Update stays as you had (optional) ====== */
 const handleLeaveUpdate = async () => {
   try {
     const file = leaveFile.value;
@@ -595,7 +633,6 @@ const handleLeaveUpdate = async () => {
         return;
       }
 
-      // 🟢 Prepare rows with expected fields
       const preparedRows = rows.map(r => ({
         employeeId: r.employeeId?.trim() || '',
         date: r.date,
@@ -603,7 +640,6 @@ const handleLeaveUpdate = async () => {
         leaveType: r.leaveType?.trim() || '',
       }));
 
-      // 🟢 Extract unique dates & employees
       const uniqueDates = [...new Set(preparedRows.map(r => dayjs(r.date).format('YYYY-MM-DD')))];
       const uniqueEmployees = [...new Set(preparedRows.map(r => r.employeeId))];
 
@@ -620,7 +656,6 @@ const handleLeaveUpdate = async () => {
           allowOutsideClick: false,
           allowEnterKey: true
         })
-
         if (!isConfirmed) {
           console.log('❌ Leave update cancelled by user.');
           leaveFile.value = null;
@@ -629,28 +664,18 @@ const handleLeaveUpdate = async () => {
         }
       }
 
-      // 🟢 Chunk rows: 500 per request
       const chunkArray = (array, size) => {
         const result = [];
-        for (let i = 0; i < array.length; i += size) {
-          result.push(array.slice(i, i + size));
-        }
+        for (let i = 0; i < array.length; i += size) result.push(array.slice(i, i + size));
         return result;
       };
-
       const chunks = chunkArray(preparedRows, 500);
 
       let totalProcessed = 0;
-
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
-        console.log(`🚚 Sending leave chunk ${i + 1}/${chunks.length} (${chunk.length} rows)`);
-
         try {
-          const res = await axios.post('/attendance/update-leave', {
-            rows: chunk,
-          });
-          console.log(`✅ Leave chunk ${i + 1} processed:`, res.data);
+          const res = await axios.post('/attendance/update-leave', { rows: chunk });
           totalProcessed += res.data.result.length;
         } catch (err) {
           console.error(`❌ Leave chunk ${i + 1} failed:`, err.message);
@@ -670,8 +695,6 @@ const handleLeaveUpdate = async () => {
   }
 };
 
-
-
 const allSelected = computed({
   get: () => selectedRows.value.length === filteredAttendance.value.length && filteredAttendance.value.length > 0,
   set: (value) => {
@@ -682,7 +705,6 @@ const allSelected = computed({
 const isIndeterminate = computed(() =>
   selectedRows.value.length > 0 && selectedRows.value.length < filteredAttendance.value.length
 );
-
 
 const editSelected = () => {
   if (selectedRows.value.length === 1) {
@@ -696,6 +718,8 @@ const editSelected = () => {
         date: formatDate(record.date),
         status: record.status,
         leaveType: record.leaveType || '',
+        riskStatus: record.riskStatus || 'None',
+        overtimeHours: record.overtimeHours || 0,
         note: record.note || ''
       };
       editDialog.value = true;
@@ -703,9 +727,9 @@ const editSelected = () => {
   }
 };
 
-
 const submitEdit = async () => {
   try {
+    editLoading.value = true;
     const payload = {
       status: editForm.value.status,
       leaveType: editForm.value.status === 'Leave' ? editForm.value.leaveType : '',
@@ -719,9 +743,10 @@ const submitEdit = async () => {
     await fetchData();
   } catch (err) {
     console.error('❌ Update failed:', err.message);
+  } finally {
+    editLoading.value = false;
   }
 };
-
 
 const deleteSelected = async () => {
   if (selectedRows.value.length === 0) return;
@@ -739,29 +764,11 @@ const deleteSelected = async () => {
   }
 };
 
-
-
-// ✅ Auto-reload when company changes
-const onCompanyChange = () => {
-  console.log('🔄 Company changed, reloading attendance data...')
-  fetchData()
-}
-
-onMounted(() => {
-  window.addEventListener('companyChanged', onCompanyChange)
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('companyChanged', onCompanyChange)
-})
-
-// simulate loading
+// simulate loading (optional)
 setTimeout(() => {
   isLoading.value = false
 }, 2000)
-
 </script>
-
 
 <style scoped>
 .table-scroll-wrapper {
@@ -803,10 +810,9 @@ setTimeout(() => {
   50% { transform: translateX(4px); }
   75% { transform: translateX(-4px); }
 }
-
 .shake-animation {
   animation: shake 0.6s ease-in-out infinite;
-  background-color: #df7f5c; /* subtle yellow highlight */
+  background-color: #df7f5c;
 }
 
 @keyframes pulse {
@@ -814,10 +820,7 @@ setTimeout(() => {
   50% { background-color: #ffc2d4; }
   100% { background-color: #ffe6eb; }
 }
-
 .risk-highlight {
   animation: pulse 2s infinite;
 }
-
-
 </style>

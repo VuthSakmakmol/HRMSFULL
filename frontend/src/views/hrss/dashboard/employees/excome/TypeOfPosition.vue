@@ -11,6 +11,7 @@
           label="Select Year"
           dense
           variant="outlined"
+          density="compact"
           @update:modelValue="fetchSnapshots"
         />
       </v-col>

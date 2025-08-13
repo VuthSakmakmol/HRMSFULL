@@ -1,12 +1,15 @@
 const express = require('express');
 const router = express.Router();
+
 const { authenticate } = require('../../middlewares/authMiddleware');
 const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware');
+
 const {
   getAllAttendance,
   getDayShiftAttendance,
   getNightShiftAttendance,
   getPaginatedAttendance,
+  getAttendanceDotSummary,   // ⬅️ NEW
   importAttendance,
   updateAttendance,
   updateLeavePermission,
@@ -15,7 +18,7 @@ const {
   getAttendanceHistoryByEmployeeId,
 } = require('../../controllers/hrss/attendanceController');
 
-// 📥 Import Attendance
+// 📥 Import Attendance (validate/commit supported by controller)
 router.post('/import', authenticate, authorizeCompanyAccess, importAttendance);
 
 // ✅ Update Leave Permission
@@ -24,28 +27,28 @@ router.post('/update-leave', authenticate, authorizeCompanyAccess, updateLeavePe
 // 📄 Fetch All Attendances
 router.get('/', authenticate, authorizeCompanyAccess, getAllAttendance);
 
-// ☀️ Fetch Day Shift Attendance
+// ☀️ Day Shift
 router.get('/day', authenticate, authorizeCompanyAccess, getDayShiftAttendance);
 
-// 🌙 Fetch Night Shift Attendance
+// 🌙 Night Shift
 router.get('/night', authenticate, authorizeCompanyAccess, getNightShiftAttendance);
 
-// 📃 Fetch Paginated Attendance
+// 📃 Paginated
 router.get('/paginated', authenticate, authorizeCompanyAccess, getPaginatedAttendance);
 
-// 🆕 ✅ Get Single Attendance by Attendance ID (for EvaluatePage)
+// 🟩 GitHub-style monthly dots (Working / Missing / Holiday / Sunday)
+router.get('/dots', authenticate, authorizeCompanyAccess, getAttendanceDotSummary);
+
+// 🆕 Get Single Attendance by ID (used by Evaluate page)
 router.get('/attendances/:id', authenticate, authorizeCompanyAccess, getAttendanceById);
 
-// 🆕 ✅ Get Full Attendance History by Employee ID (for EvaluatePage)
+// 🆕 Full Attendance History by Employee ID
 router.get('/history/:employeeId', authenticate, authorizeCompanyAccess, getAttendanceHistoryByEmployeeId);
 
-// ✏️ Update Attendance Row (general edit)
+// ✏️ Update Attendance row
 router.put('/:id', authenticate, authorizeCompanyAccess, updateAttendance);
 
-// 🗑️ Delete Attendance Row
+// 🗑️ Delete Attendance row
 router.delete('/:id', authenticate, authorizeCompanyAccess, deleteAttendance);
-
-
-
 
 module.exports = router;

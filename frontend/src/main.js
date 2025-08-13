@@ -24,6 +24,9 @@ import th from '@/locales/th'
 // Styles
 import 'unfonts.css'
 
+// 🕒 Day.js (Phnom Penh timezone)
+import dayjs from '@/plugins/dayjs' // sets Asia/Phnom_Penh as default TZ
+
 // Register Font Awesome icons
 library.add(fas)
 
@@ -39,24 +42,23 @@ app.component('font-awesome-icon', FontAwesomeIcon)
 // ✅ Register Vuetify and other plugins
 registerPlugins(app)
 
-// ✅ Socket.IO globally (correct path)
+// ✅ Socket.IO globally
 import socket, { joinSocketRoom } from '@/utils/socket'
 app.config.globalProperties.$socket = socket
 app.provide('$socket', socket)
 
+// ✅ Provide Day.js globally (use inside components as this.$dayjs or inject('dayjs'))
+app.config.globalProperties.$dayjs = dayjs
+app.provide('dayjs', dayjs)
+
 // ✅ I18n setup
 const i18n = createI18n({
   legacy: false,
-  locale: localStorage.getItem('lang') || 'en', // Default or saved
+  locale: localStorage.getItem('lang') || 'en',
   fallbackLocale: 'en',
-  messages: {
-    en,
-    kh,
-    th
-  }
+  messages: { en, kh, th }
 })
 app.use(i18n)
-
 
 // ✅ Mount app
 app.mount('#app')
