@@ -26,15 +26,62 @@ const parseTimeToDateTZ = (baseDateStr, timeStr) => {
   return dayjs.tz(baseDateStr, TZ).hour(h || 0).minute(m || 0).second(0).millisecond(0).toDate();
 };
 
+/**
+ * Accepts Excel serial numbers and many string formats:
+ * - "YYYY-MM-DD", "YYYY-M-D"
+ * - "D-M-YYYY", "DD-MM-YYYY"
+ * - "M-D-YYYY" (fallback month-first)
+ * - With separators "/", ".", " " (they are normalized)
+ * Returns "YYYY-MM-DD" (date only) or null.
+ */
 const formatExcelDate = (value) => {
-  if (typeof value === 'number') {
+  if (value == null || value === '') return null;
+
+  // 1) Excel serial (including fractional time) -> date part only
+  if (typeof value === 'number' && isFinite(value)) {
     const parsed = XLSX.SSF.parse_date_code(value);
-    if (parsed) {
-      const { y, m, d } = parsed;
-      return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    if (parsed && parsed.y && parsed.m && parsed.d) {
+      const y = parsed.y;
+      const m = String(parsed.m).padStart(2, '0');
+      const d = String(parsed.d).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     }
+    return null;
   }
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  // 2) String formats
+  if (typeof value === 'string') {
+    let s = value.trim();
+    if (!s) return null;
+
+    // unify delimiters to "-": supports "/", ".", "\" and spaces
+    s = s.replace(/[./\\\s]+/g, '-');
+
+    // a) YYYY-MM-DD or YYYY-M-D
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) {
+      const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+      if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+        return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      }
+      return null;
+    }
+
+    // b) D-M-YYYY or DD-MM-YYYY (day-first; common locally)
+    m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (m) {
+      const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);
+      if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+        return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      }
+      return null;
+    }
+
+    // c) fallback: let dayjs try anything else
+    const tentative = dayjs(s);
+    if (tentative.isValid()) return tentative.format('YYYY-MM-DD');
+  }
+
   return null;
 };
 
@@ -126,7 +173,11 @@ exports.importAttendance = async (req, res) => {
     // Detect date of import
     const firstValidDateStr = rows.map(r => formatExcelDate(r.date)).find(Boolean);
     if (!firstValidDateStr) {
-      return res.status(400).json({ message: 'Cannot detect date from file.' });
+      const sample = rows.slice(0, 3).map((r,i) => `[${i}] date=${JSON.stringify(r.date)}`).join(', ');
+      return res.status(400).json({
+        message: 'Cannot detect date from file.',
+        hint: `Sample values: ${sample}`
+      });
     }
     const dateOnly = startOfDayTZ(firstValidDateStr).toDate();
     const dayType  = await getDayType(company, dateOnly);

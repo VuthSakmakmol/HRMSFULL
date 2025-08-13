@@ -5,48 +5,38 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
-const bodyParser = require('body-parser');
 
 dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-  }
-});
-
+/* ───────────────────────── WebSocket ───────────────────────── */
+const io = new Server(server, { cors: { origin: '*' } });
 io.on('connection', (socket) => {
-  console.log('📡 WebSocket client connected:', socket.id)
-
-  socket.on('joinRoom', (roomName) => {
-    socket.join(roomName)
-    console.log(`📥 Socket ${socket.id} joined room: ${roomName}`)
-  })
-
-  socket.on('disconnect', () => {
-    console.log('❌ Client disconnected:', socket.id)
-  })
-})
-
-
+  console.log('📡 WebSocket client connected:', socket.id);
+  socket.on('joinRoom', (roomName) => socket.join(roomName));
+  socket.on('disconnect', () => console.log('❌ Client disconnected:', socket.id));
+});
 app.set('io', io);
 
-// ─── MIDDLEWARE ────────────────────────────────────────────────────────────────
+/* ───────────────────────── Middleware (ORDER MATTERS) ───────────────────────── */
+// CORS first
 app.use(cors());
-app.use(express.json());
 
-// 🔗 Serve candidate documents
+// ⬇️ SINGLE body parser with large limits (applies to ALL routes below)
+app.use(express.json({ limit: '800mb' }));
+app.use(express.urlencoded({ limit: '800mb', extended: true }));
+
+// 🔗 Static (ok to keep here)
 app.use('/uploads/candidate_docs', express.static(path.join(__dirname, 'uploads/candidate_docs')));
+app.use('/upload', express.static(path.join(__dirname, 'upload')));
 
-// ─── API ROUTES ────────────────────────────────────────────────────────────────
-
-// General Auth/User Routes
+/* ───────────────────────── API ROUTES ───────────────────────── */
+// General
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/auth', require('./routes/authRoutes'));
 
-// TA Module Routes
+// TA
 app.use('/api', require('./routes/ta/departmentRoutes'));
 app.use('/api', require('./routes/ta/jobRequisitionRoutes'));
 app.use('/api/roadmaps', require('./routes/ta/roadmapRoutes'));
@@ -56,74 +46,37 @@ app.use('/api/recruiters', require('./routes/ta/recruiterRoutes'));
 app.use('/api/candidates', require('./routes/ta/candidateRoutes'));
 app.use('/api/activity-logs', require('./routes/ta/activityLogRoutes'));
 
-// HRSS Module Routes
-app.use('/api/employees', require('./routes/hrss/employeeRoutes')); 
-app.use('/api/location', require('./routes/hrss/locationRoutes'))
-app.use('/api/meta', require('./routes/hrss/metaRoutes'))
-
-// excome
-app.use('/api/hrss/excome', require('./routes/hrss/excomeRoutes')); // contains getMonthlyResignReasonStats
-app.use('/api/hrss/excome-monthly', require('./routes/hrss/excome/employeeMonthlyCountRoutes')); // contains snapshot logic
-
-
-// HRSS Attendance
-app.use('/api/attendance', require('./routes/hrss/attendanceRoutes'))
-
-// HRSS Calendar
-app.use('/api/work-calendar',  require('./routes/hrss/calendarRoutes'));
-
-// Attendance Dashboard
+// HRSS
+app.use('/api/employees', require('./routes/hrss/employeeRoutes'));
+app.use('/api/location', require('./routes/hrss/locationRoutes'));
+app.use('/api/meta', require('./routes/hrss/metaRoutes'));
+app.use('/api/hrss/excome', require('./routes/hrss/excomeRoutes'));
+app.use('/api/hrss/excome-monthly', require('./routes/hrss/excome/employeeMonthlyCountRoutes'));
+app.use('/api/attendance', require('./routes/hrss/attendanceRoutes'));
+app.use('/api/work-calendar', require('./routes/hrss/calendarRoutes'));
 app.use('/api/hrss/attendance-dashboard', require('./routes/hrss/attendanceDashboardRoutes'));
-
-// Manpower 
-app.use('/api/hrss/manpower', require('./routes/hrss/manpower'))
-
-// Evaluate
+app.use('/api/hrss/manpower', require('./routes/hrss/manpower'));
 app.use('/api/evaluations', require('./routes/hrss/evaluationRoutes'));
-
-// HRSS Dashboard
 app.use('/api/hrss/dashboard', require('./routes/hrss/dashboardRoutes'));
 
+// Upload routes (if any)
+app.use('/api/upload', require('./routes/hrss/upload'));
 
-// 🔗 Serve uploaded profile images
-app.use('/upload', express.static(path.join(__dirname, 'upload'))) // ✅ required
+/* ───────────────────────── Health + Frontend ───────────────────────── */
+app.get('/api/health', (req, res) => res.send('✅ HRMS API is running...'));
 
-// 📦 Register upload route
-const uploadRoutes = require('./routes/hrss/upload')
-app.use('/api/upload', uploadRoutes) // ✅ mount it under /api/upload
-
-
-// ─── SERVE FRONTEND STATIC FILES ───────────────────────────────────────────────
 const frontendDist = path.join(__dirname, '../frontend/dist');
 app.use(express.static(frontendDist));
 
-// ─── HEALTH CHECK (should be before wildcard catch) ────────────────────────────
-app.get('/api/health', (req, res) => {
-  res.send('✅ HRMS API is running...');
-});
-
-// ⚠️ This must be the LAST route — it will match everything else
-// DO NOT place any app.use or app.get below this!
+// ⚠️ Keep this LAST
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(frontendDist, 'index.html'));
 });
 
-// Large data import
-app.use(bodyParser.json({ limit: '100mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '100mb' }));
+/* ───────────────────────── Mongo + Server ───────────────────────── */
+mongoose.connect(process.env.MONGO_URI).then(() => {
+  console.log('✅ MongoDB connected');
+}).catch(err => console.error('❌ MongoDB connection error:', err));
 
-
-// ─── MONGODB CONNECTION ────────────────────────────────────────────────────────
-mongoose.connect(process.env.MONGO_URI, {
-
-})
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
-
-// ─── START SERVER ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4700;
-
-server.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`);
-});
-
+server.listen(PORT, () => console.log(`🚀 Server running at http://localhost:${PORT}`));

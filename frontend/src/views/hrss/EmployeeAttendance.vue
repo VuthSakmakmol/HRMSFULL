@@ -3,6 +3,14 @@
     <v-card class="mb-4 elevation-1 rounded-2xl">
       <v-toolbar color="primary" density="comfortable" class="rounded-t-2xl" title="Attendance Record">
         <template #append>
+          <div v-if="importProg.active" class="d-flex align-center mr-2" style="gap:8px;">
+            <v-progress-circular indeterminate size="18" width="2" color="white" />
+            <v-chip density="comfortable" color="white" text-color="primary" variant="flat">
+              {{ importProg.sent.toLocaleString() }} / {{ importProg.total.toLocaleString() }}
+              ({{ importPct }}%)
+            </v-chip>
+          </div>
+
           <v-btn variant="flat" color="white" @click="fetchData">
             <v-icon start>mdi-refresh</v-icon> Refresh
           </v-btn>
@@ -321,7 +329,7 @@ const editDialog = ref(false)
 const editLoading = ref(false)
 const calendarDialog = ref(false)
 
-const selectedDate = ref(dayjs().format('YYYY-MM-DD')) // PHN local today
+const selectedDate = ref(dayjs().format('YYYY-MM-DD'))
 
 const editForm = ref({
   _id: '', employeeId: '', fullName: '', date: '',
@@ -337,6 +345,11 @@ const animateRow = (status) => {
   if (status === 'Risk') return 'risk-highlight'
   return ''
 }
+
+const importProg = ref({ active: false, sent: 0, total: 0 });
+const importPct = computed(() => importProg.value.total
+  ? Math.round((importProg.value.sent / importProg.value.total) * 100)
+  : 0);
 
 const formattedDate = computed(() =>
   selectedDate.value ? dayjs(selectedDate.value).format('YYYY-MM-DD') : ''
@@ -415,11 +428,7 @@ const riskColor = (r) => ({
   Evaluated2: 'blue-darken-2'
 }[r] || 'grey')
 
-const formatRiskStatus = (r) => {
-  if (!r || r === 'None') return '-'
-  if (/^Evaluated/.test(r)) return r.replace('Evaluated', 'Evaluated (')
-  return r
-}
+const formatRiskStatus = (r) => (!r || r === 'None') ? '-' : (/^Evaluated/.test(r) ? r.replace('Evaluated', 'Evaluated (') : r)
 
 const evaluateColor = (e) => ({
   Evaluate1: 'green-darken-1',
@@ -453,21 +462,46 @@ const getOvertimeHours = (timeOut, shiftType) => {
   return h > 0 ? `${h} hr ${m} min` : `${m} min`
 }
 
-// VALIDATE ➜ CONFIRM ➜ COMMIT importer
+/* =========================
+   VALIDATE ➜ COMMIT importer
+   With chunking (1,200 rows/chunk) -> 3,600 rows = 3 chunks
+   ========================= */
 const handleImport = async () => {
-  // helper: Excel serial time/JS date -> "HH:mm"
+  // helper: Excel serial/strings -> "HH:mm"
   const toHHmm = (v) => {
     if (v == null || v === '') return '';
     if (typeof v === 'number') {
-      // Excel time is a fraction of a day
-      const totalMinutes = Math.round(v * 24 * 60);
+      const totalMinutes = Math.round(v * 24 * 60); // Excel time is fraction of a day
       const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
       const mm = String(totalMinutes % 60).padStart(2, '0');
       return `${hh}:${mm}`;
     }
-    // Strings like "7:05", "07:05", "07:05:00"
     const m = String(v).trim().match(/^(\d{1,2}):(\d{2})/);
     return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
+  };
+
+  // helper: Date cell -> "YYYY-MM-DD"
+  const toYMD = (v) => {
+    if (v == null || v === '') return '';
+    if (typeof v === 'number' && isFinite(v)) {
+      const jsDate = new Date(Math.round((v - 25569) * 86400 * 1000));
+      return dayjs(jsDate).format('YYYY-MM-DD');
+    }
+    const s = String(v).trim();
+    if (!s) return '';
+    const t = s.replace(/[./\\\s]+/g, '-');
+    let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) return dayjs(`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`).format('YYYY-MM-DD');
+    m = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (m) return dayjs(`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`).format('YYYY-MM-DD');
+    const d = dayjs(s);
+    return d.isValid() ? d.format('YYYY-MM-DD') : '';
+  };
+
+  const chunkify = (arr, size) => {
+    const out = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
   };
 
   try {
@@ -482,15 +516,19 @@ const handleImport = async () => {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rawRows = XLSX.utils.sheet_to_json(sheet);
+        const rawRows = XLSX.utils.sheet_to_json(sheet, {
+          defval: '',
+          blankrows: false,
+          raw: false
+        });
 
         if (!rawRows.length) {
           isLoading.value = false;
           return Swal.fire('Empty file', 'No rows to import.', 'warning');
         }
 
-        // Auto-set selected date (Cambodia / Phnom Penh)
-        const firstDateCell = rawRows[0]?.date;
+        // Auto-pick the file's date into the filter (Asia/Phnom_Penh)
+        const firstDateCell = rawRows[0]?.date ?? rawRows[0]?.Date ?? rawRows[0]?.DATE;
         if (firstDateCell !== undefined) {
           let parsed;
           if (typeof firstDateCell === 'number') {
@@ -502,63 +540,64 @@ const handleImport = async () => {
           if (parsed.isValid()) selectedDate.value = parsed.format('YYYY-MM-DD');
         }
 
-        // Normalize rows for API
+        // Normalize to API shape
         const preparedRows = rawRows.map(r => ({
-          employeeId: (r.employeeId || '').trim(),
-          fullName: (r.fullName || r.name || '').trim(),
-          date: r.date,                                // number or 'YYYY-MM-DD' (backend handles)
-          startTime: toHHmm(r.startTime),              // normalize to "HH:mm"
-          endTime: toHHmm(r.endTime),
-          leaveType: (r.leaveType || '').trim(),
-        }));
+          employeeId: String(r.employeeId || r.EmployeeID || r['Employee ID'] || '').trim(),
+          fullName:   String(r.fullName   || r.FullName   || r['Full Name']   || r.name || '').trim(),
+          date:        toYMD(r.date || r.Date || r.DATE),
+          startTime:   toHHmm(r.startTime || r.StartTime || r['Time In']  || r.TimeIn),
+          endTime:     toHHmm(r.endTime   || r.EndTime   || r['Time Out'] || r.TimeOut),
+          leaveType:  String(r.leaveType  || r.LeaveType || r['Leave Type'] || '').trim(),
+        })).filter(r => r.date);
 
-        // 1) VALIDATE (no writes)
+        // progress: initialize
+        importProg.value = { active: true, sent: 0, total: preparedRows.length };
+
+        // 1) VALIDATE
         const validatePayload = {
           mode: 'validate',
           shiftType: selectedShift.value === 'All' ? undefined : selectedShift.value,
           rows: preparedRows
         };
 
-        let v;
+        let vres;
         try {
-          v = await axios.post('/attendance/import', validatePayload);
+          vres = await axios.post('/attendance/import', validatePayload);
         } catch (err) {
-          console.error('validate failed', err?.response?.data || err.message);
           throw new Error(err?.response?.data?.message || 'Validation failed');
         }
 
-        const nonWorkingDay = v.data.nonWorkingDay;         // 'Sunday' | 'Holiday' | null
-        const mismatches    = v.data.shiftMismatches || []; // [{employeeId, fullName, expectedShift, scannedShift, ...}]
+        const nonWorkingDay = vres.data.nonWorkingDay || null;
+        const mismatches    = vres.data.shiftMismatches || [];
 
-        // If there’s nothing risky, commit immediately with safe defaults
+        // 2) If safe, commit directly (fast path)
+        
         if (!nonWorkingDay && mismatches.length === 0) {
-          // chunk & commit with default policy = 'expected'
-          const chunk = (arr, size) => arr.reduce((acc, _, i) => {
-            if (i % size === 0) acc.push(arr.slice(i, i + size));
-            return acc;
-          }, []);
-          const chunks = chunk(preparedRows, 500);
-          let total = 0;
-
-          for (const part of chunks) {
+          let totalWritten = 0;
+          for (const part of chunkify(preparedRows, CHUNK_SIZE)) {
             const payload = {
               mode: 'commit',
-              allowMismatch: true,     // no mismatches anyway
-              allowNonWorking: true,   // not non-working anyway
+              allowMismatch: true,
+              allowNonWorking: true,
               mismatchPolicy: 'expected',
               shiftType: selectedShift.value === 'All' ? undefined : selectedShift.value,
               rows: part
             };
             const res = await axios.post('/attendance/import', payload);
-            total += (res.data.summary || []).length;
+            totalWritten += (res.data.summary || []).length;
+
+            importProg.value.sent = Math.min(importProg.value.total, importProg.value.sent + part.length);
           }
 
           await fetchData();
           excelFile.value = null;
-          return Swal.fire('Imported', `Imported ${total} rows.`, 'success');
+          Swal.fire('Imported', `Imported ${totalWritten} rows.`, 'success');
+          importProg.value.active = false;
+          isLoading.value = false;
+          return;
         }
 
-        // 2) Ask user how to proceed
+        // 3) Ask user how to proceed (mismatch/non-working)
         const mismatchRowsHtml = mismatches.slice(0, 12).map(m => `
           <tr>
             <td>${m.employeeId || '-'}</td>
@@ -643,43 +682,44 @@ const handleImport = async () => {
           }
         });
 
-        if (!isConfirmed) { isLoading.value = false; return; }
+        if (!isConfirmed) {
+          isLoading.value = false;
+          importProg.value.active = false;
+          return;
+        }
 
-        // 3) COMMIT with the chosen options
-        const chunk = (arr, size) => arr.reduce((acc, _, i) => {
-          if (i % size === 0) acc.push(arr.slice(i, i + size));
-          return acc;
-        }, []);
-        const chunks = chunk(preparedRows, 500);
+        // 4) COMMIT with chosen options (chunked)
         let totalImported = 0;
-
-        for (let i = 0; i < chunks.length; i++) {
+        const CHUNK_SIZE = 1200;
+        for (const part of chunkify(preparedRows, CHUNK_SIZE)) {
           const payload = {
             mode: 'commit',
             allowMismatch: value.allowMM,
             allowNonWorking: value.allowNW,
-            mismatchPolicy: value.policy, // 'expected' | 'scanned'
+            mismatchPolicy: value.policy,
             shiftType: selectedShift.value === 'All' ? undefined : selectedShift.value,
-            rows: chunks[i]
+            rows: part
           };
           try {
             const res = await axios.post('/attendance/import', payload);
             totalImported += (res.data.summary || []).length;
           } catch (err) {
-            // backend might send 409 if gates are not allowed
             const msg = err?.response?.data?.message || err.message;
-            console.error(`Commit chunk ${i + 1} failed`, err?.response?.data || err.message);
+            console.error('Commit chunk failed', err?.response?.data || err.message);
             await Swal.fire('Import warning', msg, 'warning');
-            // continue to next chunk
+          } finally {
+            importProg.value.sent = Math.min(importProg.value.total, importProg.value.sent + part.length);
           }
         }
 
         await fetchData();
         excelFile.value = null;
         Swal.fire('Imported', `Imported ${totalImported} rows.`, 'success');
+        importProg.value.active = false;
       } catch (err) {
         console.error('❌ Import failed:', err);
         Swal.fire('Import failed', err.message || 'Unknown error', 'error');
+        importProg.value.active = false;
       } finally {
         isLoading.value = false;
       }
@@ -690,15 +730,14 @@ const handleImport = async () => {
     console.error('❌ Import failed:', err.message);
     isLoading.value = false;
     Swal.fire('Import failed', err.message, 'error');
+    importProg.value.active = false;
   }
 };
-
 
 const allSelected = computed({
   get: () => selectedRows.value.length === filteredAttendance.value.length && filteredAttendance.value.length > 0,
   set: (value) => { selectedRows.value = value ? filteredAttendance.value.map(i => i._id) : [] },
 })
-
 const isIndeterminate = computed(() =>
   selectedRows.value.length > 0 && selectedRows.value.length < filteredAttendance.value.length
 )
@@ -766,7 +805,6 @@ const startEvaluation = () => {
 }
 
 const onCalendarSaved = async () => {
-  // Refresh heatmap + table after calendar changes
   await fetchData()
 }
 </script>
@@ -781,75 +819,22 @@ const onCalendarSaved = async () => {
   max-height: 70vh;
   overflow-y: auto;
 }
+.scrollable-table { width: max-content; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.scrollable-table th { position: sticky; top: 0; background-color: #f8fafc; z-index: 2; font-weight: 600; }
+.scrollable-table th, .scrollable-table td {
+  border-bottom: 1px solid #eee; padding: 8px 12px; text-align: center; vertical-align: middle;
+  white-space: nowrap; transition: background-color 0.2s ease;
+}
+.scrollable-table tbody tr.zebra:nth-child(odd) { background-color: #fcfcfd; }
+.scrollable-table tbody tr:hover { background-color: #edf6ff; cursor: pointer; }
+.sticky-col { position: sticky; left: 0; background: white; z-index: 3; box-shadow: 1px 0 0 #eee inset; }
 
-.scrollable-table {
-  width: max-content;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: 13px;
-}
-
-.scrollable-table th {
-  position: sticky;
-  top: 0;
-  background-color: #f8fafc;
-  z-index: 2;
-  font-weight: 600;
-}
-
-.scrollable-table th,
-.scrollable-table td {
-  border-bottom: 1px solid #eee;
-  padding: 8px 12px;
-  text-align: center;
-  vertical-align: middle;
-  white-space: nowrap;
-  transition: background-color 0.2s ease;
-}
-
-.scrollable-table tbody tr.zebra:nth-child(odd) {
-  background-color: #fcfcfd;
-}
-.scrollable-table tbody tr:hover {
-  background-color: #edf6ff;
-  cursor: pointer;
-}
-
-.sticky-col {
-  position: sticky;
-  left: 0;
-  background: white;
-  z-index: 3;
-  box-shadow: 1px 0 0 #eee inset;
-}
-
-.loading-overlay {
-  position: absolute;
-  inset: 0;
-  backdrop-filter: blur(1px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+.loading-overlay { position: absolute; inset: 0; backdrop-filter: blur(1px); display: flex; align-items: center; justify-content: center; }
 
 /* Animations */
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  50% { transform: translateX(4px); }
-  75% { transform: translateX(-4px); }
-}
-.shake-animation {
-  animation: shake 0.6s ease-in-out infinite;
-  background-color: #ffe5e0;
-}
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 50%{transform:translateX(4px)} 75%{transform:translateX(-4px)} }
+.shake-animation { animation: shake 0.6s ease-in-out infinite; background-color: #ffe5e0; }
 
-@keyframes pulse {
-  0% { background-color: #ffe6eb; }
-  50% { background-color: #ffc2d4; }
-  100% { background-color: #ffe6eb; }
-}
-.risk-highlight {
-  animation: pulse 2s infinite;
-}
+@keyframes pulse { 0%{background-color:#ffe6eb} 50%{background-color:#ffc2d4} 100%{background-color:#ffe6eb} }
+.risk-highlight { animation: pulse 2s infinite; }
 </style>
