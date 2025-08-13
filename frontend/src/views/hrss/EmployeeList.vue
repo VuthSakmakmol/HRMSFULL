@@ -1,95 +1,175 @@
 <template>
-  <v-container fluid class="pa-4">
-    <h2 class="text-h6 font-weight-bold mb-4">{{ $t('employeeManagement') }}</h2>
+  <v-container fluid class="pa-4 employee-page">
+    <!-- Header / Toolbar -->
+    <v-card class="mb-4 rounded-2xl elevation-1">
+      <v-toolbar density="comfortable" class="rounded-t-2xl">
+        <v-toolbar-title class="font-weight-bold">
+          <v-icon class="mr-2" color="primary">mdi-briefcase-account</v-icon>
+          {{ $t('employeeManagement') }}
+        </v-toolbar-title>
+        <v-spacer />
 
-    <!-- Top Bar -->
-    <v-row class="mb-4" align-center="center" justify="space-between" no-gutters>
-      <!-- Buttons -->
-      <v-col cols="auto">
-        <v-btn color="primary" @click="goToAddEmployee">
-          <v-icon start>mdi-plus</v-icon> {{ $t('addEmployee') }}
-        </v-btn>
-      </v-col>
+        <!-- Quick stats -->
+        <div class="d-none d-sm-flex ga-2 mr-2">
+          <v-chip size="small" variant="tonal" color="primary">
+            <v-icon start size="16">mdi-account-multiple</v-icon>
+            {{ filteredEmployees.length.toLocaleString() }} {{ $t('employees') || 'Employees' }}
+          </v-chip>
+          <v-chip size="small" variant="tonal" color="indigo">
+            <v-icon start size="16">mdi-check-all</v-icon>
+            {{ selected.length }} {{ $t('selected') || 'Selected' }}
+          </v-chip>
+        </div>
 
-      <!-- Global Filter -->
-      <v-col cols="12" md="3">
+        <!-- Global Search -->
         <v-text-field
           v-model="q"
-          label="Search employees…"
+          :label="$t('search') || 'Search employees…'"
           variant="outlined"
           density="compact"
           clearable
           hide-details
+          class="mx-2"
+          style="max-width: 320px"
+          prepend-inner-icon="mdi-magnify"
         />
-      </v-col>
 
-      <v-col cols="auto">
-        <v-btn
-          color="blue"
-          variant="flat"
-          :disabled="selected.length !== 1"
-          @click="editSelectedEmployee"
-        >
-          <v-icon start>mdi-pencil</v-icon> {{ $t('edit') }}
-        </v-btn>
-      </v-col>
+        <!-- Actions -->
+        <v-tooltip text="Add Employee">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" color="primary" class="ml-1" @click="goToAddEmployee" icon>
+              <v-icon>mdi-plus</v-icon>
+            </v-btn>
+          </template>
+        </v-tooltip>
 
-      <v-col cols="auto">
-        <v-btn
-          color="error"
-          variant="flat"
-          :disabled="!selected.length"
-          @click="deleteSelected"
-        >
-          <v-icon start>mdi-delete</v-icon> {{ $t('delete') }}
-        </v-btn>
-      </v-col>
+        <v-tooltip text="Edit Selected (1)">
+          <template #activator="{ props }">
+            <span>
+              <v-btn
+                v-bind="props"
+                class="ml-1"
+                color="blue"
+                :disabled="selected.length !== 1"
+                @click="editSelectedEmployee"
+                icon
+              >
+                <v-icon>mdi-pencil</v-icon>
+              </v-btn>
+            </span>
+          </template>
+        </v-tooltip>
 
-      <v-col cols="auto">
-        <v-btn color="indigo" variant="flat" @click="triggerImportFile">
-          <v-icon start>mdi-file-import"></v-icon> {{ $t('import') }}
-        </v-btn>
+        <v-tooltip text="Delete Selected">
+          <template #activator="{ props }">
+            <span>
+              <v-btn
+                v-bind="props"
+                class="ml-1"
+                color="error"
+                :disabled="!selected.length"
+                @click="deleteSelected"
+                icon
+              >
+                <v-icon>mdi-delete</v-icon>
+              </v-btn>
+            </span>
+          </template>
+        </v-tooltip>
+
+        <v-tooltip text="Import .xlsx">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" class="ml-1" color="indigo" @click="triggerImportFile" icon>
+              <v-icon>mdi-file-import</v-icon>
+            </v-btn>
+          </template>
+        </v-tooltip>
         <input
           ref="fileInput"
           type="file"
           accept=".xlsx"
           @change="handleImportExcel"
-          style="display: none"
+          style="display:none"
         />
-      </v-col>
 
-      <v-col cols="auto">
-        <v-btn
-          color="success"
-          variant="flat"
-          :disabled="!selected.length"
-          @click="exportToExcel"
-        >
-          <v-icon start>mdi-file-excel"></v-icon> {{ $t('export') }}
-        </v-btn>
-      </v-col>
+        <v-tooltip text="Export Selected">
+          <template #activator="{ props }">
+            <span>
+              <v-btn
+                v-bind="props"
+                class="ml-1"
+                color="success"
+                :disabled="!selected.length"
+                @click="exportToExcel"
+                icon
+              >
+                <v-icon>mdi-file-excel</v-icon>
+              </v-btn>
+            </span>
+          </template>
+        </v-tooltip>
 
-      <v-col cols="auto">
-        <v-btn
-          color="teal"
-          variant="flat"
-          :disabled="selected.length !== 1"
-          @click="openCardDialog"
-        >
-          <v-icon start>mdi-card-account-details</v-icon> Generate Card
-        </v-btn>
-      </v-col>
-    </v-row>
+        <v-tooltip text="Generate ID Card (select 1)">
+          <template #activator="{ props }">
+            <span>
+              <v-btn
+                v-bind="props"
+                class="ml-1"
+                color="teal"
+                :disabled="selected.length !== 1"
+                @click="openCardDialog"
+                icon
+              >
+                <v-icon>mdi-card-account-details</v-icon>
+              </v-btn>
+            </span>
+          </template>
+        </v-tooltip>
+      </v-toolbar>
 
+      <!-- Sub-toolbar pagination controls -->
+      <div class="px-4 py-2 d-flex align-center justify-space-between flex-wrap">
+        <div class="d-flex align-center ga-2">
+          <v-icon size="18" color="grey">mdi-information-outline</v-icon>
+          <span class="text-medium-emphasis">
+            {{ $t('hint') || 'Tip' }}: {{ $t('searchToFilter') || 'Use search to filter across all fields' }}
+          </span>
+        </div>
 
-    <!-- ID Card Preview / Export -->
+        <div class="d-flex align-center ga-3">
+          <div class="d-flex align-center">
+            <span class="me-2">Rows</span>
+            <v-select
+              v-model="itemsPerPage"
+              :items="[10, 50, 100, 1000, 'all']"
+              style="width: 110px"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+          </div>
+          <v-btn icon :disabled="page === 1" @click="page--" variant="text">
+            <v-icon>mdi-chevron-left</v-icon>
+          </v-btn>
+          <span class="mx-2 text-high-emphasis">{{ page }} / {{ totalPagesLocal }}</span>
+          <v-btn icon :disabled="page === totalPagesLocal" @click="page++" variant="text">
+            <v-icon>mdi-chevron-right</v-icon>
+          </v-btn>
+        </div>
+      </div>
+    </v-card>
+
+    <!-- Card Preview Dialog -->
     <v-dialog v-model="showCardDialog" width="880">
-      <v-card class="pa-4">
+      <v-card class="pa-4 rounded-xl">
         <div class="d-flex align-center justify-space-between">
-          <h3 class="text-h6 font-weight-bold">
-            Employee ID Card
-            <span v-if="selectedEmployee">— {{ selectedEmployee.employeeId }}</span>
-          </h3>
+          <div class="d-flex align-center">
+            <v-icon class="mr-2" color="teal">mdi-card-account-details</v-icon>
+            <h3 class="text-h6 font-weight-bold">
+              Employee ID Card
+              <span v-if="selectedEmployee">— {{ selectedEmployee.employeeId }}</span>
+            </h3>
+          </div>
           <div class="d-flex ga-2">
             <v-btn variant="tonal" @click="downloadPNG">
               <v-icon start>mdi-image</v-icon> PNG
@@ -103,9 +183,9 @@
 
         <v-divider class="my-3" />
 
-        <!-- Scaled preview so it fits nicely -->
-        <div style="overflow:auto; padding:6px">
-          <div id="cardPreviewScale" style="transform: scale(0.55); transform-origin: top left;">
+        <!-- Scaled preview for neat fit -->
+        <div class="card-preview-wrapper">
+          <div id="cardPreviewScale" class="card-preview-scale">
             <EmployeeCard
               v-if="selectedEmployee"
               ref="cardRef"
@@ -123,58 +203,71 @@
       </v-card>
     </v-dialog>
 
-    <!-- Employee Table -->
-    <v-card>
-      <div class="table-scroll-wrapper" ref="scrollWrapper">
-        <div v-if="isLoading" class="d-flex justify-center pa-8">
-          <DotLottieVue
-            style="height: 200px; width: 200px"
-            autoplay
-            loop
-            src="https://lottie.host/b3e4008f-9dbd-4b76-b13e-e1cdb52f6190/3JhAvD9aX1.json"
-          />
-        </div>
+    <!-- Employee Table Card -->
+    <v-card class="rounded-2xl elevation-1">
+      <!-- Loading -->
+      <div v-if="isLoading" class="d-flex justify-center pa-10">
+        <DotLottieVue
+          style="height: 200px; width: 200px"
+          autoplay
+          loop
+          src="https://lottie.host/b3e4008f-9dbd-4b76-b13e-e1cdb52f6190/3JhAvD9aX1.json"
+        />
+      </div>
 
-        <table class="scrollable-table" v-else>
+      <!-- Data Table -->
+      <div v-else ref="scrollWrapper" class="table-scroll-wrapper">
+        <table class="scrollable-table">
           <thead>
             <tr>
-              <th>
+              <th class="sticky-col sticky-left">
                 <v-checkbox v-model="selectAll" @change="toggleSelectAll" hide-details density="compact" />
               </th>
-              <th>No</th>
-              <th>Info</th>
-              <th>Profile</th>
+              <th class="sticky-col sticky-left-2">No</th>
+              <th class="sticky-col sticky-left-3">Info</th>
+              <th class="sticky-col sticky-left-4">Profile</th>
               <th v-for="n in 5" :key="n">Details Block {{ n }}</th>
               <th class="bg-action">Actions</th>
             </tr>
           </thead>
+
           <tbody>
             <tr v-for="(emp, index) in paginatedEmployees" :key="emp._id">
-              <td>
+              <td class="sticky-col sticky-left">
                 <v-checkbox v-model="selected" :value="emp._id" hide-details density="compact" />
               </td>
-              <td>{{ getRowNumber(index) }}</td>
-              <td>{{ getCompletionRate(emp) }}%</td>
-              <td class="img-cell">
+              <td class="sticky-col sticky-left-2">{{ getRowNumber(index) }}</td>
+              <td class="sticky-col sticky-left-3">
+                <v-chip size="small" color="primary" variant="tonal">
+                  {{ getCompletionRate(emp) }}%
+                </v-chip>
+              </td>
+              <td class="img-cell sticky-col sticky-left-4">
                 <img :src="getImageUrl(emp.profileImage)" class="profile-img" />
               </td>
+
+              <!-- Five blocks of 10 fields -->
               <td v-for="(block, blockIndex) in chunkedEmployeeInfo(emp)" :key="blockIndex">
                 <div v-for="item in block" :key="item.label" class="info-block">
-                  <span class="label">{{ item.label }}:</span> {{ item.value }}
+                  <span class="label">{{ item.label }}:</span>
+                  <span class="value">{{ item.value }}</span>
                 </div>
               </td>
+
               <td class="bg-action align-top">
-                <div class="d-flex flex-column align-center pa-1" style="gap: 6px; height: 100%">
+                <div class="d-flex flex-column align-center pa-2" style="gap: 8px">
                   <v-textarea
                     v-model="emp.note"
                     auto-grow
                     variant="outlined"
                     hide-details
                     placeholder="Write note..."
-                    style="width: 100%; font-size: 7px; min-height: 40px"
-                    :counter="60"
-                    maxlength="60"
+                    style="width: 100%; font-size: 11px; min-height: 48px"
+                    :counter="120"
+                    maxlength="120"
                     @change="updateNote(emp)"
+                    rows="2"
+                    density="comfortable"
                   />
                 </div>
               </td>
@@ -183,23 +276,22 @@
         </table>
       </div>
 
-      <!-- Pagination Footer -->
-      <v-sheet elevation="2" class="d-flex justify-end align-center mt-4 pa-4">
-        <span class="me-2">Rows per page:</span>
+      <!-- Bottom Pagination (mirrors top) -->
+      <v-sheet elevation="0" class="d-flex justify-end align-center px-4 py-3">
+        <span class="me-2 text-medium-emphasis">Rows</span>
         <v-select
           v-model="itemsPerPage"
           :items="[10, 50, 100, 1000, 'all']"
-          style="width: 100px"
+          style="width: 110px"
           density="compact"
           variant="outlined"
           hide-details
-          max-width="120px"
         />
-        <v-btn icon :disabled="page === 1" @click="page--">
+        <v-btn class="ml-2" icon :disabled="page === 1" @click="page--" variant="text">
           <v-icon>mdi-chevron-left</v-icon>
         </v-btn>
-        <span class="mx-2">{{ page }} / {{ totalPagesLocal }}</span>
-        <v-btn icon :disabled="page === totalPagesLocal" @click="page++">
+        <span class="mx-2 text-high-emphasis">{{ page }} / {{ totalPagesLocal }}</span>
+        <v-btn icon :disabled="page === totalPagesLocal" @click="page++" variant="text">
           <v-icon>mdi-chevron-right</v-icon>
         </v-btn>
       </v-sheet>
@@ -223,7 +315,7 @@ defineOptions({ name: 'EmployeeList' })
 
 const router = useRouter()
 
-// ------------------------- Card -----------------------------
+/* ------------------------------- Card ------------------------------- */
 const showCardDialog = ref(false)
 const cardRef = ref(null)
 const backendBase = (axios.defaults.baseURL?.replace(/\/api$/, '')) || ''
@@ -231,23 +323,23 @@ const companyName = 'Trax Apparel Cambodia'
 const logoSrc = '/logos/CAM-TAC.jpg'
 const footerText = 'Factory Phone: 023 880 453 • HR: 011 996 498'
 
-/* ───────────────────────── state ───────────────────────── */
+/* ------------------------------ State ------------------------------- */
 const employees = ref([])
 const selected = ref([])
 const selectAll = ref(false)
-const totalEmployees = ref(0) // kept for compatibility
+const totalEmployees = ref(0)
 const scrollWrapper = ref(null)
 const defaultImage = '/default_images/girl_default_pf.jpg'
 const hasLoaded = ref(false)
 const isLoading = ref(true)
 const fileInput = ref(null)
 
-// pagination (client-side over filtered set)
+// pagination (client-side on filtered)
 const page = ref(1)
 const itemsPerPage = ref(10) // number or "all"
-const q = ref('')            // global search text
+const q = ref('')            // global search
 
-/* ───────────────────────── lifecycle ───────────────────────── */
+/* ---------------------------- Lifecycle ------------------------------ */
 onMounted(async () => {
   if (!hasLoaded.value) {
     await fetchEmployees()
@@ -255,7 +347,7 @@ onMounted(async () => {
   }
 })
 
-/* ───────────────────────── helpers ───────────────────────── */
+/* ----------------------------- Helpers ------------------------------- */
 const formatDate = (val) => (val ? dayjs(val).format('YYYY-MM-DD') : '')
 const getImageUrl = (url) => {
   const base = axios.defaults.baseURL?.replace(/\/api$/, '') || ''
@@ -265,16 +357,13 @@ const getImageUrl = (url) => {
   return defaultImage
 }
 
-//========================== Employee Card ========================
+/* ----------------------------- Card I/O ------------------------------ */
 const captureCard = async () => {
   const el = cardRef.value?.cardEl
   if (!el) return null
-
-  // Temporarily remove preview scale for sharp capture
   const scaleWrap = document.getElementById('cardPreviewScale')
   const prevTransform = scaleWrap?.style.transform
   if (scaleWrap) scaleWrap.style.transform = 'none'
-
   try {
     const canvas = await html2canvas(el, {
       scale: 2,
@@ -301,21 +390,19 @@ const downloadPDF = async () => {
   const canvas = await captureCard()
   if (!canvas) return
   const imgData = canvas.toDataURL('image/png')
-
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
   const pageW = pdf.internal.pageSize.getWidth()
   const pageH = pdf.internal.pageSize.getHeight()
   const margin = 24
   const w = pageW - margin * 2
   const h = w * (canvas.height / canvas.width)
-
   pdf.addImage(imgData, 'PNG', margin, (pageH - h) / 2, w, h, undefined, 'FAST')
   const emp = selectedEmployee.value
   pdf.save(`IDCard_${emp?.employeeId || 'employee'}.pdf`)
 }
 
-/* ───────────────────────── data fetch ───────────────────────── */
-// Fetch ALL for client-side filter + pagination (change if dataset is too large)
+/* ---------------------------- Data Fetch ----------------------------- */
+// Keep your API & payload unchanged
 const fetchEmployees = async () => {
   isLoading.value = true
   try {
@@ -330,18 +417,16 @@ const fetchEmployees = async () => {
   }
 }
 
-// selected employee for the card preview
 const selectedEmployee = computed(
   () => employees.value.find(e => e._id === selected.value[0]) || null
 )
 
-// open dialog (only if one selected)
 const openCardDialog = () => {
   if (selected.value.length !== 1) return
   showCardDialog.value = true
 }
 
-/* ───────────────────────── global filter & pagination (client) ───────────────────────── */
+/* ----------- Filter & Pagination (client-side, unchanged) ----------- */
 const toSearchable = (emp) => {
   const parts = [
     emp.employeeId,
@@ -389,7 +474,7 @@ const paginatedEmployees = computed(() => {
   return filteredEmployees.value.slice(start, start + perPage)
 })
 
-/* ───────────────────────── selection ───────────────────────── */
+/* ----------------------------- Selection ---------------------------- */
 const toggleSelectAll = () => {
   const currentPageIds = paginatedEmployees.value.map((emp) => emp._id)
   if (selectAll.value) {
@@ -405,21 +490,22 @@ watch([selected, paginatedEmployees], () => {
     currentPageIds.every((id) => selected.value.includes(id))
 })
 
-/* ───────────────────────── nav & actions ───────────────────────── */
+/* ------------------------ Navigation & Actions ----------------------- */
+const useWarn = (title, text='') => Swal.fire({ icon: 'warning', title, text })
+
 const goToAddEmployee = () => router.push('/hrss/addemployee')
 
 const editSelectedEmployee = () => {
   if (selected.value.length !== 1) {
-    return Swal.fire({ icon: 'warning', title: 'Please select exactly 1 employee to edit.' })
+    return useWarn('Please select exactly 1 employee to edit.')
   }
   router.push({ path: '/hrss/addemployee', query: { id: selected.value[0] } })
 }
 
 const deleteSelected = async () => {
   if (!selected.value.length) {
-    return Swal.fire({ icon: 'warning', title: 'No employees selected' })
+    return useWarn('No employees selected')
   }
-
   const confirm = await Swal.fire({
     icon: 'warning',
     title: `Delete ${selected.value.length} employees?`,
@@ -446,12 +532,11 @@ const deleteSelected = async () => {
   }
 }
 
-/* ───────────────────────── export ───────────────────────── */
+/* ------------------------------ Export ------------------------------ */
 const exportToExcel = () => {
   if (!selected.value.length) {
-    return Swal.fire({ icon: 'warning', title: 'Please select at least one employee to export.' })
+    return useWarn('Please select at least one employee to export.')
   }
-
   const exportData = employees.value
     .filter((emp) => selected.value.includes(emp._id))
     .map((emp) => ({
@@ -475,6 +560,7 @@ const exportToExcel = () => {
       'Join Date': formatDate(emp.joinDate),
       Department: emp.department,
       Position: emp.position,
+      'Employee Type': emp.employeeType,
       Line: emp.line,
       Team: emp.team,
       Section: emp.section,
@@ -514,7 +600,7 @@ const exportToExcel = () => {
   XLSX.writeFile(workbook, 'Employees.xlsx')
 }
 
-/* ───────────────────────── import ───────────────────────── */
+/* ------------------------------ Import ------------------------------ */
 const triggerImportFile = () => fileInput.value?.click()
 
 const renderIssuesHtml = (items, getTitle, getList) =>
@@ -533,18 +619,14 @@ const renderIssuesHtml = (items, getTitle, getList) =>
 const handleImportExcel = async (event) => {
   const file = event.target.files?.[0]
   if (!file) return
-
   const form = new FormData()
   form.append('file', file)
-
   isLoading.value = true
   try {
     const res = await axios.post('/employees/import-excel', form, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-
     const hasPreviewPayload = Array.isArray(res?.data?.toImport) || Array.isArray(res?.data?.invalid)
-
     if (hasPreviewPayload) {
       const { toImport = [], duplicates = [], invalid = [] } = res.data || {}
 
@@ -602,7 +684,7 @@ const handleImportExcel = async (event) => {
       return
     }
 
-    // Fallback: direct import response (already saved)
+    // direct import response fallback
     await Swal.fire({
       icon: 'success',
       title: 'Import Complete',
@@ -624,17 +706,16 @@ const handleImportExcel = async (event) => {
   }
 }
 
-/* ───────────────────────── per-row note ───────────────────────── */
+/* ----------------------------- Row Note ----------------------------- */
 const updateNote = async (emp) => {
   try {
     await axios.put(`/employees/${emp._id}`, { note: emp.note })
-    console.log(`📝 Note saved for ${emp.employeeId}`)
   } catch (err) {
     console.error('❌ Failed to save note:', err?.message || err)
   }
 }
 
-/* ───────────────────────── table helpers ───────────────────────── */
+/* -------------------------- Table Helpers --------------------------- */
 const employeeFields = (emp) => [
   { label: 'Employee ID', value: emp.employeeId },
   { label: 'Khmer Name', value: `${emp.khmerFirstName} ${emp.khmerLastName}` },
@@ -694,7 +775,6 @@ const getRowNumber = (index) => {
   return (page.value - 1) * perPage + index + 1
 }
 
-
 const chunkedEmployeeInfo = (emp) => {
   const info = employeeFields(emp)
   const chunked = []
@@ -704,88 +784,128 @@ const chunkedEmployeeInfo = (emp) => {
 }
 
 const getCompletionRate = (emp) => {
-  const values = Object.values(emp).flatMap((v) => (typeof v === 'object' && v !== null ? Object.values(v) : [v]))
+  const values = Object.values(emp).flatMap((v) =>
+    (typeof v === 'object' && v !== null ? Object.values(v) : [v])
+  )
   const filled = values.filter((v) => v !== '' && v !== null && v !== undefined)
   return Math.min(Math.round((filled.length / 48) * 100), 100)
 }
 
-/* ───────────────────────── watchers ───────────────────────── */
-// Reset to page 1 when the filter changes
-watch(q, () => {
-  page.value = 1
-})
-
-// Recompute locally when page size changes (no refetch needed)
-watch(itemsPerPage, () => {
-  page.value = 1
-})
+/* ----------------------------- Watchers ----------------------------- */
+watch(q, () => { page.value = 1 })
+watch(itemsPerPage, () => { page.value = 1 })
 </script>
 
 <style scoped>
-.table-scroll-wrapper {
-  overflow-x: auto;
-  max-width: 100%;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  max-height: 70vh;
-  overflow-y: auto;
+/* Layout polish */
+.employee-page :deep(.v-toolbar) {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfbfd 100%);
 }
 
+.table-scroll-wrapper {
+  overflow: auto;
+  max-width: 100%;
+  max-height: 70vh;
+  border-top: 1px solid #e8e8ef;
+  border-bottom: 1px solid #e8e8ef;
+  border-radius: 14px;
+}
+
+/* Table + sticky headers/cols */
 .scrollable-table {
   width: max-content;
-  border-collapse: collapse;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
 }
 
-.scrollable-table th {
+.scrollable-table thead th {
   position: sticky;
   top: 0;
-  background-color: #f9f9f9;
-  z-index: 2;
+  background-color: #f6f7fb;
+  z-index: 3;
+  border-bottom: 1px solid #e5e7f1;
+  font-weight: 700;
+  letter-spacing: .2px;
+  white-space: nowrap;
 }
 
 .scrollable-table th,
 .scrollable-table td {
-  border: 1px solid #ccc;
-  padding: 6px 10px;
-  text-align: center;
+  border-right: 1px solid #ececf3;
+  border-left: 0;
+  padding: 8px 12px;
+  text-align: left;
   vertical-align: middle;
   white-space: nowrap;
-  transition: background-color 0.2s ease;
+  transition: background-color .15s ease;
+}
+
+.scrollable-table tbody tr:nth-child(even) {
+  background-color: #fafbff;
 }
 
 .scrollable-table tbody tr:hover {
-  background-color: #dfedfc;
-  cursor: pointer;
+  background-color: #eef4ff;
 }
 
+/* Sticky columns (left & right) */
+.sticky-col {
+  position: sticky;
+  z-index: 2;
+  background: inherit;
+}
+
+.sticky-right { right: 0; z-index: 3; }
+
 .profile-img {
-  width: 100%;
-  height: 4cm;
+  width: 3.8cm;
+  height: 3.8cm;
   object-fit: cover;
   display: block;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px #e8e8ef inset;
 }
 
 .img-cell {
-  width: 4cm;
-  height: 4cm;
-  padding: 0;
+  width: 4.2cm;
+  height: 4.2cm;
+  padding: 6px;
   text-align: center;
 }
 
 .bg-action {
-  background-color: #e0ddd7;
-  width: 140px;
+  background-color: #f3f2ee;
+  min-width: 160px;
+  border-left: 1px solid #e0ded8;
 }
 
 .info-block {
-  margin-bottom: 4px;
-  font-size: 13px;
-  text-align: left;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  line-height: 1.25rem;
 }
 
 .label {
-  font-weight: 500;
-  margin-right: 4px;
+  font-weight: 600;
+  margin-right: 6px;
+  color: #4b5563;
+}
+.value {
+  color: #111827;
+}
+
+/* Card preview scaling */
+.card-preview-wrapper {
+  overflow: auto;
+  padding: 10px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px dashed #e5e7eb;
+}
+.card-preview-scale {
+  transform: scale(0.55);
+  transform-origin: top left;
 }
 </style>

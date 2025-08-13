@@ -535,3 +535,5 @@ onMounted(loadData);
   .info-pill-grid { grid-template-columns: 1fr; }
 }
 </style>
+
+
