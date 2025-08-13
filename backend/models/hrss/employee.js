@@ -36,9 +36,9 @@ const employeeSchema = new mongoose.Schema({
   spouseContactNumber: { type: String, default: '' },
 
   // 📚 Education & Religion
-  education: { type: String, enum: ['Primary School','Secondary School','High School', 'Bacherlor Degree', 'Master', 'Doctor', ''], default: '' },
+  education: { type: String, enum: ['Primary School','Secondary School','High School','Bachelor Degree','Master','Doctor',''], default: '' },
   religion: { type: String, enum: [ 'Buddhism', 'Islam' ,'Christianity', 'Hinduism', ''], default: '' },
-  nationality: { type: String, enum: ['Khmer', 'Thai', 'Vietnamese', 'Filipino', 'Sri Lankan', 'Bangladehi', 'Indian', ''], default: '' },
+  nationality: { type: String, enum: ['Khmer','Thai','Vietnamese','Filipino','Sri Lankan','Bangladeshi','Indian',''], default: '' },  
   resignReason: { type: String, enum: ['Could not Contact', 'Take care of child/children', 'Heath Issue', 'Family Issue',
     'Change Carrer', 'Take care of the parent', 'Personal Issue',
     'Back to homland', 'Family-owned business/farm', 'Supervisor/Leader Attitude', 'Contract not renwed', 'Go to work oversea',
@@ -80,7 +80,7 @@ const employeeSchema = new mongoose.Schema({
   // 📥 Source & Skills
   sourceOfHiring: { type: String, enum: ['Agency', 'Banner / Job Announcement Board', 'Brochure', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'LinkedIn','Telegram', 'Other',  ''], default: '' },
   introducerId: { type: String, default: '' },
-  employeeType: { type: String, enum: ['Direct', 'Indirect', 'MAarketing', ''], default: '' },
+  employeeType: { type: String, enum: ['Direct','Indirect','Marketing',''], default: '' },
   singleNeedle: { type: String, default: '' },
   overlock: { type: String, default: '' },
   coverstitch: { type: String, default: '' },

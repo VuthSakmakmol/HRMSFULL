@@ -6,37 +6,40 @@
       <!-- Line / Team / Section -->
       <v-col cols="12" sm="2">
         <v-text-field
-          v-model="form.line"
+          v-model.trim="form.line"
           label="Line"
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="line"
-          @keydown.enter.prevent="focusNext($event)"
+          :ref="setRef(0)"
+          @keydown.enter.prevent="focusNext(0)"
+          clearable
         />
       </v-col>
 
       <v-col cols="12" sm="2">
         <v-text-field
-          v-model="form.team"
+          v-model.trim="form.team"
           label="Team"
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="team"
-          @keydown.enter.prevent="focusNext($event)"
+          :ref="setRef(1)"
+          @keydown.enter.prevent="focusNext(1)"
+          clearable
         />
       </v-col>
 
       <v-col cols="12" sm="2">
         <v-text-field
-          v-model="form.section"
+          v-model.trim="form.section"
           label="Section"
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="section"
-          @keydown.enter.prevent="focusNext($event)"
+          :ref="setRef(2)"
+          @keydown.enter.prevent="focusNext(2)"
+          clearable
         />
       </v-col>
 
@@ -49,8 +52,9 @@
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="shift"
-          @keydown.enter.prevent="focusNext($event)"
+          :ref="setRef(3)"
+          @keydown.enter.prevent="focusNext(3)"
+          clearable
         />
       </v-col>
 
@@ -63,8 +67,9 @@
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="status"
-          @keydown.enter.prevent="focusNext($event)"
+          :ref="setRef(4)"
+          @keydown.enter.prevent="focusNext(4)"
+          clearable
         />
       </v-col>
 
@@ -77,8 +82,9 @@
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="reasonResign"
-          @keydown.enter.prevent="focusNext($event)"
+          :ref="setRef(5)"
+          @keydown.enter.prevent="focusNext(5)"
+          clearable
         />
       </v-col>
 
@@ -91,8 +97,8 @@
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="resignDate"
-          @keydown.enter.prevent="focusNext($event)"
+          :ref="setRef(6)"
+          @keydown.enter.prevent="focusNext(6)"
         />
       </v-col>
 
@@ -105,58 +111,96 @@
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="source-of-hiring"
-          @keydown.enter.prevent="focusNext($event)"
+          :ref="setRef(7)"
+          @update:modelValue="onSourceChange"
+          @keydown.enter.prevent="focusNext(7)"
+          clearable
+        />
+      </v-col>
+
+      <!-- Source of Hiring (Other) -->
+      <v-col cols="12" sm="2" v-if="showOtherSource">
+        <v-text-field
+          v-model.trim="form.sourceOfHiring"
+          label="Specify Source"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="setRef(8)"
+          @keydown.enter.prevent="focusNext(8)"
+          clearable
         />
       </v-col>
 
       <!-- Skills -->
       <v-col cols="12" sm="2">
         <v-text-field
-          v-model="form.singleNeedle"
+          v-model.number="form.singleNeedle"
           label="Single Needle"
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="single-needle"
-          @keydown.enter.prevent="focusNext($event)"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          :ref="setRef(9)"
+          @input="normalizeNonNegative('singleNeedle')"
+          @keydown.enter.prevent="focusNext(9)"
+          clearable
+          hint="Number of single-needle machines"
+          persistent-hint
         />
       </v-col>
 
       <v-col cols="12" sm="2">
         <v-text-field
-          v-model="form.overlock"
-          label="Over Lock"
+          v-model.number="form.overlock"
+          label="Overlock"
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="overlock"
-          @keydown.enter.prevent="focusNext($event)"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          :ref="setRef(10)"
+          @input="normalizeNonNegative('overlock')"
+          @keydown.enter.prevent="focusNext(10)"
+          clearable
+          hint="Number of overlock machines"
+          persistent-hint
         />
       </v-col>
 
       <v-col cols="12" sm="2">
         <v-text-field
-          v-model="form.coverstitch"
-          label="Cover Stitch"
+          v-model.number="form.coverstitch"
+          label="Coverstitch"
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="coverstitch"
-          @keydown.enter.prevent="focusNext($event)"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          :ref="setRef(11)"
+          @input="normalizeNonNegative('coverstitch')"
+          @keydown.enter.prevent="focusNext(11)"
+          clearable
+          hint="Number of coverstitch machines"
+          persistent-hint
         />
       </v-col>
 
       <v-col cols="12" sm="2">
         <v-text-field
-          v-model="form.totalMachine"
+          v-model.number="form.totalMachine"
           label="Total Machine"
           type="number"
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          name="total-machine"
-          @keydown.enter.prevent="focusNext($event)"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          :ref="setRef(12)"
+          @input="normalizeNonNegative('totalMachine')"
+          @keydown.enter.prevent="focusNext(12)"
+          clearable
         />
       </v-col>
     </v-row>
@@ -164,7 +208,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import axios from '@/utils/axios'
 
 const props = defineProps({ form: Object })
@@ -177,16 +221,22 @@ const enumOptions = ref({
   resignReasonOptions: []
 })
 
+/* Load enums safely */
 onMounted(async () => {
   try {
     const { data } = await axios.get('/meta/enums')
-    enumOptions.value = data
+    enumOptions.value = {
+      shiftOptions: data?.shiftOptions || [],
+      statusOptions: data?.statusOptions || [],
+      sourceOfHiringOptions: data?.sourceOfHiringOptions || [],
+      resignReasonOptions: data?.resignReasonOptions || []
+    }
   } catch (err) {
     console.error('❌ Failed to load enums in Step 3:', err)
   }
 })
 
-// Reset resignReason and resignDate if status is not Resign
+/* Status → resign fields defaults/clears */
 watch(
   () => form.status,
   (val) => {
@@ -201,15 +251,29 @@ watch(
   }
 )
 
-function focusNext(event) {
-  const formElements = Array.from(
-    event.target
-      .closest('form, .v-card, .v-container')
-      .querySelectorAll('input, textarea, .v-select input, .v-autocomplete input')
-  ).filter(el => !el.disabled && el.offsetParent !== null)
-  const index = formElements.indexOf(event.target)
-  if (index !== -1 && index + 1 < formElements.length) {
-    formElements[index + 1].focus()
-  }
+/* Optional "Other" source input */
+const showOtherSource = computed(() =>
+  typeof form.sourceOfHiring === 'string' &&
+  form.sourceOfHiring.toLowerCase() === 'other'
+)
+const onSourceChange = (val) => {
+  // If selecting “Other”, keep the value; the text field will allow overwrite
+  if (typeof val === 'string' && val.toLowerCase() !== 'other') return
+}
+
+/* Numeric helpers (keep non-negative integers) */
+const normalizeNonNegative = (key) => {
+  let v = form[key]
+  if (v === '' || v === null || v === undefined) { form[key] = null; return }
+  v = String(v).replace(/[^\d]/g, '')
+  form[key] = v === '' ? null : Math.max(0, parseInt(v, 10))
+}
+
+/* Enter-to-next focus handling (ordered by setRef) */
+const inputRefs = []
+const setRef = (i) => (el) => { inputRefs[i] = el }
+const focusNext = (idx) => {
+  const next = inputRefs[idx + 1]
+  if (next?.focus) next.focus()
 }
 </script>

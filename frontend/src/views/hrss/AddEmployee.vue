@@ -1,53 +1,116 @@
 <template>
-  <v-container fluid class="pa-4">
-    <h2 class="text-h6 font-weight-bold mb-4">🚍 Employee Registration</h2>
+  <v-container fluid class="add-employee-page pa-2">
+    <!-- Header -->
+    <v-card class="mb-3 rounded-xl elevation-1">
+      <v-toolbar density="compact" class="rounded-t-xl">
+        <v-toolbar-title class="font-weight-bold d-flex align-center">
+          <v-icon class="mr-2" color="primary">mdi-account-plus</v-icon>
+          {{ $t('employeeRegistration') || 'Employee Registration' }}
+        </v-toolbar-title>
 
-    <!-- Progress Bar -->
-    <v-progress-linear
-      :model-value="completionPercentage"
-      color="primary"
-      height="18"
-      class="mb-4"
-      striped
-      rounded
-    >
-      <strong>{{ completionPercentage }}%</strong>
-    </v-progress-linear>
+        <v-spacer />
 
-    <v-btn
-      color="secondary"
-      class="mb-4"
-      variant="outlined"
-      @click="router.push('/hrss/employees')"
-    >
-      <v-icon start>mdi-arrow-left</v-icon>
-      Back to Employee List
-    </v-btn>
+        <!-- Completion -->
+        <v-chip size="small" variant="tonal" color="primary" class="mr-2">
+          <v-icon start size="16">mdi-progress-check</v-icon>
+          {{ completionPercentage }}%
+        </v-chip>
 
-    <!-- Dynamic Step -->
-    <component
-      :is="stepComponents[step - 1]"
-      ref="stepComponent"
-      v-model:form="form"
-      :isEditMode="isEditMode"
-      :step="step"
-      @submitEdit="handleStepSubmit"
-      @cancelEdit="router.push('/hrss/employees')"
-    />
+        <!-- Saving state -->
+        <v-chip v-if="isSaving" size="small" variant="tonal" color="indigo" class="mr-2">
+          <v-progress-circular indeterminate size="14" width="2" class="mr-2" />
+          {{ $t('saving') || 'Saving…' }}
+        </v-chip>
 
-    <!-- Navigation -->
-    <v-row justify="space-between" class="mt-4" v-if="!isEditMode || step !== 1">
-      <v-btn :disabled="step === 1" @click="step--" variant="outlined">Back</v-btn>
-      <v-btn color="green" class="mb-4" @click="startNewEmployee">+ New Employee</v-btn>
-      <v-btn color="primary" @click="handleStepSubmit">
-        {{ step === stepComponents.length ? 'Finish' : 'Next' }}
-      </v-btn>
-    </v-row>
+        <v-btn color="secondary" variant="outlined" @click="router.push('/hrss/employees')">
+          <v-icon start>mdi-arrow-left</v-icon>
+          {{ $t('backToList') || 'Back to Employee List' }}
+        </v-btn>
+      </v-toolbar>
+
+      <!-- Stepper (compact, smoke background) -->
+      <div class="px-3 pt-1 pb-3">
+        <v-row class="align-center">
+          <v-col cols="12" md="9">
+            <div class="stepper-smoke rounded-xl">
+              <v-stepper
+                :model-value="step"
+                flat
+                alt-labels
+                class="elevation-0 soft-stepper"
+                density="compact"
+              >
+                <v-stepper-header>
+                  <v-stepper-item
+                    v-for="(lbl, i) in stepLabels"
+                    :key="i"
+                    :value="i+1"
+                    :title="lbl"
+                    :complete="step > (i+1)"
+                  />
+                </v-stepper-header>
+              </v-stepper>
+            </div>
+          </v-col>
+
+          <v-col cols="12" md="3" class="d-flex align-center">
+            <v-progress-linear
+              :model-value="completionPercentage"
+              color="primary"
+              height="10"
+              striped
+              rounded
+              class="flex-grow-1"
+            >
+              <strong class="text-caption">{{ completionPercentage }}%</strong>
+            </v-progress-linear>
+          </v-col>
+        </v-row>
+      </div>
+    </v-card>
+
+    <!-- Main: FULL WIDTH -->
+    <v-card class="rounded-xl elevation-1 mb-2 full-height-card">
+      <component
+        :is="stepComponents[step - 1]"
+        ref="stepComponent"
+        v-model:form="form"
+        :isEditMode="isEditMode"
+        :step="step"
+        @submitEdit="handleStepSubmit"
+        @cancelEdit="router.push('/hrss/employees')"
+      />
+    </v-card>
+
+    <!-- Sticky bottom actions -->
+    <v-sheet class="action-bar elevation-2">
+      <div class="d-flex align-center justify-space-between flex-wrap ga-2">
+        <div class="d-flex align-center ga-2">
+          <v-btn :disabled="step === 1" @click="step--" variant="outlined">
+            <v-icon start>mdi-arrow-left</v-icon>
+            {{ $t('back') || 'Back' }}
+          </v-btn>
+
+          <v-btn color="green" variant="flat" @click="startNewEmployee">
+            <v-icon start>mdi-plus</v-icon>
+            {{ $t('newEmployee') || 'New Employee' }}
+          </v-btn>
+        </div>
+
+        <div class="d-flex align-center ga-2">
+          <v-btn color="primary" :loading="isSaving" @click="handleStepSubmit">
+            <v-icon start>mdi-content-save</v-icon>
+            {{ step === stepComponents.length ? ($t('finish') || 'Finish') : ($t('next') || 'Next') }}
+            <span class="shortcut-hint">Ctrl+Enter</span>
+          </v-btn>
+        </div>
+      </div>
+    </v-sheet>
   </v-container>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import Swal from 'sweetalert2'
 import axios from '@/utils/axios'
@@ -64,6 +127,7 @@ defineOptions({ name: 'AddEmployee' })
 /* ───────────────────────── state ───────────────────────── */
 const step = ref(parseInt(localStorage.getItem('currentStep') || '1'))
 const stepComponents = [Step1, Step2, Step3, Step4, Step5]
+const stepLabels = ['Profile', 'Personal', 'Family & Edu', 'Work Info', 'Documents']
 const stepComponent = ref(null)
 
 const router = useRouter()
@@ -71,6 +135,7 @@ const route = useRoute()
 
 const employeeId = ref(route.query.id || null)
 const isEditMode = ref(false)
+const isSaving = ref(false)
 
 const emptyAddress = () => ({
   provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: ''
@@ -116,10 +181,7 @@ const form = ref({
   medicalCheck: '', medicalCheckDate: '', workingBook: ''
 })
 
-/* ───────────────────────── progress ─────────────────────────
-   We count all primitive fields + nested address primitives.
-   Adjust "TOTAL_FIELDS" if you add/remove inputs.
----------------------------------------------------------------- */
+/* ───────────────────────── progress ───────────────────────── */
 const TOTAL_FIELDS = 48
 const completionPercentage = computed(() => {
   const flat = Object.values(form.value).flatMap(v =>
@@ -135,11 +197,12 @@ const completionPercentage = computed(() => {
 watch(step, newStep => localStorage.setItem('currentStep', String(newStep)))
 
 /* ───────────────────────── loaders ───────────────────────── */
+const routerPushList = () => router.push('/hrss/employees')
+
 const loadEmployee = async (id) => {
   if (!id) return
   try {
     const res = await axios.get(`/employees/${id}`)
-    // keep defaults like company if missing
     const merged = { ...form.value, ...res.data }
     if (!merged.company) merged.company = localStorage.getItem('company') || ''
     form.value = merged
@@ -153,16 +216,18 @@ const loadEmployee = async (id) => {
 
 onMounted(async () => {
   if (employeeId.value) await loadEmployee(employeeId.value)
+  window.addEventListener('keydown', handleKeydown)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 
-// React if user navigates with another ?id
 watch(
   () => route.query.id,
   async (id) => {
     employeeId.value = id || null
     if (employeeId.value) await loadEmployee(employeeId.value)
     else {
-      // switched to create
       resetForm()
       isEditMode.value = false
       step.value = 1
@@ -198,6 +263,8 @@ const resetForm = () => {
 
 const handleStepSubmit = async () => {
   try {
+    isSaving.value = true
+
     // Let child step upload image if it exposes handleFileUpload()
     const uploader = stepComponent.value?.handleFileUpload
     if (typeof uploader === 'function') {
@@ -214,7 +281,6 @@ const handleStepSubmit = async () => {
       employeeId.value = res.data._id
       form.value._id = res.data._id
       Swal.fire({ icon: 'success', title: 'Employee created!' })
-      // keep create flow (not forcing edit mode)
       isEditMode.value = false
     } else {
       await axios.put(`/employees/${employeeId.value}`, form.value)
@@ -229,38 +295,34 @@ const handleStepSubmit = async () => {
     } else {
       Swal.fire({ icon: 'success', title: '✅ All data saved!' })
       localStorage.removeItem('currentStep')
-      router.push('/hrss/employees')
+      routerPushList()
     }
   } catch (err) {
     console.error('❌ Save failed:', err)
     Swal.fire({ icon: 'error', title: 'Save failed', text: err.message })
+  } finally {
+    isSaving.value = false
   }
 }
 
 const startNewEmployee = async () => {
   try {
-    // Does the form contain any data?
     const hasData = Object.entries(form.value).some(([k, v]) => {
       if (k === '_id') return false
-      if (v && typeof v === 'object' && !Array.isArray(v)) {
-        return Object.values(v).some(n => n)
-      }
+      if (v && typeof v === 'object' && !Array.isArray(v)) return Object.values(v).some(n => n)
       return !!v
     })
 
     if (hasData && !employeeId.value) {
-      // Save current as a new record before reset
       const payload = { ...form.value }
       delete payload._id
       const res = await axios.post('/employees', payload)
       if (res.data?._id) Swal.fire({ icon: 'success', title: 'Saved before reset' })
     } else if (employeeId.value) {
-      // Update current record before reset
       await axios.put(`/employees/${employeeId.value}`, form.value)
       Swal.fire({ icon: 'success', title: 'Updated before reset' })
     }
 
-    // Now reset for a fresh record
     resetForm()
     employeeId.value = null
     step.value = 1
@@ -274,4 +336,72 @@ const startNewEmployee = async () => {
     Swal.fire({ icon: 'error', title: 'Reset failed', text: err.message })
   }
 }
+
+/* ───────────────────────── keyboard shortcuts ───────────────────────── */
+const handleKeydown = (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault()
+    handleStepSubmit()
+  }
+  if (e.altKey && e.key === 'ArrowRight' && step.value < stepComponents.length) {
+    e.preventDefault()
+    step.value++
+  }
+  if (e.altKey && e.key === 'ArrowLeft' && step.value > 1) {
+    e.preventDefault()
+    step.value--
+  }
+}
 </script>
+
+<style scoped>
+/* App bar gradient */
+.add-employee-page :deep(.v-toolbar) {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfbfd 100%);
+}
+
+/* Smoke background strip for the stepper */
+.stepper-smoke {
+  background: #f5f6f8;            /* smoke */
+  border: 1px dashed #e6e8ef;
+  padding: 6px 8px;
+}
+
+/* Compact stepper visuals */
+.soft-stepper :deep(.v-stepper-item) { --v-theme-surface: transparent; }
+.soft-stepper :deep(.v-stepper-item--selected .v-stepper-item__title) { font-weight: 700; }
+.soft-stepper :deep(.v-stepper-header) {
+  background: transparent !important; /* header wrapper sits on smoke strip */
+  border-radius: 10px;
+  padding: 2px 4px;                   /* smaller */
+}
+/* Make icons/avatars smaller */
+.soft-stepper :deep(.v-stepper-item__avatar) {
+  height: 26px !important;
+  width: 26px !important;
+}
+.soft-stepper :deep(.v-icon) { font-size: 18px !important; }
+.soft-stepper :deep(.v-stepper-item__title) { font-size: 0.9rem; }
+
+/* Full-height content card minus header + action bar */
+.full-height-card {
+  min-height: calc(100vh - 230px);
+}
+
+/* Sticky bottom action bar (compact) */
+.action-bar {
+  position: sticky;
+  bottom: 0;
+  background: rgba(255,255,255,.95);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid #e8e8ef;
+  border-radius: 12px 12px 0 0;
+  padding: 8px 12px;
+  margin-top: 10px;
+}
+.action-bar .shortcut-hint {
+  font-size: 11px;
+  margin-left: 8px;
+  opacity: .7;
+}
+</style>

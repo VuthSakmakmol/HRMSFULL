@@ -27,6 +27,13 @@ function normalizeDate(v) {
 
 /* ───────────────────────── header → schema mapping ───────────────────────── */
 function mapRowToEmployee(row) {
+  // canonical/default shift from any incoming text
+  const rawShift = s(row['Shift'] ?? row.shiftName ?? row.shift);
+  const defaultShift =
+    /night/i.test(rawShift) ? 'Night Shift'
+  : /day/i.test(rawShift)   ? 'Day Shift'
+  : undefined;
+
   const out = {
     // Identification / profile
     employeeId: s(row['Employee ID'] ?? row.employeeId),
@@ -78,7 +85,11 @@ function mapRowToEmployee(row) {
     line: s(row['Line'] ?? row.line),
     team: s(row['Team'] ?? row.team),
     section: s(row['Section'] ?? row.section),
-    shift: s(row['Shift'] ?? row.shift),
+
+    // legacy + canonical shift
+    shift: rawShift,
+    defaultShift,
+
     status: s(row['Status'] ?? row.status) || 'Working',
     resignDate: normalizeDate(row['Resign Date'] ?? row.resignDate),
     remark: s(row['Remark'] ?? row.remark),
@@ -106,16 +117,16 @@ function mapRowToEmployee(row) {
       : (row.totalMachine ?? 0),
   };
 
-  // prune empty nested
   if (Object.values(out.placeOfBirth).every(v => v === '')) out.placeOfBirth = {};
   if (Object.values(out.placeOfLiving).every(v => v === '')) out.placeOfLiving = {};
-
   return out;
 }
 
 /* ───────────────────────── validation rules ───────────────────────── */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 const PHONE_RE = /^\+?\d{6,20}$/;
+
+const norm = (v) => (typeof v === 'string' ? v.trim() : v);
 
 // Load enum values from schema to avoid typos
 const enumSet = (path) => new Set(Employee.schema.path(path)?.enumValues || []);
@@ -125,14 +136,12 @@ const ENUMS = {
   education: enumSet('education'),
   religion: enumSet('religion'),
   nationality: enumSet('nationality'),
-  shift: enumSet('shift'),
+  // DO NOT validate legacy `shift` (it has no enum in schema)
   status: enumSet('status'),
   sourceOfHiring: enumSet('sourceOfHiring'),
   employeeType: enumSet('employeeType'),
   resignReason: enumSet('resignReason'),
 };
-
-const norm = (v) => (typeof v === 'string' ? v.trim() : v);
 
 function validateEmployeeData(row) {
   const errors = [];
@@ -157,11 +166,17 @@ function validateEmployeeData(row) {
   checkEnum('education', ENUMS.education);
   checkEnum('religion', ENUMS.religion);
   checkEnum('nationality', ENUMS.nationality);
-  checkEnum('shift', ENUMS.shift);
   checkEnum('status', ENUMS.status);
   checkEnum('sourceOfHiring', ENUMS.sourceOfHiring);
   checkEnum('employeeType', ENUMS.employeeType);
   checkEnum('resignReason', ENUMS.resignReason);
+
+  // ✅ Validate canonical shift only (from mapper)
+  const SHIFT_SET = new Set(['Day Shift', 'Night Shift']);
+  const ds = norm(row.defaultShift);
+  if (ds && !SHIFT_SET.has(ds)) {
+    errors.push('defaultShift must be one of: Day Shift, Night Shift');
+  }
 
   // Dates
   const isDate = (v) => v instanceof Date && !isNaN(v.getTime());
@@ -305,47 +320,97 @@ exports.previewImport = async (req, res) => {
 /* ───────────────────────── Excel Import: CONFIRM (JSON) ───────────────────────
    POST /employees/import-confirmed   body: { toImport: [...] }
 -------------------------------------------------------------------------------*/
+// controllers/hrss/employeeController.js (replace existing importConfirmExcel)
+
 exports.importConfirmExcel = async (req, res) => {
   try {
     const company = req.company;
     if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
 
-    const toImport = Array.isArray(req.body?.toImport) ? req.body.toImport : [];
-    if (!toImport.length) return res.status(400).json({ message: 'No data to import' });
+    const io = req.app.get('io'); // from app.set('io', io)
+    const room = req.body?.room ? String(req.body.room) : null;
 
+    const toImportRaw = Array.isArray(req.body?.toImport) ? req.body.toImport : [];
+    if (!toImportRaw.length) return res.status(400).json({ message: 'No data to import' });
+
+    // --- 1) Normalize all rows first
+    const parsed = toImportRaw.map(mapRowToEmployee);
+
+    // --- 2) In-file duplicate check (block import if any)
+    const idCount = new Map();
+    for (const r of parsed) {
+      const id = (r.employeeId || '').trim();
+      if (!id) continue;
+      idCount.set(id, (idCount.get(id) || 0) + 1);
+    }
+    const inFileDuplicates = [...idCount.entries()]
+      .filter(([_, cnt]) => cnt > 1)
+      .map(([id, cnt]) => ({ employeeId: id, count: cnt }));
+
+    if (inFileDuplicates.length) {
+      return res.status(409).json({
+        message: 'Duplicate employeeId(s) found in uploaded file. Import blocked.',
+        duplicatesInFile: inFileDuplicates
+      });
+    }
+
+    // --- 3) DB duplicate check (block import if any)
+    const incomingIds = [...new Set(parsed.map(r => r.employeeId).filter(Boolean))];
+    const existingIds = await Employee
+      .find({ company, employeeId: { $in: incomingIds } })
+      .distinct('employeeId');
+
+    if (existingIds.length) {
+      return res.status(409).json({
+        message: 'Duplicate employeeId(s) already exist in database. Import blocked.',
+        duplicatesInDb: existingIds
+      });
+    }
+
+    // --- 4) Validate each row again & insert with progress
+    const total = parsed.length;
+    let done = 0;
     const inserted = [];
     const failed = [];
 
-    for (let i = 0; i < toImport.length; i++) {
-      const raw = toImport[i];
+    for (let i = 0; i < parsed.length; i++) {
+      const data = parsed[i];
       try {
-        const data = mapRowToEmployee(raw);
         const errs = validateEmployeeData(data);
         if (errs.length) throw new Error(errs.join(' | '));
 
+        // Final safeguard: enforce company and ensure unique index at DB level recommended
         const emp = new Employee({ ...data, company });
-        await emp.validate(); // mongoose-level too
+        await emp.validate();
         await emp.save();
-        inserted.push(emp);
+        inserted.push(emp.employeeId);
       } catch (err) {
         failed.push({
           row: i + 2,
-          employeeId: raw?.employeeId || '',
+          employeeId: data?.employeeId || '',
           reason: (err.message || '').split(' | ')
         });
+      } finally {
+        done++;
+        if (io && room) {
+          io.to(room).emit('employee-import:progress', { done, total });
+        }
       }
     }
 
+    // You may choose to partially succeed or fail; below returns success with failures listed
     return res.status(200).json({
       message: `Imported ${inserted.length} employees.`,
+      insertedCount: inserted.length,
       failedCount: failed.length,
-      failed,
+      failed
     });
   } catch (err) {
     console.error('❌ importConfirmExcel error:', err);
     return res.status(500).json({ message: 'Import failed', error: err.message });
   }
 };
+
 
 // alias to match older route name if you use confirmImport
 exports.confirmImport = exports.importConfirmExcel;

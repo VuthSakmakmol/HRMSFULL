@@ -685,13 +685,21 @@ const handleImportExcel = async (event) => {
     }
 
     // direct import response fallback
-    await Swal.fire({
-      icon: 'success',
-      title: 'Import Complete',
-      text: `✅ ${res.data?.message || 'Imported'}${
-        typeof res.data?.failedCount === 'number' ? ` ❌ Failed: ${res.data.failedCount}` : ''
-      }`
-    })
+    const failed = res.data?.failed || []
+      if (failed.length) {
+          const html = renderIssuesHtml(
+            failed,
+            (f) => `Row ${f.row}${f.employeeId ? ` (${f.employeeId})` : ''}`,
+            (f) => Array.isArray(f.reason) ? f.reason : [String(f.reason || 'Unknown error')]
+          )
+          await Swal.fire({
+            icon: 'warning',
+            title: `Import finished — some rows failed (${failed.length})`,
+            html: `${html}${failed.length > 12 ? `<em>…and ${failed.length - 12} more rows</em>` : ''}`
+          })
+        } else {
+          await Swal.fire({ icon: 'success', title: 'Import Complete', text: res.data?.message || 'Done' })
+     }
     await fetchEmployees()
   } catch (err) {
     console.error('❌ Import failed:', err)
