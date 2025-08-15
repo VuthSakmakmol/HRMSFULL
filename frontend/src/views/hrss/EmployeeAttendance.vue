@@ -329,6 +329,9 @@ const editDialog = ref(false)
 const editLoading = ref(false)
 const calendarDialog = ref(false)
 
+// ✅ define chunk size ONCE, top-level
+const CHUNK_SIZE = 1200;
+
 const selectedDate = ref(dayjs().format('YYYY-MM-DD'))
 
 const editForm = ref({
@@ -428,7 +431,9 @@ const riskColor = (r) => ({
   Evaluated2: 'blue-darken-2'
 }[r] || 'grey')
 
-const formatRiskStatus = (r) => (!r || r === 'None') ? '-' : (/^Evaluated/.test(r) ? r.replace('Evaluated', 'Evaluated (') : r)
+const formatRiskStatus = (r) => (!r || r === 'None')
+  ? '-'
+  : (/^Evaluated/.test(r) ? r.replace('Evaluated', 'Evaluated ') : r)
 
 const evaluateColor = (e) => ({
   Evaluate1: 'green-darken-1',
@@ -437,34 +442,50 @@ const evaluateColor = (e) => ({
 }[e] || 'grey')
 const formatEvaluate = (e) => (!e || e === 'None') ? '-' : e.replace('Evaluate', 'Evaluation ')
 
-// PHN-late/OT helpers
-const getLateMinutes = (timeIn, shiftType) => {
-  if (!timeIn) return '-'
-  const actual = dayjs(timeIn)
-  const expected = shiftType === 'Night Shift'
-    ? dayjs(timeIn).hour(18).minute(0)
-    : dayjs(timeIn).hour(7).minute(0)
-  const diff = actual.diff(expected.add(15, 'minute'), 'minute')
-  if (diff <= 0) return 'On Time'
-  const h = Math.floor(diff / 60), m = diff % 60
-  return h > 0 ? `${h} hr ${m} min` : `${m} min`
+/* ===== Helper to render alerts summary nicely ===== */
+const summarizeAlerts = (agg) => {
+  const parts = []
+  const total = (agg.nearly || 0) + (agg.risk || 0) + (agg.abandon || 0)
+  if (agg.nearly) parts.push(`${agg.nearly} NearlyAbandon`)
+  if (agg.risk) parts.push(`${agg.risk} Risk`)
+  if (agg.abandon) parts.push(`${agg.abandon} Abandon`)
+  if (!parts.length) return ''
+  return `There ${total === 1 ? 'is' : 'are'} ${parts.join(', ')} employee${total === 1 ? '' : 's'} flagged.`
 }
 
+// minutes difference helper
+const diffMinutes = (start, expected) => {
+  if (!start) return 0;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = expected.split(':').map(Number);
+  return (sh * 60 + sm) - (eh * 60 + em);
+};
+
+const getLateMinutes = (timeIn, shiftType) => {
+  if (!timeIn) return '-';
+  const expectedStart = shiftType === 'Night Shift' ? '18:00' : '07:00';
+  const late = diffMinutes(dayjs(timeIn).format('HH:mm'), expectedStart);
+  return late > 0 ? late : 0;
+};
+
 const getOvertimeHours = (timeOut, shiftType) => {
-  if (!timeOut) return '-'
-  const actual = dayjs(timeOut)
-  const expected = shiftType === 'Night Shift'
-    ? dayjs(timeOut).hour(3).minute(0).add(1, 'minute')
-    : dayjs(timeOut).hour(16).minute(0).add(1, 'minute')
-  const diff = actual.diff(expected, 'minute')
-  if (diff <= 0) return 'No'
-  const h = Math.floor(diff / 60), m = diff % 60
-  return h > 0 ? `${h} hr ${m} min` : `${m} min`
-}
+  if (!timeOut) return '-';
+  let expectedEnd = shiftType === 'Night Shift' ? '03:00' : '16:00';
+  let out = dayjs(timeOut);
+  let exp = dayjs(timeOut).hour(Number(expectedEnd.split(':')[0])).minute(Number(expectedEnd.split(':')[1]));
+
+  // For night shift, end time crosses midnight
+  if (shiftType === 'Night Shift' && out.isBefore(exp)) {
+    out = out.add(1, 'day');
+  }
+  let diff = out.diff(exp, 'minutes');
+  return diff > 0 ? (diff / 60).toFixed(2) : 0;
+};
+
 
 /* =========================
    VALIDATE ➜ COMMIT importer
-   With chunking (1,200 rows/chunk) -> 3,600 rows = 3 chunks
+   With chunking (1,200 rows/chunk)
    ========================= */
 const handleImport = async () => {
   // helper: Excel serial/strings -> "HH:mm"
@@ -505,8 +526,8 @@ const handleImport = async () => {
   };
 
   try {
-    const file = excelFile.value;
-    if (!file) return;
+    const fileV = Array.isArray(excelFile.value) ? excelFile.value[0] : excelFile.value;
+    if (!fileV) return;
 
     isLoading.value = true;
 
@@ -570,8 +591,17 @@ const handleImport = async () => {
         const nonWorkingDay = vres.data.nonWorkingDay || null;
         const mismatches    = vres.data.shiftMismatches || [];
 
+        // Helper to accumulate alerts across chunks
+        const agg = { nearly: 0, risk: 0, abandon: 0 };
+
+        const addAlerts = (alerts) => {
+          if (!alerts) return;
+          agg.nearly  += Number(alerts.nearlyAbandonEmployees || 0);
+          agg.risk    += Number(alerts.riskEmployees || 0);
+          agg.abandon += Number(alerts.abandonEmployees || 0);
+        };
+
         // 2) If safe, commit directly (fast path)
-        
         if (!nonWorkingDay && mismatches.length === 0) {
           let totalWritten = 0;
           for (const part of chunkify(preparedRows, CHUNK_SIZE)) {
@@ -585,13 +615,21 @@ const handleImport = async () => {
             };
             const res = await axios.post('/attendance/import', payload);
             totalWritten += (res.data.summary || []).length;
+            addAlerts(res.data.alerts);
 
             importProg.value.sent = Math.min(importProg.value.total, importProg.value.sent + part.length);
           }
 
           await fetchData();
           excelFile.value = null;
-          Swal.fire('Imported', `Imported ${totalWritten} rows.`, 'success');
+
+          const alertMsg = summarizeAlerts(agg);
+          Swal.fire({
+            icon: 'success',
+            title: 'Imported',
+            html: `Imported <b>${totalWritten}</b> rows.${alertMsg ? `<br/><small>${alertMsg}</small>` : ''}`
+          });
+
           importProg.value.active = false;
           isLoading.value = false;
           return;
@@ -690,7 +728,8 @@ const handleImport = async () => {
 
         // 4) COMMIT with chosen options (chunked)
         let totalImported = 0;
-        const CHUNK_SIZE = 1200;
+        const agg2 = { nearly: 0, risk: 0, abandon: 0 };
+
         for (const part of chunkify(preparedRows, CHUNK_SIZE)) {
           const payload = {
             mode: 'commit',
@@ -703,6 +742,12 @@ const handleImport = async () => {
           try {
             const res = await axios.post('/attendance/import', payload);
             totalImported += (res.data.summary || []).length;
+
+            // collect alerts per chunk
+            const a = res.data.alerts || {};
+            agg2.nearly  += Number(a.nearlyAbandonEmployees || 0);
+            agg2.risk    += Number(a.riskEmployees || 0);
+            agg2.abandon += Number(a.abandonEmployees || 0);
           } catch (err) {
             const msg = err?.response?.data?.message || err.message;
             console.error('Commit chunk failed', err?.response?.data || err.message);
@@ -714,7 +759,14 @@ const handleImport = async () => {
 
         await fetchData();
         excelFile.value = null;
-        Swal.fire('Imported', `Imported ${totalImported} rows.`, 'success');
+
+        const alertMsg2 = summarizeAlerts(agg2);
+        Swal.fire({
+          icon: 'success',
+          title: 'Imported',
+          html: `Imported <b>${totalImported}</b> rows.${alertMsg2 ? `<br/><small>${alertMsg2}</small>` : ''}`
+        });
+
         importProg.value.active = false;
       } catch (err) {
         console.error('❌ Import failed:', err);
@@ -725,7 +777,7 @@ const handleImport = async () => {
       }
     };
 
-    reader.readAsArrayBuffer(file);
+    reader.readAsArrayBuffer(fileV);
   } catch (err) {
     console.error('❌ Import failed:', err.message);
     isLoading.value = false;

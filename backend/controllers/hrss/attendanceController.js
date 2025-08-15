@@ -307,6 +307,34 @@ exports.importAttendance = async (req, res) => {
     // COMMIT
     const summary = [];
 
+    // 🔔 unique-employee alert sets (count once per employee for this import)
+    const alertNearly  = new Set();
+    const alertRisk    = new Set();
+    const alertAbandon = new Set();
+
+    // helper: compute consecutive ABSENT streak ending at a given date (includes that date)
+    async function consecutiveAbsentDays(employeeId, company, endDate /* Date */, lookback = 14) {
+      let streak = 0;
+      const end = new Date(endDate);
+      for (let i = 0; i < lookback; i++) {
+        const d0 = new Date(end);
+        d0.setDate(end.getDate() - i);
+        const dayStart = new Date(d0.setHours(0,0,0,0));
+        const dayEnd   = new Date(d0.setHours(23,59,59,999));
+
+        const rec = await Attendance.findOne({
+          employeeId, company,
+          date: { $gte: dayStart, $lte: dayEnd }
+        }).lean();
+
+        if (!rec) break;
+        if (rec.status === 'Leave') break;    // Permission does not count
+        if (rec.status !== 'Absent') break;   // any presence breaks the streak
+        streak++;
+      }
+      return streak;
+    }
+
     for (const p of prepared) {
       if (!p.employeeId) continue;
 
@@ -345,7 +373,7 @@ exports.importAttendance = async (req, res) => {
         { upsert: true, new: true }
       );
 
-      // Sync employee status on presence
+      /* ───── Presence updates ───── */
       if (['OnTime','Late','Overtime'].includes(updated.status)) {
         await Employee.findOneAndUpdate(
           { employeeId: p.employeeId, company },
@@ -353,65 +381,116 @@ exports.importAttendance = async (req, res) => {
         );
       }
 
-      // Consecutive absence → risk flags
+      /* ─────────────── Correct risk logic ───────────────
+         - 3 consecutive Absent → mark those records 'NearlyAbandon'
+         - 6 consecutive Absent → mark those records 'Abandon' and Employee.status 'Abandon'
+         - If the employee returns to work (OnTime/Late/Overtime) after a streak ≥3 → mark TODAY 'Risk'
+         - 'Leave' does not count toward absence streaks
+      */
+
+      // Consecutive absence → risk flags (skip Sundays/Holidays)
       if (updated.status === 'Absent') {
-        const currentDate = new Date(updated.date);
-        let consecutiveAbsent = 1;
+        const currentDate = new Date(updated.date); // this day's date (already start of day in TZ)
+        let consecutiveAbsent = 1;                  // today is absent
+        let earliestWorkingAbsent = new Date(currentDate); // earliest working-day absent in the current streak
 
-        for (let i = 1; i <= 10; i++) {
-          const prevDate = new Date(currentDate);
-          prevDate.setDate(currentDate.getDate() - i);
+        // walk back through calendar days; ignore non‑working days completely
+        for (let i = 1; i <= 14; i++) { // look back far enough to find up to 6 working absences
+          const prevLocal = dayjs.tz(currentDate, TZ).subtract(i, 'day');
+          const prevStart = prevLocal.startOf('day').toDate();
+          const prevEnd   = prevLocal.endOf('day').toDate();
 
+          // if non‑working (Sunday/Holiday) -> skip without breaking the streak
+          const dayType = await getDayType(company, prevStart);
+          if (dayType === 'Sunday' || dayType === 'Holiday') {
+            continue;
+          }
+
+          // working day: check attendance
           const prev = await Attendance.findOne({
             employeeId: p.employeeId,
             company,
-            date: {
-              $gte: new Date(prevDate.setHours(0,0,0,0)),
-              $lt:  new Date(prevDate.setHours(23,59,59,999))
-            },
+            date: { $gte: prevStart, $lt: prevEnd }
           });
-          if (prev?.status === 'Absent') consecutiveAbsent++; else break;
+
+          if (prev?.status === 'Absent') {
+            consecutiveAbsent += 1;
+            earliestWorkingAbsent = prevStart; // expand the streak window leftward
+            if (consecutiveAbsent >= 6) break; // no need to keep walking for our thresholds
+          } else {
+            // any working day that is not Absent breaks the streak
+            break;
+          }
         }
 
+        // Apply flags across the working-day streak window
         if (consecutiveAbsent >= 6) {
-          const start = new Date(currentDate);
-          start.setDate(currentDate.getDate() - 5);
           await Attendance.updateMany(
-            { employeeId: p.employeeId, company, date: { $gte: start, $lte: currentDate }, status: 'Absent' },
+            {
+              employeeId: p.employeeId,
+              company,
+              date: { $gte: earliestWorkingAbsent, $lte: currentDate },
+              status: 'Absent'
+            },
             { riskStatus: 'Abandon' }
           );
           await Employee.findOneAndUpdate({ employeeId: p.employeeId, company }, { status: 'Abandon' });
         } else if (consecutiveAbsent >= 3) {
-          const start = new Date(currentDate);
-          start.setDate(currentDate.getDate() - (consecutiveAbsent - 1));
           await Attendance.updateMany(
-            { employeeId: p.employeeId, company, date: { $gte: start, $lte: currentDate }, status: 'Absent' },
+            {
+              employeeId: p.employeeId,
+              company,
+              date: { $gte: earliestWorkingAbsent, $lte: currentDate },
+              status: 'Absent'
+            },
             { riskStatus: 'NearlyAbandon' }
           );
         }
       }
 
-      // Comeback risk
-      if (['OnTime', 'Late'].includes(updated.status)) {
-        const currentDate = new Date(updated.date);
-        let wasRisk = false;
 
+      if (['OnTime', 'Late', 'Overtime'].includes(updated.status)) {
+        // Coming back after ≥3-day absence streak? -> mark TODAY Risk
+        let hadStreak = false;
+
+        // quick peek for recent NearlyAbandon/Abandon in last 10 days
         for (let i = 1; i <= 10; i++) {
-          const prevDate = new Date(currentDate);
-          prevDate.setDate(currentDate.getDate() - i);
+          const prevDate = new Date(updated.date);
+          prevDate.setDate(updated.date.getDate() - i);
 
-          const prev = await Attendance.findOne({
-            employeeId: p.employeeId,
-            company,
-            date: {
-              $gte: new Date(prevDate.setHours(0,0,0,0)),
-              $lt:  new Date(prevDate.setHours(23,59,59,999))
-            },
-          });
-          if (['NearlyAbandon','Abandon'].includes(prev?.riskStatus)) { wasRisk = true; break; }
+          const dayStart = new Date(prevDate.setHours(0,0,0,0));
+          const dayEnd   = new Date(prevDate.setHours(23,59,59,999));
+
+          const rec = await Attendance.findOne({
+            employeeId: p.employeeId, company,
+            date: { $gte: dayStart, $lte: dayEnd }
+          }).lean();
+
+          if (rec?.riskStatus === 'Abandon' || rec?.riskStatus === 'NearlyAbandon') {
+            hadStreak = true;
+            break;
+          }
         }
 
-        updated.riskStatus = wasRisk ? 'Risk' : 'None';
+        // if not found, compute real streak ending yesterday
+        if (!hadStreak) {
+          const y = new Date(updated.date);
+          y.setDate(updated.date.getDate() - 1);
+          const absStreak = await consecutiveAbsentDays(p.employeeId, company, y, 14);
+          hadStreak = absStreak >= 3;
+        }
+
+        updated.riskStatus = hadStreak ? 'Risk' : 'None';
+        await updated.save();
+
+        if (hadStreak) alertRisk.add(p.employeeId);
+      }
+
+      if (updated.status === 'Leave') {
+        // Leave day should not escalate; keep existing risk if already escalated
+        updated.riskStatus = updated.riskStatus && updated.riskStatus !== 'None'
+          ? updated.riskStatus
+          : 'None';
         await updated.save();
       }
 
@@ -421,7 +500,8 @@ exports.importAttendance = async (req, res) => {
         status: updated.status,
         leaveType: updated.leaveType,
         overtimeHours: updated.overtimeHours,
-        shiftType: updated.shiftType
+        shiftType: updated.shiftType,
+        riskStatus: updated.riskStatus
       });
     }
 
@@ -431,6 +511,11 @@ exports.importAttendance = async (req, res) => {
       warnings: {
         nonWorkingDay: isNonWorking ? dayType : null,
         shiftMismatches: mismatches
+      },
+      alerts: {
+        nearlyAbandonEmployees: alertNearly.size,
+        riskEmployees:          alertRisk.size,
+        abandonEmployees:       alertAbandon.size
       },
       summary
     });

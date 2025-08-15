@@ -96,7 +96,7 @@
         <v-list-item :to="{ path: '/hrss/attendance' }">
           <template #title>
             <div class="sidebar-link">
-              <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
+              <font-awesome-icon :icon="['fas', 'clipboard-user']" class="sidebar-icon" />
               Attendance
             </div>
           </template>
@@ -104,15 +104,15 @@
         <v-list-item :to="{ path: '/hrss/dashboard/attendance' }">
           <template #title>
             <div class="sidebar-link">
-              <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
-              Attendance Dashboard
+              <font-awesome-icon :icon="['fas', 'fa-calendar-week']" class="sidebar-icon" />
+              Att-Dashboard
             </div>
           </template>
         </v-list-item>
         <v-list-item :to="{ path: '/hrss/manpower/table' }">
           <template #title>
             <div class="sidebar-link">
-              <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
+              <font-awesome-icon :icon="['fas', 'fa-people-group']" class="sidebar-icon" />
               ManPower
             </div>
           </template>
@@ -120,7 +120,7 @@
         <v-list-item :to="{ path: '/hrss/dashboard' }">
           <template #title>
             <div class="sidebar-link">
-              <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
+              <font-awesome-icon :icon="['fas', 'fa-tachograph-digital']" class="sidebar-icon" />
               Dashboard
             </div>
           </template>
@@ -128,7 +128,7 @@
                 <v-list-item :to="{ path: '/hrss/dashboard/excome' }">
           <template #title>
             <div class="sidebar-link">
-              <font-awesome-icon :icon="['fas', 'users']" class="sidebar-icon" />
+              <font-awesome-icon :icon="['fas', 'fa-database']" class="sidebar-icon" />
               Excome
             </div>
           </template>

@@ -2,7 +2,9 @@
 import axios from 'axios';
 
 const instance = axios.create({
-  baseURL: import.meta.env?.VITE_API_URL || process.env.VITE_API_URL || 'http://localhost:4700/api',
+  baseURL: import.meta.env?.VITE_API_URL || process.env.VITE_API_URL || 'http://localhost:4700/api', 
+  // baseURL: import.meta.env?.VITE_API_URL || process.env.VITE_API_URL || 'http://157.245.59.122:4700',
+
   // Prevent client-side truncation for large imports (Node-only, harmless in browser)
   maxBodyLength: Infinity,
   maxContentLength: Infinity,

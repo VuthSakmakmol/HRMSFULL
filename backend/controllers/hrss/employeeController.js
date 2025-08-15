@@ -122,6 +122,7 @@ function mapRowToEmployee(row) {
   return out;
 }
 
+
 /* ───────────────────────── validation rules ───────────────────────── */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 const PHONE_RE = /^\+?\d{6,20}$/;
