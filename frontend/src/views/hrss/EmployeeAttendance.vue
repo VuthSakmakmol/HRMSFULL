@@ -275,7 +275,7 @@
       </div>
     </v-card>
 
-    <v-row align="center" justify="space-between" class="mt-2">
+    <v-row align-center="center" justify="space-between" class="mt-2">
       <v-col cols="12" sm="6">
         <v-select
           v-model="pageSize"
@@ -316,6 +316,7 @@ import { useRouter } from 'vue-router'
 // Components
 import AttendanceHeatmap from '@/components/hrss/AttendanceHeatmap.vue'
 import WorkCalendarDialog from '@/components/hrss/WorkCalendarDialog.vue'
+
 
 const router = useRouter();
 const excelFile = ref(null)

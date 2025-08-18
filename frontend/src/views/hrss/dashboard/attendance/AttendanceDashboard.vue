@@ -36,6 +36,7 @@
         <v-btn :value="'indirect'" variant="flat">🏢 Indirect + Merchandising</v-btn>
         <v-btn :value="'absentCompare'" variant="flat">📉 Compare Absent Rate</v-btn>
         <v-btn :value="'turnover'" variant="flat">🔄 Turnover</v-btn>
+        <v-btn :value="'analytics'" variant="flat">📊 Analytics</v-btn> <!-- NEW -->
       </v-btn-toggle>
     </div>
 
@@ -83,19 +84,40 @@
           />
         </v-card>
       </v-window-item>
+
+      <!-- 📊 Analytics (NEW, uses /attendance/series) -->
+      <v-window-item value="analytics">
+        <v-card class="pa-4 mb-4">
+          <AttendanceAnalytics
+            class="mb-4"
+            v-model:modelValueDate="selectedDate"
+            v-model:modelValueShift="selectedShift"
+          />
+        </v-card>
+      </v-window-item>
     </v-window>
   </v-container>
 </template>
 
 <script setup>
 import { ref } from 'vue'
+import dayjs from '@/plugins/dayjs'
+
 import PeriodOfSewingDepartmentAttendanceSummary from './PeriodOfSewingDepartmentAttendanceSummary.vue'
 import PeriodOfIndirectDepartmentAttendanceSummary from './PeriodOfIndirectDepartmentAttendanceSummary.vue'
 import CompareAbentRate from './CompareAbentRate.vue'
 import TurnOver from './TurnOver.vue'
 
+// MVC nv AttendanceController
+import AttendanceAnalytics from '@/components/hrss/AttendanceAnalytics.vue'
+
 const selectedYear = ref(new Date().getFullYear())
 const selectedMonth = ref(new Date().getMonth() + 1)
+const activeSection = ref('absentCompare') // default section
+
+// 🔁 Two-way bindings for AttendanceAnalytics
+const selectedDate = ref(dayjs().format('YYYY-MM-DD')) // initial = today
+const selectedShift = ref('All') // 'All' | 'Day Shift' | 'Night Shift'
 
 const yearOptions = Array.from({ length: 6 }, (_, i) => 2020 + i)
 
@@ -114,8 +136,6 @@ const monthOptions = [
   { title: 'Nov', value: 11 },
   { title: 'Dec', value: 12 }
 ]
-
-const activeSection = ref('absentCompare') // default section
 </script>
 
 <style scoped>

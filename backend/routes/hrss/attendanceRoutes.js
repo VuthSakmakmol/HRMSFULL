@@ -1,3 +1,4 @@
+// routes/hrss/attendanceRoutes.js
 const express = require('express');
 const router = express.Router();
 
@@ -9,13 +10,14 @@ const {
   getDayShiftAttendance,
   getNightShiftAttendance,
   getPaginatedAttendance,
-  getAttendanceDotSummary,   // ⬅️ NEW
+  getAttendanceDotSummary,
   importAttendance,
   updateAttendance,
   updateLeavePermission,
   deleteAttendance,
   getAttendanceById,
   getAttendanceHistoryByEmployeeId,
+  getAttendanceSeries,   // ⬅️ NEW analytics endpoint
 } = require('../../controllers/hrss/attendanceController');
 
 // 📥 Import Attendance (validate/commit supported by controller)
@@ -38,6 +40,9 @@ router.get('/paginated', authenticate, authorizeCompanyAccess, getPaginatedAtten
 
 // 🟩 GitHub-style monthly dots (Working / Missing / Holiday / Sunday)
 router.get('/dots', authenticate, authorizeCompanyAccess, getAttendanceDotSummary);
+
+// 📊 Time-series analytics (daily / monthly / yearly)
+router.get('/series', authenticate, authorizeCompanyAccess, getAttendanceSeries);
 
 // 🆕 Get Single Attendance by ID (used by Evaluate page)
 router.get('/attendances/:id', authenticate, authorizeCompanyAccess, getAttendanceById);

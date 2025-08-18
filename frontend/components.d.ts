@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     AppSidebar: typeof import('./src/components/AppSidebar.vue')['default']
     AppTopbar: typeof import('./src/components/AppTopbar.vue')['default']
+    AttendanceAnalytics: typeof import('./src/components/hrss/AttendanceAnalytics.vue')['default']
     AttendanceHeatmap: typeof import('./src/components/hrss/AttendanceHeatmap.vue')['default']
     EmployeeCard: typeof import('./src/components/hrss/EmployeeCard.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
