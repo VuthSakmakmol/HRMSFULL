@@ -1,21 +1,15 @@
 <template>
   <v-card class="pa-4 mb-6 rounded-xl elevation-1">
     <h3 class="text-h6 font-weight-bold mb-4">
-      Direct Labor In & Out Summary ({{ selectedYear }})
+      Direct Labor In & Out Summary ({{ year }})
     </h3>
 
-    <v-row class="mb-4">
-      <v-col cols="12" sm="4">
-        <v-select
-          v-model="selectedYear"
-          :items="yearOptions"
-          label="Select Year"
-          variant="outlined"
-          density="compact"
-          @update:modelValue="fetchData"
-        />
-      </v-col>
-    </v-row>
+    <v-progress-linear
+      v-if="isLoading"
+      height="2"
+      indeterminate
+      class="mb-2"
+    />
 
     <VueApexCharts
       v-if="series.length"
@@ -28,47 +22,35 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import axios from '@/utils/axios'
 import VueApexCharts from 'vue3-apexcharts'
-import dayjs from 'dayjs'
 
-const selectedYear = ref(new Date().getFullYear())
-const yearOptions = ref([])
+// ✅ Receive global year from parent (ExcomeDashboard.vue)
+const { year } = defineProps({
+  year: { type: Number, required: true }
+})
+
+const isLoading = ref(false)
 const series = ref([])
 const chartOptions = ref({})
 
-onMounted(() => {
-  const currentYear = new Date().getFullYear()
-  yearOptions.value = Array.from({ length: 5 }, (_, i) => currentYear - i)
-  fetchData()
-})
-
-const fetchData = async () => {
+async function fetchData() {
   try {
-    const res = await axios.get(`/hrss/excome/direct-labor-in-out?year=${selectedYear.value}`)
-    const data = res.data.data
+    isLoading.value = true
+    const res = await axios.get('/hrss/excome/direct-labor-in-out', {
+      params: { year }
+    })
+    const data = res.data?.data ?? []
 
     series.value = [
-      {
-        name: 'Joined',
-        data: data.map(d => d.joined)
-      },
-      {
-        name: 'Resigned',
-        data: data.map(d => d.resigned)
-      },
-      {
-        name: 'Net Change',
-        data: data.map(d => d.net)
-      }
+      { name: 'Joined',    data: data.map(d => d.joined ?? 0) },
+      { name: 'Resigned',  data: data.map(d => d.resigned ?? 0) },
+      { name: 'Net Change',data: data.map(d => d.net ?? 0) }
     ]
 
     chartOptions.value = {
-      chart: {
-        type: 'bar',
-        stacked: false
-      },
+      chart: { type: 'bar', stacked: false, toolbar: { show: false } },
       xaxis: {
         categories: data.map(d => d.month),
         title: { text: 'Month' }
@@ -78,22 +60,23 @@ const fetchData = async () => {
         min: 0,
         forceNiceScale: true
       },
-      tooltip: {
-        shared: true,
-        intersect: false
-      },
-      legend: {
-        position: 'top'
-      },
-      plotOptions: {
-        bar: {
-          horizontal: false,
-          columnWidth: '55%',
-        }
-      }
+      tooltip: { shared: true, intersect: false },
+      legend: { position: 'top' },
+      plotOptions: { bar: { horizontal: false, columnWidth: '55%' } },
+      colors: ['#2E7D32', '#C62828', '#1565C0']
     }
   } catch (err) {
     console.error('Failed to fetch direct labor in/out data:', err)
+    series.value = []
+    chartOptions.value = {}
+  } finally {
+    isLoading.value = false
   }
 }
+
+// 🔁 Load now and whenever the global year changes
+watch(() => year, fetchData, { immediate: true })
 </script>
+
+<style scoped>
+</style>

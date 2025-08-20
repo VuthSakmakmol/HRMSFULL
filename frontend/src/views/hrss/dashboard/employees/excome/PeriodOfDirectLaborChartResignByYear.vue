@@ -1,24 +1,18 @@
 <template>
   <v-card class="pa-4 mb-6 rounded-xl elevation-1">
     <h3 class="text-h6 font-weight-bold mb-4">
-      Period of Direct Labor Resignation by Service Duration ({{ selectedYear }})
+      Period of Direct Labor Resignation by Service Duration ({{ year }})
     </h3>
 
-    <!-- Year Selector -->
-    <v-row class="mb-4">
-      <v-col cols="12" sm="4">
-        <v-select
-          v-model="selectedYear"
-          :items="yearOptions"
-          label="Select Year"
-          variant="outlined"
-          density="compact"
-        />
-      </v-col>
-    </v-row>
+    <v-progress-linear
+      v-if="isLoading"
+      height="2"
+      indeterminate
+      class="mb-2"
+    />
 
-    <!-- Chart -->
     <VueApexCharts
+      v-if="chartSeries.length"
       type="bar"
       height="400"
       :options="chartOptions"
@@ -28,80 +22,73 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import axios from '@/utils/axios'
 import VueApexCharts from 'vue3-apexcharts'
 
-// Setup year
-const currentYear = new Date().getFullYear()
-const selectedYear = ref(currentYear)
-const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i)
+// ✅ receive global year from parent
+const { year } = defineProps({
+  year: { type: Number, required: true }
+})
 
-// Chart data
+const isLoading = ref(false)
 const chartSeries = ref([])
 const chartOptions = ref({})
 
-// Fetch and build chart
-const fetchChartData = async () => {
+async function fetchChartData() {
   try {
+    isLoading.value = true
+
     const res = await axios.get('/hrss/excome/period-of-direct-chart-resign', {
-      params: { year: selectedYear.value }
+      params: { year }
     })
 
     const chartData = res.data?.data || []
 
-    chartSeries.value = [{
-      name: 'Percentage',
-      data: chartData.map(item => parseFloat(item.percent))
-    }]
+    const percents = chartData.map(item => {
+      const num = parseFloat(item.percent)
+      return Number.isFinite(num) ? num : 0
+    })
+
+    chartSeries.value = [
+      { name: 'Percentage', data: percents }
+    ]
 
     chartOptions.value = {
-      chart: {
-        type: 'bar',
-        toolbar: { show: false }
-      },
+      chart: { type: 'bar', toolbar: { show: false } },
       plotOptions: {
-        bar: {
-          horizontal: false,
-          columnWidth: '45%',
-          distributed: true
-        }
+        bar: { horizontal: false, columnWidth: '45%', distributed: true }
       },
       dataLabels: {
         enabled: true,
-        formatter: val => `${val.toFixed(2)}%`,
+        formatter: (val) => `${Number(val).toFixed(2)}%`,
         offsetY: -10,
-        style: {
-          fontSize: '12px',
-          colors: ['#000']
-        }
+        style: { fontSize: '12px', colors: ['#000'] }
       },
       xaxis: {
         categories: chartData.map(item => item.group),
-        labels: {
-          rotate: -10
-        }
+        labels: { rotate: -10 }
       },
       yaxis: {
         title: { text: 'Percentage (%)' },
-        labels: {
-          formatter: val => `${val.toFixed(0)}%`
-        }
+        labels: { formatter: (val) => `${Number(val).toFixed(0)}%` },
+        min: 0,
+        max: Math.max(100, Math.ceil(Math.max(...percents, 0) / 10) * 10)
       },
-      tooltip: {
-        y: {
-          formatter: val => `${val.toFixed(2)}%`
-        }
-      },
+      tooltip: { y: { formatter: (val) => `${Number(val).toFixed(2)}%` } },
       colors: ['#1E88E5']
     }
   } catch (err) {
-    console.error('❌ Failed to fetch chart data:', err)
+    console.error('❌ Failed to fetch direct chart data:', err)
+    chartSeries.value = []
+    chartOptions.value = {}
+  } finally {
+    isLoading.value = false
   }
 }
 
-onMounted(fetchChartData)
-watch(selectedYear, fetchChartData)
+// 🔁 load now and whenever global year changes
+watch(() => year, fetchChartData, { immediate: true })
 </script>
 
 <style scoped>
