@@ -47,22 +47,6 @@
         />
       </v-col>
 
-      <!-- 4) Merchandising Join Trends -->
-      <!-- <v-col cols="12" sm="4">
-        <MonthlyJoinChart
-          :chart-data="merchMonthlyProcessed"
-        />
-      </v-col> -->
-
-
-      <!-- 4) Other Position Joint -->
-      <v-col cols="12" sm="6">
-        <OtherPositionChart
-          :chart-data="otherPivot"
-          title="Other Positions Join Trends"
-        />
-      </v-col>
-
       <!-- 1) Total Employees -->
       <v-col cols="12" sm="4">
         <TotalEmployeesCard
@@ -82,7 +66,6 @@ import axios from '@/utils/axios'
 import TotalEmployeesCard   from './charts/TotalEmployeesCard.vue'
 import MonthlyJoinChart     from './charts/MonthlyJoinChart.vue'
 import PositionCountChart   from './charts/PositionCountChart.vue'
-import OtherPositionChart   from './charts/OtherPositionChart.vue'
 
 
 // ─── RAW DATA STATES ───────────────────────────────────────────────

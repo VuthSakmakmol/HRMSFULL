@@ -32,11 +32,11 @@
     <!-- Section Switcher -->
     <div class="mb-4">
       <v-btn-toggle v-model="activeSection" mandatory divided>
-        <v-btn :value="'sewing'" variant="flat">🧵 Sewing Summary</v-btn>
-        <v-btn :value="'indirect'" variant="flat">🏢 Indirect + Merchandising</v-btn>
-        <v-btn :value="'absentCompare'" variant="flat">📉 Compare Absent Rate</v-btn>
-        <v-btn :value="'turnover'" variant="flat">🔄 Turnover</v-btn>
-        <v-btn :value="'analytics'" variant="flat">📊 Analytics</v-btn> <!-- NEW -->
+        <v-btn :value="'sewing'" variant="flat">Sewing Summary</v-btn>
+        <v-btn :value="'indirect'" variant="flat">Indirect + Merchandising</v-btn>
+        <v-btn :value="'absentCompare'" variant="flat">Compare Absent Rate</v-btn>
+        <v-btn :value="'turnover'" variant="flat">Turnover</v-btn>
+        <v-btn :value="'analytics'" variant="flat">Analytics</v-btn>
       </v-btn-toggle>
     </div>
 

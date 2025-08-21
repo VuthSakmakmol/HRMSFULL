@@ -138,7 +138,6 @@ const props = defineProps({
   modelValueDate: { type: String, required: true },
   modelValueShift: { type: String, default: 'All' },
 })
-
 const emit = defineEmits(['update:modelValueDate', 'update:modelValueShift'])
 
 /* ====== Controls ====== */
@@ -164,7 +163,7 @@ const month = ref(Number(now.format('MM')))
 
 /* ====== Data ====== */
 const loading = ref(false)
-const labels = ref([])
+const rawLabels = ref([]) // untouched from API
 
 const seriesOutcome = ref([]) // OnTime/Late/Absent/Leave/None
 const seriesRisk = ref([])    // NearlyAbandon/Abandon/Risk/None
@@ -177,9 +176,55 @@ const totalsCount = computed(() => {
   return (status.OnTime||0)+ (status.Late||0)+ (status.Absent||0)+ (status.Leave||0)+ (status.None||0)
 })
 
+/* ====== Label formatting ====== */
+const MONTHS_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+const displayLabels = computed(() => {
+  const toMonthName = (m) => {
+    const n = Number(m)
+    return n >= 1 && n <= 12 ? MONTHS_ABBR[n - 1] : String(m)
+  }
+
+  if (scope.value === 'year') {
+    // Inputs could be 1..12, 'YYYY-MM', 'YYYY-MM-DD', etc.
+    return rawLabels.value.map((key) => {
+      const s = String(key)
+      if (/^\d{1,2}$/.test(s)) return toMonthName(s)
+      if (/^\d{4}-\d{2}(-\d{2})?$/.test(s)) return toMonthName(s.slice(5, 7))
+      const d = dayjs(s)
+      return d.isValid() ? MONTHS_ABBR[d.month()] : s
+    })
+  }
+
+  if (scope.value === 'month') {
+    // Show only day-of-month (01..31), no 'YYYY-MM-DD'
+    return rawLabels.value.map((key) => {
+      const s = String(key)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s.slice(8, 10)
+      if (/^\d{1,2}$/.test(s)) return s.padStart(2, '0')
+      const d = dayjs(s)
+      if (d.isValid()) return d.format('DD')
+      // If backend accidentally returns month numbers here, show month names
+      if (/^\d{1,2}$/.test(s)) return toMonthName(s)
+      return s
+    })
+  }
+
+  // scope === 'day' – keep HH:mm if datetime detected; otherwise as-is
+  return rawLabels.value.map((key) => {
+    const s = String(key)
+    if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}/.test(s)) {
+      const d = dayjs(s)
+      return d.isValid() ? d.format('HH:mm') : s
+    }
+    if (/^\d{1,2}$/.test(s)) return s.padStart(2, '0')
+    return s
+  })
+})
+
 /* ====== Chart options ====== */
 const baseXAxis = computed(() => ({
-  categories: labels.value,
+  categories: displayLabels.value,
   labels: { rotate: -30, hideOverlappingLabels: true, trim: true },
   tickPlacement: 'on',
 }))
@@ -239,7 +284,7 @@ async function load() {
     const { data } = await axios.get('/attendance/series', { params })
     const buckets = Array.isArray(data?.buckets) ? data.buckets : []
 
-    labels.value = buckets.map(b => b.key)
+    rawLabels.value = buckets.map(b => b.key)
 
     // Outcome series
     const outOnTime = buckets.map(b => b.status?.OnTime || 0)
@@ -286,7 +331,7 @@ async function load() {
     totals.value = data?.totals || null
   } catch (err) {
     console.error('❌ /attendance/series fetch failed', err)
-    labels.value = []
+    rawLabels.value = []
     seriesOutcome.value = []
     seriesRisk.value = []
     seriesLeave.value = []

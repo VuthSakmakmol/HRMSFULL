@@ -18,12 +18,12 @@
     <!-- Button Row (one-at-a-time view) -->
     <div class="section-buttons mb-4">
       <v-btn-toggle v-model="activeSection" mandatory divided>
-        <v-btn :value="'ageService'" variant="flat">📊 Age & Service</v-btn>
-        <v-btn :value="'headcount'"  variant="flat">👷 Headcount by Type</v-btn>
-        <v-btn :value="'charts'"     variant="flat">📈 Direct/Indirect + Budget</v-btn>
-        <v-btn :value="'resign'"     variant="flat">📉 Resign Reasons</v-btn>
-        <v-btn :value="'yearlyResign'" variant="flat">🗓️ Yearly Resign</v-btn>
-        <v-btn :value="'inOut'"      variant="flat">🔄 Direct Labor In & Out</v-btn>
+        <v-btn :value="'ageService'" variant="flat">Age & Service</v-btn>
+        <v-btn :value="'headcount'"  variant="flat">Headcount by Type</v-btn>
+        <v-btn :value="'charts'"     variant="flat">Direct/Indirect + Budget</v-btn>
+        <v-btn :value="'resign'"     variant="flat">Resign Reasons</v-btn>
+        <v-btn :value="'yearlyResign'" variant="flat">Yearly Resign</v-btn>
+        <v-btn :value="'inOut'"      variant="flat">Direct Labor In & Out</v-btn>
       </v-btn-toggle>
     </div>
 
@@ -34,7 +34,7 @@
         <v-card class="pa-4">
           <v-row dense class="chart-section">
             <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-age">
-              <AvgAgeCard />
+              <AvgAgeCard :year="selectedYear" />
             </v-col>
 
             <v-col cols="12" sm="6" class="pa-2 dashboard-card card-avg-service">
