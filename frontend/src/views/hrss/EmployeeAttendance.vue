@@ -255,7 +255,7 @@
               <td><v-chip :color="statusColor(item.status)" variant="flat" density="comfortable">{{ formatStatus(item.status) }}</v-chip></td>
               <td><v-chip :color="riskColor(item.riskStatus)" variant="flat" density="comfortable">{{ formatRiskStatus(item.riskStatus) }}</v-chip></td>
               <td><v-chip :color="evaluateColor(item.evaluate)" variant="flat" density="comfortable">{{ formatEvaluate(item.evaluate) }}</v-chip></td>
-              <td>{{ getLateMinutes(item.timeIn, item.shiftType) }}</td>
+              <td>{{ lateBy(item) }}</td>
               <td>{{ getOvertimeHours(item.timeOut, item.shiftType) }}</td>
               <td>
                 <span v-if="item.status === 'Leave'">{{ item.leaveType || '-' }}</span>
@@ -462,12 +462,48 @@ const diffMinutes = (start, expected) => {
   return (sh * 60 + sm) - (eh * 60 + em);
 };
 
-const getLateMinutes = (timeIn, shiftType) => {
-  if (!timeIn) return '-';
-  const expectedStart = shiftType === 'Night Shift' ? '18:00' : '07:00';
-  const late = diffMinutes(dayjs(timeIn).format('HH:mm'), expectedStart);
-  return late > 0 ? late : 0;
+// --- Use controller's break-aware lateMinutes when available ---
+const lateBy = (row) => {
+  if (Number.isFinite(row?.lateMinutes)) return row.lateMinutes;
+
+  // Fallback (if old records have no lateMinutes yet): compute with break-aware logic
+  const hhmm = row?.timeIn ? dayjs(row.timeIn).format('HH:mm') : null;
+  if (!hhmm) return '-';
+
+  const toMin = (s) => {
+    const [h, m] = s.split(':').map(Number);
+    return (h * 60) + (m || 0);
+  };
+
+  const startMin = toMin(hhmm);
+
+  if (row?.shiftType === 'Night Shift') {
+    const S   = toMin('18:00');
+    const B1  = toMin('22:00');
+    const B2  = toMin('23:00');
+    const BLK = B2 - B1; // 60
+
+    let sm = startMin;
+    if (sm < S) sm += 1440; // normalize across midnight
+
+    if (sm <= S) return 0;
+    if (sm <= B1) return sm - S;
+    if (sm <  B2) return B1 - S;           // arrived during break -> cap at morning max
+    return (sm - S) - BLK;                  // after break -> subtract 60
+  }
+
+  // Day Shift (default)
+  const S   = toMin('07:00');
+  const B1  = toMin('11:00');
+  const B2  = toMin('12:00');
+  const BLK = B2 - B1; // 60
+
+  if (startMin <= S) return 0;
+  if (startMin <= B1) return startMin - S;
+  if (startMin <  B2) return B1 - S;        // arrived during break
+  return (startMin - S) - BLK;              // after break -> minus 60
 };
+
 
 const getOvertimeHours = (timeOut, shiftType) => {
   if (!timeOut) return '-';

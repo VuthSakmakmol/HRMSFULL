@@ -12,10 +12,26 @@ dayjs.extend(timezone);
 const TZ = 'Asia/Phnom_Penh';
 
 /* ───────────────────────── helpers ───────────────────────── */
+// Robust "time string" -> minutes since 00:00 (supports "12:00 PM", "11am", "7", "07:30")
 const toMinutes = (time) => {
-  if (!time) return 0;
-  const [h, m] = String(time).split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
+  if (time == null || time === '') return null; // keep null to detect "no scan"
+  if (typeof time === 'number' && isFinite(time)) return Math.max(0, Math.floor(time));
+
+  let s = String(time).trim().toLowerCase().replace(/\s+/g, ''); // "12:00 PM" -> "12:00pm"
+  const isPM = /pm$/.test(s);
+  const isAM = /am$/.test(s);
+  if (isPM || isAM) s = s.replace(/(am|pm)$/, '');
+
+  const parts = s.split(':');
+  let h = Number(parts[0] || 0);
+  let m = Number(parts[1] || 0);
+  if (!isFinite(h)) h = 0;
+  if (!isFinite(m)) m = 0;
+
+  if (isPM && h < 12) h += 12;
+  if (isAM && h === 12) h = 0;
+
+  return h * 60 + m;
 };
 
 const startOfDayTZ = (dLike) => dayjs.tz(dLike, TZ).startOf('day');
@@ -27,17 +43,12 @@ const parseTimeToDateTZ = (baseDateStr, timeStr) => {
 };
 
 /**
- * Accepts Excel serial numbers and many string formats:
- * - "YYYY-MM-DD", "YYYY-M-D"
- * - "D-M-YYYY", "DD-MM-YYYY"
- * - "M-D-YYYY" (fallback month-first)
- * - With separators "/", ".", " " (they are normalized)
- * Returns "YYYY-MM-DD" (date only) or null.
+ * Accept many date formats & Excel serials and return "YYYY-MM-DD" or null.
  */
 const formatExcelDate = (value) => {
   if (value == null || value === '') return null;
 
-  // 1) Excel serial (including fractional time) -> date part only
+  // Excel serial (incl. fractional time) -> date part only
   if (typeof value === 'number' && isFinite(value)) {
     const parsed = XLSX.SSF.parse_date_code(value);
     if (parsed && parsed.y && parsed.m && parsed.d) {
@@ -49,15 +60,12 @@ const formatExcelDate = (value) => {
     return null;
   }
 
-  // 2) String formats
   if (typeof value === 'string') {
     let s = value.trim();
     if (!s) return null;
-
-    // unify delimiters to "-": supports "/", ".", "\" and spaces
     s = s.replace(/[./\\\s]+/g, '-');
 
-    // a) YYYY-MM-DD or YYYY-M-D
+    // YYYY-MM-DD or YYYY-M-D
     let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
     if (m) {
       const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
@@ -67,7 +75,7 @@ const formatExcelDate = (value) => {
       return null;
     }
 
-    // b) D-M-YYYY or DD-MM-YYYY (day-first; common locally)
+    // DD-MM-YYYY or D-M-YYYY
     m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
     if (m) {
       const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);
@@ -77,11 +85,9 @@ const formatExcelDate = (value) => {
       return null;
     }
 
-    // c) fallback: let dayjs try anything else
     const tentative = dayjs(s);
     if (tentative.isValid()) return tentative.format('YYYY-MM-DD');
   }
-
   return null;
 };
 
@@ -93,48 +99,6 @@ const normalizeShift = (s) => {
   return null;
 };
 
-const evaluateStatus = (startTime, endTime, shiftType) => {
-  if (!startTime || !endTime) return { status: 'Absent', overtimeMinutes: 0 };
-
-  let startMin = toMinutes(startTime);
-  let endMin   = toMinutes(endTime);
-  let overtimeMinutes = 0;
-
-  if (shiftType === 'Day Shift') {
-    const expectedStart = toMinutes('07:00');
-    const expectedEnd   = toMinutes('16:00');
-    const late = startMin > expectedStart + 15;
-    if (endMin > expectedEnd + 1) overtimeMinutes = endMin - (expectedEnd + 1);
-    return { status: late ? 'Late' : 'OnTime', overtimeMinutes };
-  }
-
-  if (shiftType === 'Night Shift') {
-    const expectedStart = toMinutes('18:00');
-    const expectedEnd   = toMinutes('03:00') + 1440; // crosses midnight
-    if (startMin < expectedStart) startMin += 1440;
-    if (endMin   < expectedStart) endMin   += 1440;
-    const late = startMin > expectedStart + 15;
-    if (endMin > expectedEnd + 1) overtimeMinutes = endMin - (expectedEnd + 1);
-    return { status: late ? 'Late' : 'OnTime', overtimeMinutes };
-  }
-
-  return { status: 'Absent', overtimeMinutes: 0 };
-};
-
-const guessShiftFromTimes = (startTime, endTime) => {
-  if (!startTime && !endTime) return null;
-  if (startTime) {
-    const sm = toMinutes(startTime);
-    if (sm >= toMinutes('05:00') && sm <= toMinutes('11:59')) return 'Day Shift';
-    if (sm >= toMinutes('16:00') && sm <= toMinutes('23:59')) return 'Night Shift';
-  }
-  if (endTime) {
-    const em = toMinutes(endTime);
-    if (em >= toMinutes('00:00') && em <= toMinutes('06:00')) return 'Night Shift';
-  }
-  return null;
-};
-
 const getDayType = async (company, dateOnly) => {
   const d0 = startOfDayTZ(dateOnly).toDate();
   const cal = await WorkCalendar.findOne({ company, date: d0 }).lean();
@@ -143,14 +107,123 @@ const getDayType = async (company, dateOnly) => {
   return dow === 0 ? 'Sunday' : 'Working';
 };
 
+/* ───────── Strict windows to decide if scans plausibly belong to a shift ─────────
+   We DO NOT re-assign shift from time. If scans are “night-like” but employee is Day Shift,
+   we will mark the record as Absent (no late, no OT).
+*/
+const scansMatchShift = (startTime, endTime, shiftType) => {
+  const sm = toMinutes(startTime);
+  const em = toMinutes(endTime);
+
+  // if no scans, we don't call it a mismatch here (caller decides Absent/Leave)
+  if (sm == null && em == null) return true;
+
+  if (shiftType === 'Day Shift') {
+    // Day-like scans: starts between 05:00–15:59; any end up to 23:59 is OK
+    if (sm != null && (sm < toMinutes('05:00') || sm >= toMinutes('16:00'))) return false;
+    if (em != null && em < toMinutes('00:00')) return false; // impossible anyway
+    return true;
+  }
+
+  if (shiftType === 'Night Shift') {
+    // Night-like scans: start 16:00–23:59 or 00:00–02:59 (some devices post-midnight)
+    if (sm != null) {
+      const nightStart = (sm >= toMinutes('16:00') && sm <= toMinutes('23:59')) || (sm >= 0 && sm < toMinutes('03:00'));
+      if (!nightStart) return false;
+    }
+    return true;
+  }
+
+  return false;
+};
+
+/* ────────────────── Lateness & overtime (break-aware, strict by shift) ──────────────────
+   Day Shift:   07:00–11:00 work, 11:00–12:00 BREAK, 12:00–16:00 work
+   Night Shift: 18:00–22:00 work, 22:00–23:00 BREAK, 23:00–03:00 work
+   Returns { status, overtimeMinutes, lateMinutes }
+*/
+const evaluateStatus = (startTime, endTime, shiftType) => {
+  // No scans at all
+  if (!startTime && !endTime) return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
+
+  // If scans obviously don't belong to this shift window -> Absent
+  if (!scansMatchShift(startTime, endTime, shiftType)) {
+    return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
+  }
+
+  let startMin = toMinutes(startTime);
+  let endMin   = toMinutes(endTime);
+  let overtimeMinutes = 0;
+  let lateMinutes = 0;
+
+  if (shiftType === 'Day Shift') {
+    const S = toMinutes('07:00');
+    const E = toMinutes('16:00');
+    const B1 = toMinutes('11:00');
+    const B2 = toMinutes('12:00');
+    const BLK = B2 - B1; // 60
+
+    // Lateness (skip the 1h break entirely)
+    if (startMin == null || endMin == null) return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
+
+    if (startMin <= S) {
+      lateMinutes = 0;
+    } else if (startMin <= B1) {
+      lateMinutes = startMin - S;               // before break
+    } else if (startMin < B2) {
+      lateMinutes = B1 - S;                     // during break -> cap at morning max
+    } else {
+      lateMinutes = (startMin - S) - BLK;       // after break -> subtract 60
+    }
+
+    const late = lateMinutes > 15;              // 15' grace
+
+    if (endMin > E + 1) overtimeMinutes = endMin - (E + 1);
+
+    return { status: late ? 'Late' : 'OnTime', overtimeMinutes, lateMinutes };
+  }
+
+  if (shiftType === 'Night Shift') {
+    const S   = toMinutes('18:00');
+    const E   = toMinutes('03:00');
+    const B1  = toMinutes('22:00');
+    const B2  = toMinutes('23:00');
+    const BLK = B2 - B1; // 60
+
+    if (startMin == null || endMin == null) return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
+
+    // roll post-midnight only
+    const MID_CUTOFF = toMinutes('06:00');
+    if (startMin < MID_CUTOFF) startMin += 1440;
+    if (endMin   < startMin)   endMin   += 1440;
+
+    const E_norm = (endMin >= 1440) ? (E + 1440) : E;
+
+    if (startMin <= S) {
+      lateMinutes = 0;
+    } else if (startMin <= B1) {
+      lateMinutes = startMin - S;
+    } else if (startMin < B2) {
+      lateMinutes = B1 - S;
+    } else {
+      lateMinutes = (startMin - S) - BLK;
+    }
+
+    const late = lateMinutes > 15;
+
+    if (endMin > E_norm + 1) overtimeMinutes = endMin - (E_norm + 1);
+
+    return { status: late ? 'Late' : 'OnTime', overtimeMinutes, lateMinutes };
+  }
+
+  return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
+};
+
 /* ───────────────────── Import attendance (validate/commit) ─────────────────────
 Body:
 {
-  mode?: 'validate' | 'commit'                // default 'commit'
-  allowMismatch?: boolean                     // default false
-  allowNonWorking?: boolean                   // default false
-  mismatchPolicy?: 'expected' | 'scanned'     // default 'expected'
-  shiftType?: 'Day Shift' | 'Night Shift'     // optional UI assumption
+  mode?: 'validate' | 'commit'      // default 'commit'
+  allowNonWorking?: boolean         // default false
   rows: [{ employeeId?, fullName?, date, startTime, endTime, leaveType? }]
 }
 */
@@ -158,10 +231,7 @@ exports.importAttendance = async (req, res) => {
   try {
     const {
       mode = 'commit',
-      allowMismatch = false,
       allowNonWorking = false,
-      mismatchPolicy = 'expected',
-      shiftType,
       rows = []
     } = req.body;
 
@@ -183,51 +253,48 @@ exports.importAttendance = async (req, res) => {
     const dayType  = await getDayType(company, dateOnly);
     const isNonWorking = (dayType === 'Sunday' || dayType === 'Holiday');
 
-    // Employee cache by ID (lean -> keep legacy fields like "shift")
-    const ids = [...new Set(rows.map(r => (r.employeeId || '').trim()).filter(Boolean))];
+    /* ───────── Employee caches (NO defaultShift, NO guessing) ───────── */
+    const idsRaw   = [...new Set(rows.map(r => (r.employeeId || '').trim()).filter(Boolean))];
+    const idsQuery = [...new Set([...idsRaw, ...idsRaw.map(s => s.toUpperCase())])];
+
     const empsById = {};
-    if (ids.length) {
-      const empDocs = await Employee.find({ company, employeeId: { $in: ids } })
-        .select('employeeId englishFirstName englishLastName department position line defaultShift shift shiftName')
+    if (idsQuery.length) {
+      const empDocs = await Employee.find({ company, employeeId: { $in: idsQuery } })
+        .select('employeeId englishFirstName englishLastName department position line shift shiftName')
         .lean();
 
       for (const e of empDocs) {
-        const empShift =
-          normalizeShift(e.defaultShift) ||
-          normalizeShift(e.shift) ||
-          normalizeShift(e.shiftName) ||
-          null;
-
-        empsById[e.employeeId.trim()] = { ...e, __empShift: empShift };
+        const key = e.employeeId.trim().toUpperCase();
+        const empShift = normalizeShift(e.shift) || normalizeShift(e.shiftName) || null;
+        empsById[key] = { ...e, __empShift: empShift };
       }
     }
 
-    // Name-based cache (only if needed)
     const needNameLookup = rows.some(r => !r.employeeId && r.fullName);
     const empsByName = {};
     if (needNameLookup) {
       const allDocs = await Employee.find({ company })
-        .select('employeeId englishFirstName englishLastName department position line defaultShift shift shiftName')
+        .select('employeeId englishFirstName englishLastName department position line shift shiftName')
         .lean();
 
       for (const e of allDocs) {
         const key = `${(e.englishFirstName||'').trim()} ${(e.englishLastName||'').trim()}`.trim().toLowerCase();
-        const empShift =
-          normalizeShift(e.defaultShift) ||
-          normalizeShift(e.shift) ||
-          normalizeShift(e.shiftName) ||
-          null;
-
+        const empShift = normalizeShift(e.shift) || normalizeShift(e.shiftName) || null;
         if (key) empsByName[key] = { ...e, __empShift: empShift };
       }
     }
 
-    // Build prepared rows & mismatch list
-    const mismatches = [];
+    /* ───────── Build prepared rows & collect errors ───────── */
     const prepared = [];
+    const missingShift = [];   // { row, employeeId, fullName, reason }
+    const missingEmployee = [];
 
-    for (const r of rows) {
+    for (let idx = 0; idx < rows.length; idx++) {
+      const r = rows[idx];
+      const rowNo = idx + 1;
+
       const employeeIdRaw = (r.employeeId || '').trim();
+      const idKey         = employeeIdRaw.toUpperCase();
       const dateStr       = formatExcelDate(r.date);
       if (!dateStr) continue;
 
@@ -235,11 +302,15 @@ exports.importAttendance = async (req, res) => {
       const endTime   = (r.endTime   || '').trim();
       const leaveType = (r.leaveType || '').trim() || null;
 
-      let empDoc = null;
-      if (employeeIdRaw) empDoc = empsById[employeeIdRaw];
+      // Lookup by ID first (uppercased), else by full name
+      let empDoc = employeeIdRaw ? empsById[idKey] : null;
       if (!empDoc && r.fullName) {
         const key = String(r.fullName).trim().toLowerCase();
         empDoc = empsByName[key] || null;
+        if (empDoc?.employeeId) {
+          const injectKey = empDoc.employeeId.trim().toUpperCase();
+          if (!empsById[injectKey]) empsById[injectKey] = empDoc;
+        }
       }
 
       const resolvedId = employeeIdRaw || (empDoc?.employeeId || '');
@@ -247,26 +318,29 @@ exports.importAttendance = async (req, res) => {
         ? `${empDoc.englishFirstName || ''} ${empDoc.englishLastName || ''}`.trim()
         : (r.fullName || 'Unknown');
 
-      // Expected = employee saved shift (wins) → UI shiftType → guessed → Day
-      const empShift = empDoc?.__empShift || null;
-      const guessed  = guessShiftFromTimes(startTime, endTime);
-      const expected = empShift || shiftType || guessed || 'Day Shift';
-      const scanned  = guessed || shiftType || expected;
+      // Strict: must have employee and must have shift in DB
+      const empShift = empDoc ? (empDoc.__empShift || null) : null;
 
-      if (expected && scanned && expected !== scanned) {
-        mismatches.push({
-          employeeId: resolvedId || '—',
-          fullName, startTime, endTime,
-          expectedShift: expected,
-          scannedShift: scanned
+      if (!empDoc) {
+        missingEmployee.push({
+          row: rowNo,
+          employeeId: resolvedId || '-',
+          fullName,
+          reason: 'Employee not found'
+        });
+      } else if (!empShift) {
+        missingShift.push({
+          row: rowNo,
+          employeeId: resolvedId || '-',
+          fullName,
+          reason: `Employee ${resolvedId} has no shift. Please assign a shift before importing attendance.`
         });
       }
 
       prepared.push({
         employeeId: resolvedId,
         dateStr, startTime, endTime, leaveType,
-        expectedShift: expected,
-        scannedShift: scanned,
+        expectedShift: empShift, // for preview/debug only
         fullName,
         department: empDoc?.department || '',
         position:   empDoc?.position   || '',
@@ -274,18 +348,33 @@ exports.importAttendance = async (req, res) => {
       });
     }
 
-    // VALIDATE only
+    // VALIDATE mode: block on any missing employee/shift
     if (mode === 'validate') {
+      if (missingEmployee.length || missingShift.length) {
+        const preview = [...missingEmployee, ...missingShift].slice(0, 8)
+          .map(m => `Row ${m.row} (${m.employeeId} - ${m.fullName}): ${m.reason}`)
+          .join('; ');
+        const more = (missingEmployee.length + missingShift.length) > 8
+          ? ` …and ${(missingEmployee.length + missingShift.length) - 8} more`
+          : '';
+        return res.status(422).json({
+          ok: false,
+          reason: missingEmployee.length ? 'MISSING_EMPLOYEE' : 'MISSING_SHIFT',
+          message: `Cannot import: ${preview}${more}`,
+          details: { missingEmployee, missingShift },
+          nonWorkingDay: isNonWorking ? dayType : null
+        });
+      }
+
       return res.json({
         ok: true,
         nonWorkingDay: isNonWorking ? dayType : null,
-        shiftMismatches: mismatches,
         totalRows: rows.length,
         preparedCount: prepared.length
       });
     }
 
-    // Gates
+    /* ───────── COMMIT gates ───────── */
     if (isNonWorking && !allowNonWorking) {
       return res.status(409).json({
         ok: false,
@@ -295,22 +384,23 @@ exports.importAttendance = async (req, res) => {
       });
     }
 
-    if (mismatches.length && !allowMismatch) {
+    if (missingEmployee.length || missingShift.length) {
+      const preview = [...missingEmployee, ...missingShift].slice(0, 8)
+        .map(m => `Row ${m.row} (${m.employeeId} - ${m.fullName}): ${m.reason}`)
+        .join('; ');
+      const more = (missingEmployee.length + missingShift.length) > 8
+        ? ` …and ${(missingEmployee.length + missingShift.length) - 8} more`
+        : '';
       return res.status(409).json({
         ok: false,
-        reason: 'SHIFT_MISMATCH',
-        message: 'Some employees scanned a different shift than expected',
-        shiftMismatches: mismatches
+        reason: missingEmployee.length ? 'MISSING_EMPLOYEE' : 'MISSING_SHIFT',
+        message: `Cannot import: ${preview}${more}`,
+        details: { missingEmployee, missingShift }
       });
     }
 
-    // COMMIT
+    /* ───────── COMMIT ───────── */
     const summary = [];
-
-    // 🔔 unique-employee alert sets (count once per employee for this import)
-    const alertNearly  = new Set();
-    const alertRisk    = new Set();
-    const alertAbandon = new Set();
 
     // helper: compute consecutive ABSENT streak ending at a given date (includes that date)
     async function consecutiveAbsentDays(employeeId, company, endDate /* Date */, lookback = 14) {
@@ -342,14 +432,24 @@ exports.importAttendance = async (req, res) => {
       const timeIn  = parseTimeToDateTZ(p.dateStr, p.startTime);
       const timeOut = parseTimeToDateTZ(p.dateStr, p.endTime);
 
-      const isMismatch = p.expectedShift && p.scannedShift && p.expectedShift !== p.scannedShift;
-      const finalShift = isMismatch
-        ? (mismatchPolicy === 'scanned' ? p.scannedShift : p.expectedShift)
-        : (p.expectedShift || p.scannedShift || 'Day Shift');
+      // guaranteed by validation: employee exists and has shift
+      const empFromCache = empsById[(p.employeeId || '').trim().toUpperCase()];
+      const finalShift   = empFromCache.__empShift; // already normalized
 
-      const { status, overtimeMinutes } = evaluateStatus(p.startTime, p.endTime, finalShift);
+      // Leave override: when both scans missing and leaveType provided
+      let computedStatus, overtimeMinutes, lateMinutes;
+      if (!p.startTime && !p.endTime && p.leaveType) {
+        computedStatus = 'Leave';
+        overtimeMinutes = 0;
+        lateMinutes = 0;
+      } else {
+        const ev = evaluateStatus(p.startTime, p.endTime, finalShift);
+        computedStatus   = ev.status;
+        overtimeMinutes  = ev.overtimeMinutes;
+        lateMinutes      = ev.lateMinutes;
+      }
+
       const overtimeHours = overtimeMinutes > 0 ? parseFloat((overtimeMinutes / 60).toFixed(2)) : 0;
-      const finalStatus = (!p.startTime && !p.endTime && p.leaveType) ? 'Leave' : status;
 
       const updated = await Attendance.findOneAndUpdate(
         { employeeId: p.employeeId, date, company },
@@ -359,9 +459,10 @@ exports.importAttendance = async (req, res) => {
           shiftType: finalShift,
           timeIn,
           timeOut,
-          status: finalStatus,
-          leaveType: finalStatus === 'Leave' ? p.leaveType : null,
+          status: computedStatus,
+          leaveType: computedStatus === 'Leave' ? p.leaveType : null,
           overtimeHours,
+          lateMinutes,                 // lateness after skipping the break
           riskStatus: 'None',
           fullName: p.fullName || 'Unknown',
           company,
@@ -373,106 +474,77 @@ exports.importAttendance = async (req, res) => {
         { upsert: true, new: true }
       );
 
-      /* ───── Presence updates ───── */
-      if (['OnTime','Late','Overtime'].includes(updated.status)) {
+      // Presence update
+      if (['OnTime','Late'].includes(updated.status)) {
         await Employee.findOneAndUpdate(
           { employeeId: p.employeeId, company },
           { status: 'Working' }
         );
       }
 
-      /* ─────────────── Correct risk logic ───────────────
-         - 3 consecutive Absent → mark those records 'NearlyAbandon'
-         - 6 consecutive Absent → mark those records 'Abandon' and Employee.status 'Abandon'
-         - If the employee returns to work (OnTime/Late/Overtime) after a streak ≥3 → mark TODAY 'Risk'
-         - 'Leave' does not count toward absence streaks
-      */
-
-      // Consecutive absence → risk flags (skip Sundays/Holidays)
+      /* ───────────── Risk logic (unchanged) ───────────── */
       if (updated.status === 'Absent') {
-        const currentDate = new Date(updated.date); // this day's date (already start of day in TZ)
-        let consecutiveAbsent = 1;                  // today is absent
-        let earliestWorkingAbsent = new Date(currentDate); // earliest working-day absent in the current streak
+        const currentDate = new Date(updated.date);
+        let consecutiveAbsent = 1;
+        let earliestWorkingAbsent = new Date(currentDate);
 
-        // walk back through calendar days; ignore non‑working days completely
-        for (let i = 1; i <= 14; i++) { // look back far enough to find up to 6 working absences
+        for (let i = 1; i <= 14; i++) {
           const prevLocal = dayjs.tz(currentDate, TZ).subtract(i, 'day');
           const prevStart = prevLocal.startOf('day').toDate();
           const prevEnd   = prevLocal.endOf('day').toDate();
 
-          // if non‑working (Sunday/Holiday) -> skip without breaking the streak
-          const dayType = await getDayType(company, prevStart);
-          if (dayType === 'Sunday' || dayType === 'Holiday') {
-            continue;
+          const prevType = await getDayType(company, prevStart);
+          if (prevType === 'Sunday' || prevType === 'Holiday') {
+            continue; // skip non-working days entirely
           }
 
-          // working day: check attendance
           const prev = await Attendance.findOne({
-            employeeId: p.employeeId,
-            company,
+            employeeId: p.employeeId, company,
             date: { $gte: prevStart, $lt: prevEnd }
           });
 
           if (prev?.status === 'Absent') {
             consecutiveAbsent += 1;
-            earliestWorkingAbsent = prevStart; // expand the streak window leftward
-            if (consecutiveAbsent >= 6) break; // no need to keep walking for our thresholds
+            earliestWorkingAbsent = prevStart;
+            if (consecutiveAbsent >= 6) break;
           } else {
-            // any working day that is not Absent breaks the streak
             break;
           }
         }
 
-        // Apply flags across the working-day streak window
         if (consecutiveAbsent >= 6) {
           await Attendance.updateMany(
-            {
-              employeeId: p.employeeId,
-              company,
-              date: { $gte: earliestWorkingAbsent, $lte: currentDate },
-              status: 'Absent'
-            },
+            { employeeId: p.employeeId, company, date: { $gte: earliestWorkingAbsent, $lte: currentDate }, status: 'Absent' },
             { riskStatus: 'Abandon' }
           );
           await Employee.findOneAndUpdate({ employeeId: p.employeeId, company }, { status: 'Abandon' });
         } else if (consecutiveAbsent >= 3) {
           await Attendance.updateMany(
-            {
-              employeeId: p.employeeId,
-              company,
-              date: { $gte: earliestWorkingAbsent, $lte: currentDate },
-              status: 'Absent'
-            },
+            { employeeId: p.employeeId, company, date: { $gte: earliestWorkingAbsent, $lte: currentDate }, status: 'Absent' },
             { riskStatus: 'NearlyAbandon' }
           );
         }
       }
 
-
-      if (['OnTime', 'Late', 'Overtime'].includes(updated.status)) {
+      if (['OnTime', 'Late'].includes(updated.status)) {
         // Coming back after ≥3-day absence streak? -> mark TODAY Risk
         let hadStreak = false;
 
-        // quick peek for recent NearlyAbandon/Abandon in last 10 days
         for (let i = 1; i <= 10; i++) {
           const prevDate = new Date(updated.date);
           prevDate.setDate(updated.date.getDate() - i);
-
           const dayStart = new Date(prevDate.setHours(0,0,0,0));
           const dayEnd   = new Date(prevDate.setHours(23,59,59,999));
-
           const rec = await Attendance.findOne({
             employeeId: p.employeeId, company,
             date: { $gte: dayStart, $lte: dayEnd }
           }).lean();
-
           if (rec?.riskStatus === 'Abandon' || rec?.riskStatus === 'NearlyAbandon') {
             hadStreak = true;
             break;
           }
         }
 
-        // if not found, compute real streak ending yesterday
         if (!hadStreak) {
           const y = new Date(updated.date);
           y.setDate(updated.date.getDate() - 1);
@@ -482,12 +554,9 @@ exports.importAttendance = async (req, res) => {
 
         updated.riskStatus = hadStreak ? 'Risk' : 'None';
         await updated.save();
-
-        if (hadStreak) alertRisk.add(p.employeeId);
       }
 
       if (updated.status === 'Leave') {
-        // Leave day should not escalate; keep existing risk if already escalated
         updated.riskStatus = updated.riskStatus && updated.riskStatus !== 'None'
           ? updated.riskStatus
           : 'None';
@@ -500,6 +569,7 @@ exports.importAttendance = async (req, res) => {
         status: updated.status,
         leaveType: updated.leaveType,
         overtimeHours: updated.overtimeHours,
+        lateMinutes: updated.lateMinutes,
         shiftType: updated.shiftType,
         riskStatus: updated.riskStatus
       });
@@ -509,13 +579,7 @@ exports.importAttendance = async (req, res) => {
       ok: true,
       message: `✅ Imported ${summary.length} attendance records.`,
       warnings: {
-        nonWorkingDay: isNonWorking ? dayType : null,
-        shiftMismatches: mismatches
-      },
-      alerts: {
-        nearlyAbandonEmployees: alertNearly.size,
-        riskEmployees:          alertRisk.size,
-        abandonEmployees:       alertAbandon.size
+        nonWorkingDay: isNonWorking ? dayType : null
       },
       summary
     });
@@ -537,21 +601,32 @@ exports.updateLeavePermission = async (req, res) => {
     const result = [];
     for (const row of rows) {
       const employeeId = row.employeeId?.trim();
-      const shiftType  = row.shiftType?.trim();
       const leaveType  = row.leaveType?.trim();
       const formattedDateStr = formatExcelDate(row.date);
       if (!employeeId || !leaveType || !formattedDateStr) continue;
 
+      // Enforce employee-configured shift for leave (NO defaultShift)
+      const emp = await Employee.findOne({ employeeId, company })
+        .select('englishFirstName englishLastName shift shiftName')
+        .lean();
+
+      const empShift =
+        normalizeShift(emp?.shift) ||
+        normalizeShift(emp?.shiftName) ||
+        null;
+
+      const shiftType = empShift || normalizeShift(row.shiftType) || 'Day Shift';
+
       const date = startOfDayTZ(formattedDateStr).toDate();
       const existing = await Attendance.findOne({ employeeId, company, date, shiftType });
+
       if (existing) {
         existing.status = 'Leave';
         existing.leaveType = leaveType;
         await existing.save();
         result.push({ employeeId, date: formattedDateStr, updated: true });
       } else {
-        const emp = await Employee.findOne({ employeeId, company }).lean();
-        const fullName = emp ? `${emp.englishFirstName} ${emp.englishLastName}` : 'Unknown';
+        const fullName = emp ? `${emp.englishFirstName || ''} ${emp.englishLastName || ''}`.trim() : 'Unknown';
         const newLeave = new Attendance({
           employeeId, date, shiftType, status: 'Leave', leaveType, company, fullName
         });
@@ -559,6 +634,7 @@ exports.updateLeavePermission = async (req, res) => {
         result.push({ employeeId, date: formattedDateStr, created: true });
       }
     }
+
     res.json({ message: `✅ Leave records processed: ${result.length}`, result });
   } catch (err) {
     console.error('❌ Leave update error:', err.message);
@@ -772,12 +848,11 @@ exports.deleteAttendance = async (req, res) => {
   try {
     const company = req.company;
     const deleted = await Attendance.findOneAndDelete({ _id: req.params.id, company });
-    if (!deleted) return res.status(404).json({ message: 'Attendance record not found' });
-    res.json({ message: '✅ Deleted', data: deleted });
   } catch (err) {
     console.error('❌ Delete error:', err.message);
-    res.status(500).json({ message: 'Delete failed', error: err.message });
+    return res.status(500).json({ message: 'Delete failed', error: err.message });
   }
+  return res.json({ message: '✅ Deleted' });
 };
 
 exports.getAttendanceById = async (req, res) => {
@@ -831,10 +906,6 @@ exports.getAttendanceSeries = async (req, res) => {
     const scope = (req.query.scope || 'day').toLowerCase(); // 'day' | 'month' | 'year'
     const shiftType = req.query.shiftType && req.query.shiftType !== 'All' ? req.query.shiftType : null;
 
-    // Inputs:
-    // scope=day   -> date=YYYY-MM-DD (default: today)
-    // scope=month -> year=YYYY & month=1..12 (default: current)
-    // scope=year  -> year=YYYY (default: current)
     const todayLocal = dayjs.tz(dayjs(), TZ);
     let startLocal, endLocal, unit, labelFormat;
 
@@ -850,13 +921,13 @@ exports.getAttendanceSeries = async (req, res) => {
       const mm = String(m).padStart(2, '0');
       startLocal = dayjs.tz(`${y}-${mm}-01 00:00:00`, TZ).startOf('month');
       endLocal   = startLocal.add(1, 'month');
-      unit = 'day';            // daily buckets across the month
+      unit = 'day';
       labelFormat = 'YYYY-MM-DD';
     } else if (scope === 'year') {
       const y = Number(req.query.year || todayLocal.year());
       startLocal = dayjs.tz(`${y}-01-01 00:00:00`, TZ).startOf('year');
       endLocal   = startLocal.add(1, 'year');
-      unit = 'month';          // monthly buckets across the year
+      unit = 'month';
       labelFormat = 'YYYY-MM';
     } else {
       return res.status(400).json({ message: "scope must be 'day' | 'month' | 'year'" });
@@ -868,14 +939,13 @@ exports.getAttendanceSeries = async (req, res) => {
     const match = { company, date: { $gte: start, $lt: end } };
     if (shiftType) match.shiftType = shiftType;
 
-    // Map leave types to clean buckets (server-side, inside aggregation)
     const leaveBucketSwitch = {
       branches: [
         { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /sick/i } },       then: 'Sick Leave' },
         { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /annual/i } },     then: 'Annual Leave' },
         { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /maternity/i } },  then: 'Maternity Leave' },
         { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /unpaid/i } },     then: 'Unpaid Leave' },
-        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /spec?ial/i } },   then: 'Special Leave' }, // handles "Specail"
+        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /spec?ial/i } },   then: 'Special Leave' },
       ],
       default: 'Other'
     };
@@ -899,21 +969,15 @@ exports.getAttendanceSeries = async (req, res) => {
       {
         $group: {
           _id: '$bucket',
-
-          // Attendance outcome
           OnTime: { $sum: { $cond: [{ $eq: ['$status', 'OnTime'] }, 1, 0] } },
           Late:   { $sum: { $cond: [{ $eq: ['$status', 'Late'] }, 1, 0] } },
           Absent: { $sum: { $cond: [{ $eq: ['$status', 'Absent'] }, 1, 0] } },
           Leave:  { $sum: { $cond: [{ $eq: ['$status', 'Leave'] }, 1, 0] } },
           NoneStatus: { $sum: { $cond: [{ $eq: ['$status', 'None'] }, 1, 0] } },
-
-          // Risk flags
           RiskNearlyAbandon: { $sum: { $cond: [{ $eq: ['$risk', 'NearlyAbandon'] }, 1, 0] } },
           RiskAbandon:       { $sum: { $cond: [{ $eq: ['$risk', 'Abandon'] }, 1, 0] } },
           RiskRisk:          { $sum: { $cond: [{ $eq: ['$risk', 'Risk'] }, 1, 0] } },
           RiskNone:          { $sum: { $cond: [{ $eq: ['$risk', 'None'] }, 1, 0] } },
-
-          // Leave breakdown
           LeaveSick:      { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Sick Leave'] }, 1, 0] } },
           LeaveAnnual:    { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Annual Leave'] }, 1, 0] } },
           LeaveMaternity: { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Maternity Leave'] }, 1, 0] } },
@@ -925,20 +989,7 @@ exports.getAttendanceSeries = async (req, res) => {
       { $sort: { _id: 1 } },
     ]);
 
-    // Build dense timeline with zeros for missing buckets
-    const zeroRow = () => ({
-      // outcome
-      OnTime: 0, Late: 0, Absent: 0, Leave: 0, NoneStatus: 0,
-      // risk
-      RiskNearlyAbandon: 0, RiskAbandon: 0, RiskRisk: 0, RiskNone: 0,
-      // leaves
-      LeaveSick: 0, LeaveAnnual: 0, LeaveMaternity: 0, LeaveUnpaid: 0, LeaveSpecial: 0, LeaveOther: 0,
-    });
-
-    // map from ISO date string to row
-    const map = new Map(
-      agg.map(r => [new Date(r._id).toISOString(), r])
-    );
+    const map = new Map(agg.map(r => [new Date(r._id).toISOString(), r]));
 
     const buckets = [];
     let cursor = startLocal.clone();
@@ -947,10 +998,9 @@ exports.getAttendanceSeries = async (req, res) => {
     while (cursor.isBefore(endLocal)) {
       const keyISO = cursor.startOf(unit).toDate().toISOString();
       const found = map.get(keyISO);
-      const label = cursor.format(labelFormat);
 
       buckets.push({
-        key: label,
+        key: cursor.format(unit === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD'),
         status: {
           OnTime: found?.OnTime || 0,
           Late: found?.Late || 0,
@@ -977,7 +1027,6 @@ exports.getAttendanceSeries = async (req, res) => {
       cursor = cursor.add(step.n, step.u);
     }
 
-    // Totals (handy for small KPI chips)
     const totals = buckets.reduce((acc, b) => {
       for (const [k, v] of Object.entries(b.status)) acc.status[k] += v;
       for (const [k, v] of Object.entries(b.risk))   acc.risk[k]   += v;
@@ -995,7 +1044,7 @@ exports.getAttendanceSeries = async (req, res) => {
       unit,
       tz: TZ,
       start: startLocal.format('YYYY-MM-DD'),
-      end: endLocal.subtract(1, unit).format(labelFormat),
+      end: endLocal.subtract(1, unit).format(unit === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD'),
       buckets,
       totals
     });

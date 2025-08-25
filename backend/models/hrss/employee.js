@@ -57,10 +57,9 @@ const employeeSchema = new mongoose.Schema({
   team: { type: String, default: '' },
   section: { type: String, default: '' },
 
-  // 🔁 Shift (canonical + legacy)
-  defaultShift: { type: String, enum: ['Day Shift', 'Night Shift'], default: 'Day Shift' },
-  shift:       { type: String, default: '' },  // legacy field you already store, e.g. "Night Shift"
-  shiftName:   { type: String, default: '' },  // another legacy variant some DBs use
+  // 🔁 Shift (legacy only)
+  shift:     { type: String, default: '' },  // e.g. "Day Shift" or "Night Shift"
+  shiftName: { type: String, default: '' },  // another legacy variant
 
   status: { type: String, enum: ['Working', 'Resign', 'Terminate', 'Abandon', 'Pass Away', 'Retirement', ''], default: 'Working' },
   resignDate: { type: Date, default: null },
