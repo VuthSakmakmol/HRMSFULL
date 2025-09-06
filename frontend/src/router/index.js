@@ -61,6 +61,11 @@ const routes = [
 
     // Attendance Dashboard
     { path: 'dashboard/attendance', component: () => import('@/views/hrss/dashboard/attendance/AttendanceDashboard.vue') },
+
+    { path: 'assign-shifts',name: 'ShiftAssignments', component: () => import('@/views/hrss/ShiftAssignments.vue'), meta: { requiresAuth: true }},
+    
+    { path: 'shift-templates', name: 'ShiftTemplates', component: () => import('@/views/hrss/ShiftTemplates.vue'), meta: { requiresAuth: true } }
+
   ]
 },
 

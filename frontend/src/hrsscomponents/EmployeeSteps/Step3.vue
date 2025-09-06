@@ -43,18 +43,49 @@
         />
       </v-col>
 
-      <!-- Shift -->
-      <v-col cols="12" sm="2">
-        <v-select
-          v-model="form.shift"
-          :items="enumOptions.shiftOptions"
-          label="Shift"
+      <!-- Shift Template (NEW) -->
+      <v-col cols="12" sm="4">
+        <v-autocomplete
+          v-model="form.shiftTemplateId"
+          :items="shiftTemplates"
+          item-title="name"
+          item-value="_id"
+          label="Shift template"
           variant="outlined"
           density="comfortable"
           autocomplete="off"
+          clearable
+          :loading="loadingShifts"
           :ref="setRef(3)"
           @keydown.enter.prevent="focusNext(3)"
-          clearable
+        >
+          <!-- Pretty dropdown rows -->
+          <template #item="{ props, item }">
+            <v-list-item
+              v-bind="props"
+              :title="item.raw.name"
+              :subtitle="templateSubtitle(item.raw)"
+            />
+          </template>
+
+          <!-- Selected chip -->
+          <template #selection="{ item }">
+            <v-chip class="ma-1" size="small" label>{{ item.raw.name }}</v-chip>
+          </template>
+        </v-autocomplete>
+      </v-col>
+
+      <!-- Optional: effective-from date for initial assignment -->
+      <v-col cols="12" sm="2">
+        <v-text-field
+          v-model="form.shiftEffectiveFrom"
+          label="Shift effective from"
+          type="date"
+          variant="outlined"
+          density="comfortable"
+          autocomplete="off"
+          :ref="setRef(4)"
+          @keydown.enter.prevent="focusNext(4)"
         />
       </v-col>
 
@@ -67,8 +98,8 @@
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          :ref="setRef(4)"
-          @keydown.enter.prevent="focusNext(4)"
+          :ref="setRef(5)"
+          @keydown.enter.prevent="focusNext(5)"
           clearable
         />
       </v-col>
@@ -82,13 +113,13 @@
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          :ref="setRef(5)"
-          @keydown.enter.prevent="focusNext(5)"
+          :ref="setRef(6)"
+          @keydown.enter.prevent="focusNext(6)"
           clearable
         />
       </v-col>
 
-      <!-- Resign Date (only show if status === Resign) -->
+      <!-- Resign Date -->
       <v-col cols="12" sm="2" v-if="form.status === 'Resign'">
         <v-text-field
           v-model="form.resignDate"
@@ -97,8 +128,8 @@
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          :ref="setRef(6)"
-          @keydown.enter.prevent="focusNext(6)"
+          :ref="setRef(7)"
+          @keydown.enter.prevent="focusNext(7)"
         />
       </v-col>
 
@@ -111,9 +142,9 @@
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          :ref="setRef(7)"
+          :ref="setRef(8)"
           @update:modelValue="onSourceChange"
-          @keydown.enter.prevent="focusNext(7)"
+          @keydown.enter.prevent="focusNext(8)"
           clearable
         />
       </v-col>
@@ -126,8 +157,8 @@
           variant="outlined"
           density="comfortable"
           autocomplete="off"
-          :ref="setRef(8)"
-          @keydown.enter.prevent="focusNext(8)"
+          :ref="setRef(9)"
+          @keydown.enter.prevent="focusNext(9)"
           clearable
         />
       </v-col>
@@ -142,9 +173,9 @@
           autocomplete="off"
           inputmode="numeric"
           pattern="[0-9]*"
-          :ref="setRef(9)"
+          :ref="setRef(10)"
           @input="normalizeNonNegative('singleNeedle')"
-          @keydown.enter.prevent="focusNext(9)"
+          @keydown.enter.prevent="focusNext(10)"
           clearable
           hint="Number of single-needle machines"
           persistent-hint
@@ -160,9 +191,9 @@
           autocomplete="off"
           inputmode="numeric"
           pattern="[0-9]*"
-          :ref="setRef(10)"
+          :ref="setRef(11)"
           @input="normalizeNonNegative('overlock')"
-          @keydown.enter.prevent="focusNext(10)"
+          @keydown.enter.prevent="focusNext(11)"
           clearable
           hint="Number of overlock machines"
           persistent-hint
@@ -178,9 +209,9 @@
           autocomplete="off"
           inputmode="numeric"
           pattern="[0-9]*"
-          :ref="setRef(11)"
+          :ref="setRef(12)"
           @input="normalizeNonNegative('coverstitch')"
-          @keydown.enter.prevent="focusNext(11)"
+          @keydown.enter.prevent="focusNext(12)"
           clearable
           hint="Number of coverstitch machines"
           persistent-hint
@@ -197,9 +228,9 @@
           autocomplete="off"
           inputmode="numeric"
           pattern="[0-9]*"
-          :ref="setRef(12)"
+          :ref="setRef(13)"
           @input="normalizeNonNegative('totalMachine')"
-          @keydown.enter.prevent="focusNext(12)"
+          @keydown.enter.prevent="focusNext(13)"
           clearable
         />
       </v-col>
@@ -214,25 +245,48 @@ import axios from '@/utils/axios'
 const props = defineProps({ form: Object })
 const form = props.form
 
+/* ───────── enums (keep existing API for status, sources, etc.) ───────── */
 const enumOptions = ref({
-  shiftOptions: [],
   statusOptions: [],
   sourceOfHiringOptions: [],
   resignReasonOptions: []
 })
 
-/* Load enums safely */
+/* ───────── shift templates (new) ───────── */
+const shiftTemplates = ref([])
+const loadingShifts = ref(false)
+
+const templateSubtitle = (t) => {
+  if (!t) return ''
+  const base = `${t.timeIn} → ${t.timeOut}`
+  const late = t.lateAfter ? ` • late ${t.lateAfter}` : ''
+  const ot   = t.ot?.mode && t.ot.mode !== 'DISABLED' ? ` • OT ${t.ot.mode}` : ''
+  return base + late + ot
+}
+
 onMounted(async () => {
+  // enums (non-shift)
   try {
     const { data } = await axios.get('/meta/enums')
     enumOptions.value = {
-      shiftOptions: data?.shiftOptions || [],
       statusOptions: data?.statusOptions || [],
       sourceOfHiringOptions: data?.sourceOfHiringOptions || [],
       resignReasonOptions: data?.resignReasonOptions || []
     }
   } catch (err) {
     console.error('❌ Failed to load enums in Step 3:', err)
+  }
+
+  // active shift templates
+  try {
+    loadingShifts.value = true
+    const { data } = await axios.get('/hrss/shift-templates', { params: { active: true } })
+    shiftTemplates.value = Array.isArray(data) ? data : []
+  } catch (err) {
+    console.error('❌ Failed to load shift templates:', err)
+    shiftTemplates.value = []
+  } finally {
+    loadingShifts.value = false
   }
 })
 
@@ -257,7 +311,6 @@ const showOtherSource = computed(() =>
   form.sourceOfHiring.toLowerCase() === 'other'
 )
 const onSourceChange = (val) => {
-  // If selecting “Other”, keep the value; the text field will allow overwrite
   if (typeof val === 'string' && val.toLowerCase() !== 'other') return
 }
 
@@ -269,7 +322,7 @@ const normalizeNonNegative = (key) => {
   form[key] = v === '' ? null : Math.max(0, parseInt(v, 10))
 }
 
-/* Enter-to-next focus handling (ordered by setRef) */
+/* Enter-to-next focus handling */
 const inputRefs = []
 const setRef = (i) => (el) => { inputRefs[i] = el }
 const focusNext = (idx) => {

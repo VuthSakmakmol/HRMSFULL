@@ -1,18 +1,18 @@
-/**
- * plugins/vuetify.js
- *
- * Framework documentation: https://vuetifyjs.com`
- */
-
-// Styles
+// plugins/vuetify.js
 import '@mdi/font/css/materialdesignicons.css'
 import 'vuetify/styles'
 
-// Composables
 import { createVuetify } from 'vuetify'
+import * as components from 'vuetify/components'
+import * as directives from 'vuetify/directives'
+import { VTimePicker } from 'vuetify/labs/VTimePicker' // ✅ labs component
 
-// https://vuetifyjs.com/en/introduction/why-vuetify/#feature-guides
 export default createVuetify({
+  components: {
+    ...components,
+    VTimePicker, // ✅ register it
+  },
+  directives,
   theme: {
     defaultTheme: 'light',
     themes: {
@@ -24,13 +24,12 @@ export default createVuetify({
           error: '#FF5252',
           info: '#2196F3',
           success: '#4CAF50',
-          warning: '#FFC107'
+          warning: '#FFC107',
         },
         variables: {
-          'font-family': 'Kantumruy Pro, sans-serif'
-        }
-      }
-    }
-  }
+          'font-family': 'Kantumruy Pro, sans-serif',
+        },
+      },
+    },
+  },
 })
-

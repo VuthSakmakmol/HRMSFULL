@@ -17,7 +17,7 @@ const {
   deleteAttendance,
   getAttendanceById,
   getAttendanceHistoryByEmployeeId,
-  getAttendanceSeries,   // ⬅️ NEW analytics endpoint
+  getAttendanceSeries,
 } = require('../../controllers/hrss/attendanceController');
 
 // 📥 Import Attendance (validate/commit supported by controller)
@@ -26,16 +26,22 @@ router.post('/import', authenticate, authorizeCompanyAccess, importAttendance);
 // ✅ Update Leave Permission
 router.post('/update-leave', authenticate, authorizeCompanyAccess, updateLeavePermission);
 
-// 📄 Fetch All Attendances
+// 📄 Fetch All Attendances (with new filters: shiftTemplateId, shiftName, department, line, etc.)
 router.get('/', authenticate, authorizeCompanyAccess, getAllAttendance);
 
-// ☀️ Day Shift
-router.get('/day', authenticate, authorizeCompanyAccess, getDayShiftAttendance);
+// ☀️ Day Shift (LEGACY, use /?shiftName=Day Shift instead)
+router.get('/day', authenticate, authorizeCompanyAccess, (req, res, next) => {
+  res.setHeader('Deprecation', 'true');
+  return getDayShiftAttendance(req, res, next);
+});
 
-// 🌙 Night Shift
-router.get('/night', authenticate, authorizeCompanyAccess, getNightShiftAttendance);
+// 🌙 Night Shift (LEGACY, use /?shiftName=Night Shift instead)
+router.get('/night', authenticate, authorizeCompanyAccess, (req, res, next) => {
+  res.setHeader('Deprecation', 'true');
+  return getNightShiftAttendance(req, res, next);
+});
 
-// 📃 Paginated
+// 📃 Paginated (with new filters: shiftTemplateId, shiftName)
 router.get('/paginated', authenticate, authorizeCompanyAccess, getPaginatedAttendance);
 
 // 🟩 GitHub-style monthly dots (Working / Missing / Holiday / Sunday)

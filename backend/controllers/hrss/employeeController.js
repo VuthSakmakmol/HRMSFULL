@@ -1,6 +1,9 @@
 // controllers/hrss/employeeController.js
 const XLSX = require('xlsx');
 const Employee = require('../../models/hrss/employee');
+const ShiftAssignment = require('../../models/hrss/shiftAssignment');
+const { findTemplate } = require('./_helpers/shiftLookup');
+
 
 /* ───────────────────────── helpers: strings & dates ───────────────────────── */
 const s = (v) => (v === undefined || v === null ? '' : String(v).trim());
@@ -86,7 +89,7 @@ function mapRowToEmployee(row) {
     team: s(row['Team'] ?? row.team),
     section: s(row['Section'] ?? row.section),
 
-    // legacy + canonical shift
+    // legacy + canonical shift (legacy text kept for info; defaultShift used to map)
     shift: rawShift,
     defaultShift,
 
@@ -214,13 +217,13 @@ function validateEmployeeData(row) {
   }
   if (row.totalMachine !== null && row.totalMachine !== undefined) {
     const tm = Number(row.totalMachine);
-    if (Number.isNaN(tm) || tm < 0) errors.push('totalMachine must be a non‑negative number');
+    if (Number.isNaN(tm) || tm < 0) errors.push('totalMachine must be a non-negative number');
   }
 
   // Contact
   if (row.email && !EMAIL_RE.test(row.email)) errors.push('email is not valid');
-  if (row.phoneNumber && !PHONE_RE.test(row.phoneNumber)) errors.push('phoneNumber should be 6‑20 digits (optional +)');
-  if (row.agentPhoneNumber && !PHONE_RE.test(row.agentPhoneNumber)) errors.push('agentPhoneNumber should be 6‑20 digits (optional +)');
+  if (row.phoneNumber && !PHONE_RE.test(row.phoneNumber)) errors.push('phoneNumber should be 6-20 digits (optional +)');
+  if (row.agentPhoneNumber && !PHONE_RE.test(row.agentPhoneNumber)) errors.push('agentPhoneNumber should be 6-20 digits (optional +)');
 
   // Nested address lengths (optional)
   const checkAddr = (addr, label) => {
@@ -319,10 +322,8 @@ exports.previewImport = async (req, res) => {
 };
 
 /* ───────────────────────── Excel Import: CONFIRM (JSON) ───────────────────────
-   POST /employees/import-confirmed   body: { toImport: [...] }
+   POST /employees/import-confirmed   body: { toImport: [...], room? }
 -------------------------------------------------------------------------------*/
-// controllers/hrss/employeeController.js (replace existing importConfirmExcel)
-
 exports.importConfirmExcel = async (req, res) => {
   try {
     const company = req.company;
@@ -334,10 +335,10 @@ exports.importConfirmExcel = async (req, res) => {
     const toImportRaw = Array.isArray(req.body?.toImport) ? req.body.toImport : [];
     if (!toImportRaw.length) return res.status(400).json({ message: 'No data to import' });
 
-    // --- 1) Normalize all rows first
+    // 1) Normalize all rows first
     const parsed = toImportRaw.map(mapRowToEmployee);
 
-    // --- 2) In-file duplicate check (block import if any)
+    // 2) In-file duplicate check (block import if any)
     const idCount = new Map();
     for (const r of parsed) {
       const id = (r.employeeId || '').trim();
@@ -347,7 +348,6 @@ exports.importConfirmExcel = async (req, res) => {
     const inFileDuplicates = [...idCount.entries()]
       .filter(([_, cnt]) => cnt > 1)
       .map(([id, cnt]) => ({ employeeId: id, count: cnt }));
-
     if (inFileDuplicates.length) {
       return res.status(409).json({
         message: 'Duplicate employeeId(s) found in uploaded file. Import blocked.',
@@ -355,12 +355,11 @@ exports.importConfirmExcel = async (req, res) => {
       });
     }
 
-    // --- 3) DB duplicate check (block import if any)
+    // 3) DB duplicate check (block import if any)
     const incomingIds = [...new Set(parsed.map(r => r.employeeId).filter(Boolean))];
     const existingIds = await Employee
       .find({ company, employeeId: { $in: incomingIds } })
       .distinct('employeeId');
-
     if (existingIds.length) {
       return res.status(409).json({
         message: 'Duplicate employeeId(s) already exist in database. Import blocked.',
@@ -368,7 +367,7 @@ exports.importConfirmExcel = async (req, res) => {
       });
     }
 
-    // --- 4) Validate each row again & insert with progress
+    // 4) Validate each row again & insert with progress (+ initial shift assignment if resolvable)
     const total = parsed.length;
     let done = 0;
     const inserted = [];
@@ -380,11 +379,30 @@ exports.importConfirmExcel = async (req, res) => {
         const errs = validateEmployeeData(data);
         if (errs.length) throw new Error(errs.join(' | '));
 
-        // Final safeguard: enforce company and ensure unique index at DB level recommended
         const emp = new Employee({ ...data, company });
         await emp.validate();
         await emp.save();
         inserted.push(emp.employeeId);
+
+        // Try to create initial assignment (prefer explicit id; else map defaultShift)
+        let tplId = data.shiftTemplateId || null;
+        if (!tplId && data.defaultShift) {
+          const t = await findTemplate(company, data.defaultShift);
+          if (t) tplId = t._id;
+        }
+        if (tplId) {
+          const from = data.joinDate || new Date();
+          await ShiftAssignment.create({
+            company,
+            employeeId: emp.employeeId,
+            shiftTemplateId: tplId,
+            from,
+            to: null,
+            reason: 'Initial assignment (import)',
+            createdBy: req.user?.name || '',
+          });
+        }
+
       } catch (err) {
         failed.push({
           row: i + 2,
@@ -399,7 +417,6 @@ exports.importConfirmExcel = async (req, res) => {
       }
     }
 
-    // You may choose to partially succeed or fail; below returns success with failures listed
     return res.status(200).json({
       message: `Imported ${inserted.length} employees.`,
       insertedCount: inserted.length,
@@ -412,12 +429,11 @@ exports.importConfirmExcel = async (req, res) => {
   }
 };
 
-
-// alias to match older route name if you use confirmImport
+// alias for older route names
 exports.confirmImport = exports.importConfirmExcel;
 
 /* ───────────────────────── Excel Import: DIRECT SAVE ─────────────────────────
-   POST /employees/import-excel  (if you choose to save immediately)
+   POST /employees/import-excel  (save immediately)
 -------------------------------------------------------------------------------*/
 exports.importExcelDirect = async (req, res) => {
   try {
@@ -443,6 +459,26 @@ exports.importExcelDirect = async (req, res) => {
         await emp.validate();
         await emp.save();
         inserted.push(emp);
+
+        // Initial assignment if possible
+        let tplId = data.shiftTemplateId || null;
+        if (!tplId && data.defaultShift) {
+          const t = await findTemplate(company, data.defaultShift);
+          if (t) tplId = t._id;
+        }
+        if (tplId) {
+          const from = data.joinDate || new Date();
+          await ShiftAssignment.create({
+            company,
+            employeeId: emp.employeeId,
+            shiftTemplateId: tplId,
+            from,
+            to: null,
+            reason: 'Initial assignment (import-direct)',
+            createdBy: req.user?.name || '',
+          });
+        }
+
       } catch (err) {
         failed.push({
           row: i + 2,
@@ -469,11 +505,43 @@ exports.createEmployee = async (req, res) => {
     const company = req.company;
     if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
 
-    const emp = new Employee({ ...req.body, company });
+    // peel off assignment-relevant props (coming from your Employee form)
+    const {
+      shiftTemplateId: incomingTplId,
+      defaultShift,          // may come from old UI/Excel mapper
+      shift, shiftName,      // legacy text (ignored for new writes)
+      joinDate,
+      ...rest
+    } = req.body || {};
+
+    const emp = new Employee({ ...rest, company });
     await emp.save();
+
+    // Create assignment if provided
+    let tplId = incomingTplId || null;
+    if (!tplId && defaultShift) {
+      const t = await findTemplate(company, defaultShift);
+      if (t) tplId = t._id;
+    }
+    if (tplId) {
+      const from = joinDate ? new Date(joinDate) : new Date();
+      await ShiftAssignment.create({
+        company,
+        employeeId: emp.employeeId,
+        shiftTemplateId: tplId,
+        from,
+        to: null,
+        reason: 'Initial assignment (on create)',
+        createdBy: req.user?.name || '',  // optional
+      });
+    }
+
     res.status(201).json(emp);
   } catch (err) {
     console.error('[CREATE ERROR]', err);
+    if (err.code === 11000) {
+      return res.status(409).json({ error: 'Duplicate employeeId for this company' });
+    }
     res.status(500).json({ error: err.message });
   }
 };
@@ -496,7 +564,10 @@ exports.getAllEmployees = async (req, res) => {
     const limitInt = Math.max(parseInt(limit) || 10, 1);
     const skip = (pageInt - 1) * limitInt;
 
-    const employees = await Employee.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitInt);
+    const employees = await Employee.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitInt);
 
     return res.json({
       employees,
@@ -540,6 +611,11 @@ exports.getEmployeeByEmployeeId = async (req, res) => {
 exports.updateEmployee = async (req, res) => {
   try {
     const company = req.company;
+
+    // block shift-related keys → must go via ShiftAssignment endpoints
+    const forbidden = ['shiftTemplateId','shiftHistory','shift','shiftName','defaultShift'];
+    forbidden.forEach(k => delete req.body[k]);
+
     const updated = await Employee.findOneAndUpdate(
       { _id: req.params.id, company },
       { $set: req.body },
@@ -556,8 +632,13 @@ exports.updateEmployee = async (req, res) => {
 exports.deleteEmployee = async (req, res) => {
   try {
     const company = req.company;
+
     const deleted = await Employee.findOneAndDelete({ _id: req.params.id, company });
     if (!deleted) return res.status(404).json({ message: 'Employee not found or unauthorized' });
+
+    // Also delete this employee's shift assignments
+    await ShiftAssignment.deleteMany({ company, employeeId: deleted.employeeId });
+
     res.json({ message: 'Employee deleted' });
   } catch (err) {
     console.error('[DELETE EMPLOYEE ERROR]', err);
@@ -571,7 +652,15 @@ exports.deleteMultipleEmployees = async (req, res) => {
     const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
     if (!ids.length) return res.status(400).json({ message: 'No ids provided' });
 
+    // Find employees to delete so we can also remove their assignments
+    const victims = await Employee.find({ _id: { $in: ids }, company }, { employeeId: 1 });
+    const empIds = victims.map(v => v.employeeId);
+
     const result = await Employee.deleteMany({ _id: { $in: ids }, company });
+    if (empIds.length) {
+      await ShiftAssignment.deleteMany({ company, employeeId: { $in: empIds } });
+    }
+
     res.json({ message: 'Selected employees deleted', deletedCount: result.deletedCount });
   } catch (err) {
     console.error('[DELETE MULTIPLE EMPLOYEES ERROR]', err);
@@ -581,4 +670,5 @@ exports.deleteMultipleEmployees = async (req, res) => {
 
 /* ───────────────────── Legacy names compatibility ───────────────────── */
 // If your routes reference these names, they still work:
+exports.confirmImport = exports.confirmImport || exports.importConfirmExcel;
 exports.previewImport = exports.previewImport || exports.importPreviewExcel;

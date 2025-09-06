@@ -1,14 +1,21 @@
 // models/hrss/employee.js
 const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-const addressSchema = new mongoose.Schema({
+const addressSchema = new Schema({
   provinceNameKh: { type: String, default: '' },
   districtNameKh: { type: String, default: '' },
   communeNameKh: { type: String, default: '' },
   villageNameKh: { type: String, default: '' }
 }, { _id: false });
 
-const employeeSchema = new mongoose.Schema({
+const shiftHistorySchema = new Schema({
+  shiftTemplateId: { type: Schema.Types.ObjectId, ref: 'ShiftTemplate', required: true },
+  from: { type: Date, required: true },
+  to:   { type: Date, default: null } // null = current
+}, { _id: false });
+
+const employeeSchema = new Schema({
   // 👤 Profile
   profileImage: { type: String, default: '' },
 
@@ -57,9 +64,14 @@ const employeeSchema = new mongoose.Schema({
   team: { type: String, default: '' },
   section: { type: String, default: '' },
 
-  // 🔁 Shift (legacy only)
-  shift:     { type: String, default: '' },  // e.g. "Day Shift" or "Night Shift"
-  shiftName: { type: String, default: '' },  // another legacy variant
+  // ✅ New: reference an existing Shift Template
+  shiftTemplateId: { type: Schema.Types.ObjectId, ref: 'ShiftTemplate', default: null, index: true },
+  shiftEffectiveFrom: { type: Date, default: null },
+  shiftHistory: { type: [shiftHistorySchema], default: [] },
+
+  // 🔁 Legacy (kept for old data, do not use going forward)
+  shift:     { type: String, default: '' },  // e.g., "Day Shift" / "Night Shift" (deprecated)
+  shiftName: { type: String, default: '' },  // deprecated duplicate
 
   status: { type: String, enum: ['Working', 'Resign', 'Terminate', 'Abandon', 'Pass Away', 'Retirement', ''], default: 'Working' },
   resignDate: { type: Date, default: null },

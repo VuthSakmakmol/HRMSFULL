@@ -1,144 +1,43 @@
 <template>
   <v-container fluid class="pa-4">
     <v-card class="mb-4 elevation-1 rounded-2xl">
-      <v-toolbar color="primary" density="comfortable" class="rounded-t-2xl" title="Attendance Record">
-        <template #append>
-          <div v-if="importProg.active" class="d-flex align-center mr-2" style="gap:8px;">
-            <v-progress-circular indeterminate size="18" width="2" color="white" />
-            <v-chip density="comfortable" color="white" text-color="primary" variant="flat">
-              {{ importProg.sent.toLocaleString() }} / {{ importProg.total.toLocaleString() }}
-              ({{ importPct }}%)
-            </v-chip>
-          </div>
-
-          <v-btn variant="flat" color="white" @click="fetchData">
-            <v-icon start>mdi-refresh</v-icon> Refresh
-          </v-btn>
-        </template>
-      </v-toolbar>
-
-      <!-- Top Bar -->
+      <AttendanceToolbar
+        :import-prog="importProg"
+        @refresh="fetchData"
+        @open-calendar="calendarDialog = true"
+        @import="onImport"
+      />
       <div class="pa-4">
-        <v-row align="center" justify="space-between" dense>
-          <v-col cols="12" sm="5" md="4">
-            <v-file-input
-              v-model="excelFile"
-              accept=".xlsx"
-              label="Select Excel File"
-              variant="outlined"
-              prepend-icon="mdi-upload"
-              density="comfortable"
-              hide-details
-              show-size
-            />
-          </v-col>
-          <v-col cols="12" sm="4" md="3">
-            <v-btn
-              color="success"
-              block
-              :disabled="!excelFile"
-              @click="handleImport"
-              variant="elevated"
-              class="rounded-xl"
-            >
-              <v-icon start>mdi-database-import</v-icon> Import Attendance
-            </v-btn>
-          </v-col>
-
-          <!-- Customize Calendar -->
-          <v-col cols="12" sm="3" md="3">
-            <v-btn
-              block
-              variant="tonal"
-              color="warning"
-              class="rounded-xl"
-              @click="calendarDialog = true"
-            >
-              <v-icon start>mdi-calendar-cog</v-icon>
-              Customize Calendar
-            </v-btn>
-          </v-col>
-        </v-row>
-
-        <!-- Filters -->
-        <v-row class="mt-1" dense>
-          <v-col cols="12" sm="3">
-            <v-select
-              v-model="selectedShift"
-              :items="['All', 'Day Shift', 'Night Shift']"
-              label="Shift Type"
-              density="compact"
-              variant="outlined"
-              hide-details
-            />
-          </v-col>
-
-          <v-col cols="12" sm="4">
-            <v-text-field
-              v-model="searchText"
-              label="Search employee (ID/Name)"
-              append-inner-icon="mdi-magnify"
-              density="compact"
-              variant="outlined"
-              hide-details
-            />
-          </v-col>
-
-          <v-col cols="12" sm="3">
-            <v-menu
-              v-model="datePicker"
-              :close-on-content-click="false"
-              transition="scale-transition"
-              offset-y
-            >
-              <template #activator="{ props }">
-                <v-text-field
-                  v-bind="props"
-                  v-model="formattedDate"
-                  label="Filter by Date"
-                  density="compact"
-                  variant="outlined"
-                  append-inner-icon="mdi-calendar"
-                  readonly
-                  hide-details
-                />
-              </template>
-              <v-date-picker
-                v-model="selectedDate"
-                @update:modelValue="onDateChange"
-              />
-            </v-menu>
-          </v-col>
-        </v-row>
+        <AttendanceFilters
+          :templates="shiftTemplates"
+          v-model:template-id="filters.shiftTemplateId"
+          v-model:shift-name="filters.shiftName"
+          v-model:search="filters.searchText"
+          v-model:date="filters.date"
+          @changed="onFiltersChanged"
+        />
       </div>
     </v-card>
 
-    <!-- Monthly Heatmap (GitHub-style) -->
-    <AttendanceHeatmap :date="selectedDate" class="mb-4" @reload="fetchData" />
+    <!-- Monthly Heatmap (unchanged) -->
+    <AttendanceHeatmap :date="filters.date" class="mb-4" @reload="fetchData" />
 
     <!-- Actions -->
     <v-card class="mb-3 elevation-1 rounded-2xl">
       <div class="pa-3">
-        <v-row align="center" justify="start" dense>
+        <v-row align="center" dense>
           <v-col cols="auto">
-            <v-btn
-              color="secondary"
-              :disabled="selectedRows.length !== 1"
-              @click="startEvaluation"
-              class="rounded-xl"
-            >
+            <v-btn color="secondary" :disabled="selectedIds.length !== 1" class="rounded-xl" @click="startEvaluation">
               <v-icon start>mdi-account-check</v-icon> Evaluate
             </v-btn>
           </v-col>
-
           <v-col cols="auto">
-            <v-btn color="primary" :disabled="selectedRows.length !== 1" class="rounded-xl" @click="editSelected">
+            <v-btn color="primary" :disabled="selectedIds.length !== 1" class="rounded-xl" @click="openEdit">
               <v-icon start>mdi-pencil</v-icon> Edit
             </v-btn>
           </v-col>
-
           <v-col cols="auto">
-            <v-btn color="error" :disabled="selectedRows.length === 0" class="rounded-xl" @click="deleteSelected">
+            <v-btn color="error" :disabled="selectedIds.length === 0" class="rounded-xl" @click="deleteSelected">
               <v-icon start>mdi-delete</v-icon> Delete
             </v-btn>
           </v-col>
@@ -146,784 +45,165 @@
       </div>
     </v-card>
 
-    <!-- Edit Attendance Dialog -->
-    <v-dialog v-model="editDialog" max-width="640">
-      <v-card class="rounded-2xl">
-        <v-card-title class="text-h6 font-weight-bold">
-          ✏️ Edit Attendance
-        </v-card-title>
-        <v-card-text>
-          <v-row dense>
-            <v-col cols="12" md="6">
-              <v-text-field v-model="editForm.fullName" label="Full Name" readonly />
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-text-field v-model="editForm.employeeId" label="Employee ID" readonly />
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-text-field v-model="editForm.date" label="Date" readonly />
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="editForm.status"
-                :items="['OnTime', 'Late', 'Overtime', 'Absent', 'Leave']"
-                label="Status"
-              />
-            </v-col>
-            <v-col cols="12" v-if="editForm.status === 'Leave'">
-              <v-text-field v-model="editForm.leaveType" label="Type of Leave" />
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="editForm.riskStatus"
-                :items="['None', 'NearlyAbandon', 'Abandon', 'Risk', 'Evaluated1', 'Evaluated2']"
-                label="Risk Status"
-              />
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-text-field v-model.number="editForm.overtimeHours" type="number" label="Overtime Hours" />
-            </v-col>
-            <v-col cols="12">
-              <v-text-field v-model="editForm.note" label="Note" />
-            </v-col>
-          </v-row>
-        </v-card-text>
-        <v-card-actions class="px-4 pb-4">
-          <v-spacer></v-spacer>
-          <v-btn color="grey" variant="text" @click="editDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="editLoading" @click="submitEdit">Save</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Attendance Table -->
+    <!-- Table -->
     <v-card class="elevation-1 rounded-2xl">
-      <div class="table-scroll-wrapper">
-        <table class="scrollable-table">
-          <thead>
-            <tr>
-              <th class="sticky-col">
-                <v-checkbox
-                  v-model="allSelected"
-                  :indeterminate="isIndeterminate"
-                  hide-details
-                  density="compact"
-                />
-              </th>
-              <th class="sticky-col">#</th>
-              <th>Date</th>
-              <th>Employee ID</th>
-              <th>Full Name</th>
-              <th>Department</th>
-              <th>Position</th>
-              <th>Line</th>
-              <th>Time In</th>
-              <th>Time Out</th>
-              <th>Shift</th>
-              <th>Status</th>
-              <th>Risk Status</th>
-              <th>Evaluate</th>
-              <th>Late By</th>
-              <th>Overtime</th>
-              <th>Type of Leave</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(item, index) in filteredAttendance"
-              :key="item._id"
-              :class="['zebra', animateRow(item.status)]"
-            >
-              <td class="sticky-col">
-                <v-checkbox
-                  v-model="selectedRows"
-                  :value="item._id"
-                  hide-details
-                  density="compact"
-                />
-              </td>
-              <td class="sticky-col">{{ index + 1 }}</td>
-              <td>{{ formatDate(item.date) }}</td>
-              <td>{{ item.employeeId }}</td>
-              <td>{{ item.fullName }}</td>
-              <td>{{ item.department || '-' }}</td>
-              <td>{{ item.position || '-' }}</td>
-              <td>{{ item.line || '-' }}</td>
-              <td>{{ formatTime(item.timeIn) }}</td>
-              <td>{{ formatTime(item.timeOut) }}</td>
-              <td>{{ item.shiftType }}</td>
-              <td><v-chip :color="statusColor(item.status)" variant="flat" density="comfortable">{{ formatStatus(item.status) }}</v-chip></td>
-              <td><v-chip :color="riskColor(item.riskStatus)" variant="flat" density="comfortable">{{ formatRiskStatus(item.riskStatus) }}</v-chip></td>
-              <td><v-chip :color="evaluateColor(item.evaluate)" variant="flat" density="comfortable">{{ formatEvaluate(item.evaluate) }}</v-chip></td>
-              <td>{{ lateBy(item) }}</td>
-              <td>{{ getOvertimeHours(item.timeOut, item.shiftType) }}</td>
-              <td>
-                <span v-if="item.status === 'Leave'">{{ item.leaveType || '-' }}</span>
-                <span v-else>-</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div v-if="isLoading" class="loading-overlay">
-          <DotLottieVue
-            style="height: 200px; width: 200px;"
-            autoplay
-            loop
-            src="https://lottie.host/b3e4008f-9dbd-4b76-b13e-e1cdb52f6190/3JhAvD9aX1.json" />
-        </div>
-      </div>
+      <AttendanceTable
+        :items="rows"
+        :loading="isLoading"
+        :page="pagination.page"
+        :page-size="pagination.limit"
+        :total-pages="pagination.totalPages"
+        :selected-ids="selectedIds"
+        @update:selected-ids="(v)=> selectedIds = v"
+        @page="onPageChange"
+        @page-size="onPageSizeChange"
+        @edit="openEditByRecord"
+      />
     </v-card>
 
-    <v-row align-center="center" justify="space-between" class="mt-2">
-      <v-col cols="12" sm="6">
-        <v-select
-          v-model="pageSize"
-          :items="['20', '50', '100', 'All']"
-          label="Rows per page"
-          variant="outlined"
-          density="compact"
-          hide-details
-          @update:model-value="onPageSizeChange"
-        />
-      </v-col>
-      <v-col cols="12" sm="6" class="text-right">
-        <v-pagination
-          v-if="totalPages > 1"
-          v-model="currentPage"
-          :length="totalPages"
-          density="comfortable"
-          total-visible="5"
-          @update:model-value="onPageChange"
-        />
-      </v-col>
-    </v-row>
+    <!-- Edit Dialog -->
+    <EditAttendanceDialog
+      v-model="editDialog"
+      :loading="editLoading"
+      :value="editForm"
+      @save="submitEdit"
+    />
 
-    <!-- Customize Calendar dialog -->
-    <WorkCalendarDialog v-model="calendarDialog" @saved="onCalendarSaved" />
+    <!-- Calendar -->
+    <WorkCalendarDialog v-model="calendarDialog" @saved="fetchData" />
   </v-container>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import axios from '@/utils/axios'
+import { ref, reactive, computed, onMounted } from 'vue'
 import dayjs from '@/plugins/dayjs'
-import * as XLSX from 'xlsx'
-import { DotLottieVue } from '@lottiefiles/dotlottie-vue'
-import Swal from 'sweetalert2'
 import { useRouter } from 'vue-router'
 
-// Components
+// components
+import AttendanceToolbar from '@/components/hrss/attendance/AttendanceToolbar.vue'
+import AttendanceFilters from '@/components/hrss/attendance/AttendanceFilters.vue'
+import AttendanceTable from '@/components/hrss/attendance/AttendanceTable.vue'
+import EditAttendanceDialog from '@/components/hrss/attendance/EditAttendanceDialog.vue'
 import AttendanceHeatmap from '@/components/hrss/AttendanceHeatmap.vue'
 import WorkCalendarDialog from '@/components/hrss/WorkCalendarDialog.vue'
 
+// composables
+import { useAttendanceApi } from '@/composables/hrss/useAttendanceApi'
+import { useImportAttendance } from '@/composables/hrss/useImportAttendance'
 
-const router = useRouter();
-const excelFile = ref(null)
-const attendance = ref([])
-const searchText = ref('')
-const selectedShift = ref('All')
-const datePicker = ref(false)
-const selectedRows = ref([])
-const isLoading = ref(true)
+const router = useRouter()
+
+/* ───────── state ───────── */
+const isLoading = ref(false)
+const rows = ref([])
+const selectedIds = ref([])
+
+const pagination = reactive({
+  page: 1,
+  limit: '50',
+  totalPages: 1,
+})
+
+const filters = reactive({
+  shiftTemplateId: '',
+  shiftName: '',                // legacy fallback / quick typing
+  searchText: '',
+  date: dayjs().format('YYYY-MM-DD')
+})
+
 const editDialog = ref(false)
 const editLoading = ref(false)
-const calendarDialog = ref(false)
-
-// ✅ define chunk size ONCE, top-level
-const CHUNK_SIZE = 1200;
-
-const selectedDate = ref(dayjs().format('YYYY-MM-DD'))
-
 const editForm = ref({
   _id: '', employeeId: '', fullName: '', date: '',
   status: '', leaveType: '', riskStatus: 'None', overtimeHours: 0, note: ''
 })
-const currentPage = ref(1)
-const totalPages = ref(1)
-const pageSize = ref('50')
+const calendarDialog = ref(false)
+const shiftTemplates = ref([])
 
-// UI helpers
-const animateRow = (status) => {
-  if (status === 'NearlyAbandon' || status === 'Abandon') return 'shake-animation'
-  if (status === 'Risk') return 'risk-highlight'
-  return ''
-}
+/* ───────── api + import ───────── */
+const { listPaginated, updateAttendance, deleteAttendance, listShiftTemplates } = useAttendanceApi()
+const { importProg, importExcel } = useImportAttendance({ onAfterCommit: () => fetchData() })
 
-const importProg = ref({ active: false, sent: 0, total: 0 });
-const importPct = computed(() => importProg.value.total
-  ? Math.round((importProg.value.sent / importProg.value.total) * 100)
-  : 0);
-
-const formattedDate = computed(() =>
-  selectedDate.value ? dayjs(selectedDate.value).format('YYYY-MM-DD') : ''
-)
-
+/* ───────── actions ───────── */
 const fetchData = async () => {
   try {
     isLoading.value = true
-    const res = await axios.get('/attendance/paginated', {
-      params: {
-        page: currentPage.value,
-        limit: pageSize.value,
-        date: selectedDate.value ? dayjs(selectedDate.value).format('YYYY-MM-DD') : undefined,
-      },
+    const res = await listPaginated({
+      page: pagination.page,
+      limit: pagination.limit,
+      date: filters.date,
+      shiftTemplateId: filters.shiftTemplateId || undefined,
+      shiftName: filters.shiftName || undefined,
+      search: filters.searchText || undefined, // server can ignore if not supported
     })
-    attendance.value = Array.isArray(res.data.records) ? res.data.records : []
-    totalPages.value = res.data.totalPages || 1
-  } catch (err) {
-    console.error('❌ Fetch error:', err.message)
-    attendance.value = []
-    totalPages.value = 1
+    rows.value = Array.isArray(res.records) ? res.records : []
+    pagination.totalPages = res.totalPages || 1
   } finally {
     isLoading.value = false
   }
 }
 
-const onPageChange = (newPage) => { currentPage.value = newPage; fetchData() }
-const onPageSizeChange = () => { currentPage.value = 1; fetchData() }
-const onDateChange = () => { datePicker.value = false; fetchData() }
+const loadTemplates = async () => {
+  const list = await listShiftTemplates()
+  shiftTemplates.value = list
+}
 
-onMounted(() => {
+onMounted(async () => {
+  await Promise.all([fetchData(), loadTemplates()])
+})
+
+const onFiltersChanged = () => {
+  pagination.page = 1
   fetchData()
-  window.addEventListener('companyChanged', onCompanyChange)
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('companyChanged', onCompanyChange)
-})
-const onCompanyChange = () => { fetchData() }
-
-const filteredAttendance = computed(() =>
-  attendance.value.filter(row => {
-    const matchShift = selectedShift.value === 'All' || row.shiftType === selectedShift.value
-    const q = (searchText.value || '').toLowerCase()
-    const matchName = row.employeeId?.toLowerCase().includes(q) || row.fullName?.toLowerCase().includes(q)
-    const matchDate = !selectedDate.value || dayjs(row.date).isSame(selectedDate.value, 'day')
-    return matchShift && matchName && matchDate
-  })
-)
-
-const formatDate = val => (val ? dayjs(val).format('YYYY-MM-DD') : '-')
-const formatTime = val => (val ? dayjs(val).format('HH:mm') : '-')
-
-const statusColor = status => {
-  switch (status) {
-    case 'OnTime': return 'green'
-    case 'Late': return 'orange'
-    case 'Overtime': return 'purple'
-    case 'Absent': return 'red'
-    case 'Leave': return 'blue'
-    case 'NearlyAbandon': return 'yellow-darken-2'
-    case 'Abandon': return 'deep-orange-accent-4'
-    case 'Risk': return 'pink-accent-4'
-    default: return 'grey'
-  }
-}
-const formatStatus = s => ({
-  OnTime: 'On Time', Late: 'Late', Overtime: 'Overtime', Absent: 'Absent',
-  Leave: 'Permission', NearlyAbandon: 'Nearly Abandon', Abandon: 'Abandon', Risk: 'Risk on Comeback'
-}[s] || s)
-
-const riskColor = (r) => ({
-  NearlyAbandon: 'yellow-darken-2',
-  Abandon: 'deep-orange-accent-4',
-  Risk: 'pink-accent-4',
-  Evaluated1: 'green-darken-1',
-  Evaluated2: 'blue-darken-2'
-}[r] || 'grey')
-
-const formatRiskStatus = (r) => (!r || r === 'None')
-  ? '-'
-  : (/^Evaluated/.test(r) ? r.replace('Evaluated', 'Evaluated ') : r)
-
-const evaluateColor = (e) => ({
-  Evaluate1: 'green-darken-1',
-  Evaluate2: 'blue-darken-2',
-  Evaluate3: 'purple-darken-3'
-}[e] || 'grey')
-const formatEvaluate = (e) => (!e || e === 'None') ? '-' : e.replace('Evaluate', 'Evaluation ')
-
-/* ===== Helper to render alerts summary nicely ===== */
-const summarizeAlerts = (agg) => {
-  const parts = []
-  const total = (agg.nearly || 0) + (agg.risk || 0) + (agg.abandon || 0)
-  if (agg.nearly) parts.push(`${agg.nearly} NearlyAbandon`)
-  if (agg.risk) parts.push(`${agg.risk} Risk`)
-  if (agg.abandon) parts.push(`${agg.abandon} Abandon`)
-  if (!parts.length) return ''
-  return `There ${total === 1 ? 'is' : 'are'} ${parts.join(', ')} employee${total === 1 ? '' : 's'} flagged.`
 }
 
-// minutes difference helper
-const diffMinutes = (start, expected) => {
-  if (!start) return 0;
-  const [sh, sm] = start.split(':').map(Number);
-  const [eh, em] = expected.split(':').map(Number);
-  return (sh * 60 + sm) - (eh * 60 + em);
-};
+const onPageChange = (p) => { pagination.page = p; fetchData() }
+const onPageSizeChange = (size) => { pagination.limit = size; pagination.page = 1; fetchData() }
 
-// --- Use controller's break-aware lateMinutes when available ---
-const lateBy = (row) => {
-  if (Number.isFinite(row?.lateMinutes)) return row.lateMinutes;
-
-  // Fallback (if old records have no lateMinutes yet): compute with break-aware logic
-  const hhmm = row?.timeIn ? dayjs(row.timeIn).format('HH:mm') : null;
-  if (!hhmm) return '-';
-
-  const toMin = (s) => {
-    const [h, m] = s.split(':').map(Number);
-    return (h * 60) + (m || 0);
-  };
-
-  const startMin = toMin(hhmm);
-
-  if (row?.shiftType === 'Night Shift') {
-    const S   = toMin('18:00');
-    const B1  = toMin('22:00');
-    const B2  = toMin('23:00');
-    const BLK = B2 - B1; // 60
-
-    let sm = startMin;
-    if (sm < S) sm += 1440; // normalize across midnight
-
-    if (sm <= S) return 0;
-    if (sm <= B1) return sm - S;
-    if (sm <  B2) return B1 - S;           // arrived during break -> cap at morning max
-    return (sm - S) - BLK;                  // after break -> subtract 60
-  }
-
-  // Day Shift (default)
-  const S   = toMin('07:00');
-  const B1  = toMin('11:00');
-  const B2  = toMin('12:00');
-  const BLK = B2 - B1; // 60
-
-  if (startMin <= S) return 0;
-  if (startMin <= B1) return startMin - S;
-  if (startMin <  B2) return B1 - S;        // arrived during break
-  return (startMin - S) - BLK;              // after break -> minus 60
-};
-
-
-const getOvertimeHours = (timeOut, shiftType) => {
-  if (!timeOut) return '-';
-  let expectedEnd = shiftType === 'Night Shift' ? '03:00' : '16:00';
-  let out = dayjs(timeOut);
-  let exp = dayjs(timeOut).hour(Number(expectedEnd.split(':')[0])).minute(Number(expectedEnd.split(':')[1]));
-
-  // For night shift, end time crosses midnight
-  if (shiftType === 'Night Shift' && out.isBefore(exp)) {
-    out = out.add(1, 'day');
-  }
-  let diff = out.diff(exp, 'minutes');
-  return diff > 0 ? (diff / 60).toFixed(2) : 0;
-};
-
-
-/* =========================
-   VALIDATE ➜ COMMIT importer
-   With chunking (1,200 rows/chunk)
-   ========================= */
-const handleImport = async () => {
-  // helper: Excel serial/strings -> "HH:mm"
-  const toHHmm = (v) => {
-    if (v == null || v === '') return '';
-    if (typeof v === 'number') {
-      const totalMinutes = Math.round(v * 24 * 60); // Excel time is fraction of a day
-      const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
-      const mm = String(totalMinutes % 60).padStart(2, '0');
-      return `${hh}:${mm}`;
-    }
-    const m = String(v).trim().match(/^(\d{1,2}):(\d{2})/);
-    return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
-  };
-
-  // helper: Date cell -> "YYYY-MM-DD"
-  const toYMD = (v) => {
-    if (v == null || v === '') return '';
-    if (typeof v === 'number' && isFinite(v)) {
-      const jsDate = new Date(Math.round((v - 25569) * 86400 * 1000));
-      return dayjs(jsDate).format('YYYY-MM-DD');
-    }
-    const s = String(v).trim();
-    if (!s) return '';
-    const t = s.replace(/[./\\\s]+/g, '-');
-    let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (m) return dayjs(`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`).format('YYYY-MM-DD');
-    m = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-    if (m) return dayjs(`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`).format('YYYY-MM-DD');
-    const d = dayjs(s);
-    return d.isValid() ? d.format('YYYY-MM-DD') : '';
-  };
-
-  const chunkify = (arr, size) => {
-    const out = [];
-    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-    return out;
-  };
-
-  try {
-    const fileV = Array.isArray(excelFile.value) ? excelFile.value[0] : excelFile.value;
-    if (!fileV) return;
-
-    isLoading.value = true;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rawRows = XLSX.utils.sheet_to_json(sheet, {
-          defval: '',
-          blankrows: false,
-          raw: false
-        });
-
-        if (!rawRows.length) {
-          isLoading.value = false;
-          return Swal.fire('Empty file', 'No rows to import.', 'warning');
-        }
-
-        // Auto-pick the file's date into the filter (Asia/Phnom_Penh)
-        const firstDateCell = rawRows[0]?.date ?? rawRows[0]?.Date ?? rawRows[0]?.DATE;
-        if (firstDateCell !== undefined) {
-          let parsed;
-          if (typeof firstDateCell === 'number') {
-            const jsDate = new Date(Math.round((firstDateCell - 25569) * 86400 * 1000));
-            parsed = dayjs(jsDate);
-          } else {
-            parsed = dayjs(firstDateCell);
-          }
-          if (parsed.isValid()) selectedDate.value = parsed.format('YYYY-MM-DD');
-        }
-
-        // Normalize to API shape
-        const preparedRows = rawRows.map(r => ({
-          employeeId: String(r.employeeId || r.EmployeeID || r['Employee ID'] || '').trim(),
-          fullName:   String(r.fullName   || r.FullName   || r['Full Name']   || r.name || '').trim(),
-          date:        toYMD(r.date || r.Date || r.DATE),
-          startTime:   toHHmm(r.startTime || r.StartTime || r['Time In']  || r.TimeIn),
-          endTime:     toHHmm(r.endTime   || r.EndTime   || r['Time Out'] || r.TimeOut),
-          leaveType:  String(r.leaveType  || r.LeaveType || r['Leave Type'] || '').trim(),
-        })).filter(r => r.date);
-
-        // progress: initialize
-        importProg.value = { active: true, sent: 0, total: preparedRows.length };
-
-        // 1) VALIDATE
-        const validatePayload = {
-          mode: 'validate',
-          shiftType: selectedShift.value === 'All' ? undefined : selectedShift.value,
-          rows: preparedRows
-        };
-
-        let vres;
-        try {
-          vres = await axios.post('/attendance/import', validatePayload);
-        } catch (err) {
-          throw new Error(err?.response?.data?.message || 'Validation failed');
-        }
-
-        const nonWorkingDay = vres.data.nonWorkingDay || null;
-        const mismatches    = vres.data.shiftMismatches || [];
-
-        // Helper to accumulate alerts across chunks
-        const agg = { nearly: 0, risk: 0, abandon: 0 };
-
-        const addAlerts = (alerts) => {
-          if (!alerts) return;
-          agg.nearly  += Number(alerts.nearlyAbandonEmployees || 0);
-          agg.risk    += Number(alerts.riskEmployees || 0);
-          agg.abandon += Number(alerts.abandonEmployees || 0);
-        };
-
-        // 2) If safe, commit directly (fast path)
-        if (!nonWorkingDay && mismatches.length === 0) {
-          let totalWritten = 0;
-          for (const part of chunkify(preparedRows, CHUNK_SIZE)) {
-            const payload = {
-              mode: 'commit',
-              allowMismatch: true,
-              allowNonWorking: true,
-              mismatchPolicy: 'expected',
-              shiftType: selectedShift.value === 'All' ? undefined : selectedShift.value,
-              rows: part
-            };
-            const res = await axios.post('/attendance/import', payload);
-            totalWritten += (res.data.summary || []).length;
-            addAlerts(res.data.alerts);
-
-            importProg.value.sent = Math.min(importProg.value.total, importProg.value.sent + part.length);
-          }
-
-          await fetchData();
-          excelFile.value = null;
-
-          const alertMsg = summarizeAlerts(agg);
-          Swal.fire({
-            icon: 'success',
-            title: 'Imported',
-            html: `Imported <b>${totalWritten}</b> rows.${alertMsg ? `<br/><small>${alertMsg}</small>` : ''}`
-          });
-
-          importProg.value.active = false;
-          isLoading.value = false;
-          return;
-        }
-
-        // 3) Ask user how to proceed (mismatch/non-working)
-        const mismatchRowsHtml = mismatches.slice(0, 12).map(m => `
-          <tr>
-            <td>${m.employeeId || '-'}</td>
-            <td>${m.fullName || '-'}</td>
-            <td>${m.startTime || '-'}</td>
-            <td>${m.endTime || '-'}</td>
-            <td>${m.expectedShift || '-'}</td>
-            <td>${m.scannedShift || '-'}</td>
-          </tr>
-        `).join('');
-
-        const more = mismatches.length > 12
-          ? `<tr><td colspan="6" style="text-align:center">...and ${mismatches.length - 12} more</td></tr>`
-          : '';
-
-        const warnNonWork = nonWorkingDay
-          ? `<div style="padding:8px 12px; background:#fff6f6; border:1px solid #ffd1d1; border-radius:8px; margin-bottom:10px">
-               The selected date is marked as <b>${nonWorkingDay}</b> in Work Calendar.
-             </div>`
-          : '';
-
-        const { isConfirmed, value } = await Swal.fire({
-          width: 900,
-          title: 'Review before import',
-          html: `
-            ${warnNonWork}
-            <div style="margin-bottom:10px">
-              <b>${preparedRows.length}</b> rows detected.
-            </div>
-            ${mismatches.length ? `
-              <div style="border:1px solid #eee; border-radius:8px; max-height:260px; overflow:auto; margin-bottom:10px">
-                <table style="width:100%; font-size:12px; border-collapse:collapse">
-                  <thead>
-                    <tr style="background:#fafafa">
-                      <th style="padding:6px; border-bottom:1px solid #eee">ID</th>
-                      <th style="padding:6px; border-bottom:1px solid #eee">Name</th>
-                      <th style="padding:6px; border-bottom:1px solid #eee">In</th>
-                      <th style="padding:6px; border-bottom:1px solid #eee">Out</th>
-                      <th style="padding:6px; border-bottom:1px solid #eee">Expected</th>
-                      <th style="padding:6px; border-bottom:1px solid #eee">Scanned</th>
-                    </tr>
-                  </thead>
-                  <tbody>${mismatchRowsHtml}${more}</tbody>
-                </table>
-              </div>
-              <div style="display:flex; gap:18px; align-items:center; margin:10px 0 6px">
-                <div style="font-weight:600">When shift mismatches:</div>
-                <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
-                  <input type="radio" name="mpolicy" value="expected" checked>
-                  <span>Keep <b>scheduled</b> shift (recommended)</span>
-                </label>
-                <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
-                  <input type="radio" name="mpolicy" value="scanned">
-                  <span>Use <b>scanned</b> times to set shift</span>
-                </label>
-              </div>
-            ` : ''}
-            <div style="display:flex; gap:18px; margin-top:8px">
-              ${nonWorkingDay ? `
-                <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
-                  <input id="allow-nw" type="checkbox" checked>
-                  <span>Allow import on ${nonWorkingDay}</span>
-                </label>
-              ` : ''}
-              ${mismatches.length ? `
-                <label style="display:flex; gap:8px; align-items:center; cursor:pointer">
-                  <input id="allow-mm" type="checkbox" checked>
-                  <span>Allow shift mismatches</span>
-                </label>
-              ` : ''}
-            </div>
-          `,
-          focusConfirm: false,
-          showCancelButton: true,
-          confirmButtonText: 'Import',
-          cancelButtonText: 'Cancel',
-          preConfirm: () => {
-            const policy = (document.querySelector('input[name="mpolicy"]:checked')?.value) || 'expected';
-            const allowNW = document.querySelector('#allow-nw') ? document.querySelector('#allow-nw').checked : true;
-            const allowMM = document.querySelector('#allow-mm') ? document.querySelector('#allow-mm').checked : true;
-            return { policy, allowNW, allowMM };
-          }
-        });
-
-        if (!isConfirmed) {
-          isLoading.value = false;
-          importProg.value.active = false;
-          return;
-        }
-
-        // 4) COMMIT with chosen options (chunked)
-        let totalImported = 0;
-        const agg2 = { nearly: 0, risk: 0, abandon: 0 };
-
-        for (const part of chunkify(preparedRows, CHUNK_SIZE)) {
-          const payload = {
-            mode: 'commit',
-            allowMismatch: value.allowMM,
-            allowNonWorking: value.allowNW,
-            mismatchPolicy: value.policy,
-            shiftType: selectedShift.value === 'All' ? undefined : selectedShift.value,
-            rows: part
-          };
-          try {
-            const res = await axios.post('/attendance/import', payload);
-            totalImported += (res.data.summary || []).length;
-
-            // collect alerts per chunk
-            const a = res.data.alerts || {};
-            agg2.nearly  += Number(a.nearlyAbandonEmployees || 0);
-            agg2.risk    += Number(a.riskEmployees || 0);
-            agg2.abandon += Number(a.abandonEmployees || 0);
-          } catch (err) {
-            const msg = err?.response?.data?.message || err.message;
-            console.error('Commit chunk failed', err?.response?.data || err.message);
-            await Swal.fire('Import warning', msg, 'warning');
-          } finally {
-            importProg.value.sent = Math.min(importProg.value.total, importProg.value.sent + part.length);
-          }
-        }
-
-        await fetchData();
-        excelFile.value = null;
-
-        const alertMsg2 = summarizeAlerts(agg2);
-        Swal.fire({
-          icon: 'success',
-          title: 'Imported',
-          html: `Imported <b>${totalImported}</b> rows.${alertMsg2 ? `<br/><small>${alertMsg2}</small>` : ''}`
-        });
-
-        importProg.value.active = false;
-      } catch (err) {
-        console.error('❌ Import failed:', err);
-        Swal.fire('Import failed', err.message || 'Unknown error', 'error');
-        importProg.value.active = false;
-      } finally {
-        isLoading.value = false;
-      }
-    };
-
-    reader.readAsArrayBuffer(fileV);
-  } catch (err) {
-    console.error('❌ Import failed:', err.message);
-    isLoading.value = false;
-    Swal.fire('Import failed', err.message, 'error');
-    importProg.value.active = false;
-  }
-};
-
-const allSelected = computed({
-  get: () => selectedRows.value.length === filteredAttendance.value.length && filteredAttendance.value.length > 0,
-  set: (value) => { selectedRows.value = value ? filteredAttendance.value.map(i => i._id) : [] },
-})
-const isIndeterminate = computed(() =>
-  selectedRows.value.length > 0 && selectedRows.value.length < filteredAttendance.value.length
-)
-
-const editSelected = () => {
-  if (selectedRows.value.length === 1) {
-    const id = selectedRows.value[0]
-    const record = attendance.value.find(item => item._id === id)
-    if (record) {
-      editForm.value = {
-        _id: record._id,
-        employeeId: record.employeeId,
-        fullName: record.fullName,
-        date: formatDate(record.date),
-        status: record.status,
-        leaveType: record.leaveType || '',
-        riskStatus: record.riskStatus || 'None',
-        overtimeHours: record.overtimeHours || 0,
-        note: record.note || ''
-      }
-      editDialog.value = true
-    }
-  }
+const openEdit = () => {
+  if (selectedIds.value.length !== 1) return
+  const record = rows.value.find(r => r._id === selectedIds.value[0])
+  openEditByRecord(record)
 }
-
-const submitEdit = async () => {
+const openEditByRecord = (record) => {
+  if (!record) return
+  editForm.value = {
+    _id: record._id,
+    employeeId: record.employeeId,
+    fullName: record.fullName,
+    date: dayjs(record.date).format('YYYY-MM-DD'),
+    status: record.status,
+    leaveType: record.leaveType || '',
+    riskStatus: record.riskStatus || 'None',
+    overtimeHours: record.overtimeHours || 0,
+    note: record.note || ''
+  }
+  editDialog.value = true
+}
+const submitEdit = async (payload) => {
   try {
     editLoading.value = true
-    const payload = {
-      status: editForm.value.status,
-      leaveType: editForm.value.status === 'Leave' ? editForm.value.leaveType : '',
-      riskStatus: editForm.value.riskStatus || 'None',
-      overtimeHours: editForm.value.overtimeHours || 0,
-      note: editForm.value.note,
-    }
-    await axios.put(`/attendance/${editForm.value._id}`, payload)
+    await updateAttendance(editForm.value._id, payload)
     editDialog.value = false
     await fetchData()
-  } catch (err) {
-    console.error('❌ Update failed:', err.message)
   } finally {
     editLoading.value = false
   }
 }
 
 const deleteSelected = async () => {
-  if (selectedRows.value.length === 0) return
-  const confirmed = confirm(`Delete ${selectedRows.value.length} records?`)
-  if (!confirmed) return
-  try {
-    await Promise.all(selectedRows.value.map(id => axios.delete(`/attendance/${id}`)))
-    await fetchData()
-    selectedRows.value = []
-  } catch (err) {
-    console.error('❌ Failed to delete selected:', err.message)
-  }
+  if (selectedIds.value.length === 0) return
+  if (!confirm(`Delete ${selectedIds.value.length} records?`)) return
+  await Promise.all(selectedIds.value.map(id => deleteAttendance(id)))
+  selectedIds.value = []
+  fetchData()
 }
 
 const startEvaluation = () => {
-  if (selectedRows.value.length === 1) {
-    router.push(`/hrss/evaluate/${selectedRows.value[0]}`)
-  } else {
-    alert('Please select exactly one record to evaluate.')
-  }
+  if (selectedIds.value.length === 1) router.push(`/hrss/evaluate/${selectedIds.value[0]}`)
 }
 
-const onCalendarSaved = async () => {
-  await fetchData()
+const onImport = async (file) => {
+  await importExcel(file, { selectedDate: filters.date })
 }
 </script>
-
-<style scoped>
-.table-scroll-wrapper {
-  position: relative;
-  overflow-x: auto;
-  max-width: 100%;
-  border: 1px solid #e7e7e7;
-  border-radius: 16px;
-  max-height: 70vh;
-  overflow-y: auto;
-}
-.scrollable-table { width: max-content; border-collapse: separate; border-spacing: 0; font-size: 13px; }
-.scrollable-table th { position: sticky; top: 0; background-color: #f8fafc; z-index: 2; font-weight: 600; }
-.scrollable-table th, .scrollable-table td {
-  border-bottom: 1px solid #eee; padding: 8px 12px; text-align: center; vertical-align: middle;
-  white-space: nowrap; transition: background-color 0.2s ease;
-}
-.scrollable-table tbody tr.zebra:nth-child(odd) { background-color: #fcfcfd; }
-.scrollable-table tbody tr:hover { background-color: #edf6ff; cursor: pointer; }
-.sticky-col { position: sticky; left: 0; background: white; z-index: 3; box-shadow: 1px 0 0 #eee inset; }
-
-.loading-overlay { position: absolute; inset: 0; backdrop-filter: blur(1px); display: flex; align-items: center; justify-content: center; }
-
-/* Animations */
-@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 50%{transform:translateX(4px)} 75%{transform:translateX(-4px)} }
-.shake-animation { animation: shake 0.6s ease-in-out infinite; background-color: #ffe5e0; }
-
-@keyframes pulse { 0%{background-color:#ffe6eb} 50%{background-color:#ffc2d4} 100%{background-color:#ffe6eb} }
-.risk-highlight { animation: pulse 2s infinite; }
-</style>

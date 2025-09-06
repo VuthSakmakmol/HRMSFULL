@@ -101,6 +101,26 @@
             </div>
           </template>
         </v-list-item>
+
+        <!-- ✅ New: Assign Shifts -->
+        <v-list-item :to="{ path: '/hrss/assign-shifts' }">
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'user-clock']" class="sidebar-icon" />
+              Assign Shifts
+            </div>
+          </template>
+        </v-list-item>
+
+        <v-list-item :to="{ path: '/hrss/shift-templates' }">
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'clock']" class="sidebar-icon" />
+              Shift Templates
+            </div>
+          </template>
+        </v-list-item>
+
         <v-list-item :to="{ path: '/hrss/dashboard/attendance' }">
           <template #title>
             <div class="sidebar-link">
@@ -109,6 +129,7 @@
             </div>
           </template>
         </v-list-item>
+
         <v-list-item :to="{ path: '/hrss/manpower/table' }">
           <template #title>
             <div class="sidebar-link">
@@ -117,6 +138,7 @@
             </div>
           </template>
         </v-list-item>
+
         <v-list-item :to="{ path: '/hrss/dashboard' }">
           <template #title>
             <div class="sidebar-link">
@@ -125,7 +147,8 @@
             </div>
           </template>
         </v-list-item>
-                <v-list-item :to="{ path: '/hrss/dashboard/excome' }">
+
+        <v-list-item :to="{ path: '/hrss/dashboard/excome' }">
           <template #title>
             <div class="sidebar-link">
               <font-awesome-icon :icon="['fas', 'fa-database']" class="sidebar-icon" />
@@ -134,6 +157,7 @@
           </template>
         </v-list-item>
       </v-list-group>
+
 
 
       <!-- GM Section -->
