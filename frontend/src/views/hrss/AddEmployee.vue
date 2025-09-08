@@ -28,18 +28,12 @@
         </v-btn>
       </v-toolbar>
 
-      <!-- Stepper (compact, smoke background) -->
+      <!-- Stepper -->
       <div class="px-3 pt-1 pb-3">
         <v-row class="align-center">
           <v-col cols="12" md="9">
             <div class="stepper-smoke rounded-xl">
-              <v-stepper
-                :model-value="step"
-                flat
-                alt-labels
-                class="elevation-0 soft-stepper"
-                density="compact"
-              >
+              <v-stepper :model-value="step" flat alt-labels class="elevation-0 soft-stepper" density="compact">
                 <v-stepper-header>
                   <v-stepper-item
                     v-for="(lbl, i) in stepLabels"
@@ -69,7 +63,7 @@
       </div>
     </v-card>
 
-    <!-- Main: FULL WIDTH -->
+    <!-- Main -->
     <v-card class="rounded-xl elevation-1 mb-2 full-height-card">
       <component
         :is="stepComponents[step - 1]"
@@ -115,7 +109,7 @@ import { useRouter, useRoute } from 'vue-router'
 import Swal from 'sweetalert2'
 import axios from '@/utils/axios'
 
-// Steps
+/* Steps */
 import Step1 from '@/hrsscomponents/EmployeeSteps/Step1.vue'
 import Step2 from '@/hrsscomponents/EmployeeSteps/Step2.vue'
 import Step3 from '@/hrsscomponents/EmployeeSteps/Step3.vue'
@@ -141,6 +135,7 @@ const emptyAddress = () => ({
   provinceNameKh: '', districtNameKh: '', communeNameKh: '', villageNameKh: ''
 })
 
+/* The canonical single source of truth for the form */
 const form = ref({
   // profile
   profileImage: '', profileImageFile: null,
@@ -169,6 +164,12 @@ const form = ref({
   // work
   joinDate: '',
   department: '', position: '', line: '', team: '', section: '',
+
+  /* ✅ Required by server */
+  shiftTemplateId: '',            // must be selected before save
+  shiftEffectiveFrom: '',         // defaults to today if empty on save
+
+  // legacy + status
   shift: '', status: 'Working', resignDate: '', remark: '',
   employeeType: '', sourceOfHiring: '', introducerId: '',
 
@@ -204,13 +205,24 @@ const loadEmployee = async (id) => {
   try {
     const res = await axios.get(`/employees/${id}`)
     const merged = { ...form.value, ...res.data }
+
+    // Ensure company present
     if (!merged.company) merged.company = localStorage.getItem('company') || ''
+
+    // If backend returns currentShift convenience, reflect core fields
+    if (!merged.shiftTemplateId && res.data?.currentShift?.shiftTemplateId) {
+      merged.shiftTemplateId = String(res.data.currentShift.shiftTemplateId)
+    }
+    if (!merged.shiftEffectiveFrom && res.data?.currentShift?.from) {
+      merged.shiftEffectiveFrom = new Date(res.data.currentShift.from).toISOString().slice(0, 10)
+    }
+
     form.value = merged
     isEditMode.value = true
     step.value = 1
   } catch (err) {
     console.error('❌ Load failed', err)
-    Swal.fire({ icon: 'error', title: 'Load failed', text: err.message })
+    Swal.fire({ icon: 'error', title: 'Load failed', text: err?.response?.data?.message || err.message })
   }
 }
 
@@ -252,6 +264,11 @@ const resetForm = () => {
     placeOfLiving: emptyAddress(),
     joinDate: '', department: '', position: '',
     line: '', team: '', section: '',
+
+    /* keep required shift fields in the fresh model */
+    shiftTemplateId: '',
+    shiftEffectiveFrom: '',
+
     shift: '', status: 'Working', resignDate: '', remark: '',
     employeeType: '', sourceOfHiring: '', introducerId: '',
     singleNeedle: '', overlock: '', coverstitch: '', totalMachine: null,
@@ -261,16 +278,35 @@ const resetForm = () => {
   }
 }
 
+const ensureEffectiveFrom = () => {
+  if (!form.value.shiftEffectiveFrom) {
+    form.value.shiftEffectiveFrom = new Date().toISOString().slice(0, 10) // yyyy-MM-dd
+  }
+}
+
 const handleStepSubmit = async () => {
   try {
     isSaving.value = true
 
-    // Let child step upload image if it exposes handleFileUpload()
+    // Allow current step to upload an image if it supports it
     const uploader = stepComponent.value?.handleFileUpload
     if (typeof uploader === 'function') {
       const imageUrl = await uploader()
       if (imageUrl) form.value.profileImage = imageUrl
     }
+
+    /* ✅ Enforce shift before save */
+    if (!form.value.shiftTemplateId) {
+      isSaving.value = false
+      step.value = 3 // jump to Work Info step (Shift picker)
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Select Shift Template',
+        text: 'Please choose a Shift Template in Step 3 before saving.'
+      })
+      return
+    }
+    ensureEffectiveFrom()
 
     // Create vs Update
     if (!employeeId.value) {
@@ -299,7 +335,7 @@ const handleStepSubmit = async () => {
     }
   } catch (err) {
     console.error('❌ Save failed:', err)
-    Swal.fire({ icon: 'error', title: 'Save failed', text: err.message })
+    Swal.fire({ icon: 'error', title: 'Save failed', text: err?.response?.data?.message || err.message })
   } finally {
     isSaving.value = false
   }
@@ -313,14 +349,23 @@ const startNewEmployee = async () => {
       return !!v
     })
 
-    if (hasData && !employeeId.value) {
-      const payload = { ...form.value }
-      delete payload._id
-      const res = await axios.post('/employees', payload)
-      if (res.data?._id) Swal.fire({ icon: 'success', title: 'Saved before reset' })
-    } else if (employeeId.value) {
-      await axios.put(`/employees/${employeeId.value}`, form.value)
-      Swal.fire({ icon: 'success', title: 'Updated before reset' })
+    // Save current as draft/new (respect API requirement)
+    if (hasData) {
+      if (!form.value.shiftTemplateId) {
+        step.value = 3
+        await Swal.fire({ icon: 'warning', title: 'Shift required', text: 'Please choose a Shift Template before starting a new record.' })
+        return
+      }
+      ensureEffectiveFrom()
+      if (!employeeId.value) {
+        const payload = { ...form.value }
+        delete payload._id
+        const res = await axios.post('/employees', payload)
+        if (res.data?._id) Swal.fire({ icon: 'success', title: 'Saved before reset' })
+      } else {
+        await axios.put(`/employees/${employeeId.value}`, form.value)
+        Swal.fire({ icon: 'success', title: 'Updated before reset' })
+      }
     }
 
     resetForm()
@@ -333,7 +378,7 @@ const startNewEmployee = async () => {
     await nextTick()
   } catch (err) {
     console.error('❌ Reset error:', err)
-    Swal.fire({ icon: 'error', title: 'Reset failed', text: err.message })
+    Swal.fire({ icon: 'error', title: 'Reset failed', text: err?.response?.data?.message || err.message })
   }
 }
 
@@ -362,7 +407,7 @@ const handleKeydown = (e) => {
 
 /* Smoke background strip for the stepper */
 .stepper-smoke {
-  background: #f5f6f8;            /* smoke */
+  background: #f5f6f8;
   border: 1px dashed #e6e8ef;
   padding: 6px 8px;
 }
@@ -371,11 +416,10 @@ const handleKeydown = (e) => {
 .soft-stepper :deep(.v-stepper-item) { --v-theme-surface: transparent; }
 .soft-stepper :deep(.v-stepper-item--selected .v-stepper-item__title) { font-weight: 700; }
 .soft-stepper :deep(.v-stepper-header) {
-  background: transparent !important; /* header wrapper sits on smoke strip */
+  background: transparent !important;
   border-radius: 10px;
-  padding: 2px 4px;                   /* smaller */
+  padding: 2px 4px;
 }
-/* Make icons/avatars smaller */
 .soft-stepper :deep(.v-stepper-item__avatar) {
   height: 26px !important;
   width: 26px !important;
@@ -384,9 +428,7 @@ const handleKeydown = (e) => {
 .soft-stepper :deep(.v-stepper-item__title) { font-size: 0.9rem; }
 
 /* Full-height content card minus header + action bar */
-.full-height-card {
-  min-height: calc(100vh - 230px);
-}
+.full-height-card { min-height: calc(100vh - 230px); }
 
 /* Sticky bottom action bar (compact) */
 .action-bar {
@@ -399,9 +441,5 @@ const handleKeydown = (e) => {
   padding: 8px 12px;
   margin-top: 10px;
 }
-.action-bar .shortcut-hint {
-  font-size: 11px;
-  margin-left: 8px;
-  opacity: .7;
-}
+.action-bar .shortcut-hint { font-size: 11px; margin-left: 8px; opacity: .7; }
 </style>

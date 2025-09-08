@@ -43,13 +43,14 @@
         />
       </v-col>
 
-      <!-- Shift Template (NEW) -->
+      <!-- Shift Template (REQUIRED) -->
       <v-col cols="12" sm="4">
         <v-autocomplete
           v-model="form.shiftTemplateId"
           :items="shiftTemplates"
           item-title="name"
           item-value="_id"
+          :return-object="false"
           label="Shift template"
           variant="outlined"
           density="comfortable"
@@ -58,6 +59,8 @@
           :loading="loadingShifts"
           :ref="setRef(3)"
           @keydown.enter.prevent="focusNext(3)"
+          required
+          :rules="[v => !!v || 'Shift is required']"
         >
           <!-- Pretty dropdown rows -->
           <template #item="{ props, item }">
@@ -68,14 +71,19 @@
             />
           </template>
 
-          <!-- Selected chip -->
+          <!-- Selected pill -->
           <template #selection="{ item }">
-            <v-chip class="ma-1" size="small" label>{{ item.raw.name }}</v-chip>
+            <v-chip v-if="item?.raw" class="ma-1" size="small" label>
+              {{ item.raw.name }}
+            </v-chip>
+            <v-chip v-else class="ma-1" size="small" label>
+              {{ resolveSelectedName(form.shiftTemplateId) }}
+            </v-chip>
           </template>
         </v-autocomplete>
       </v-col>
 
-      <!-- Optional: effective-from date for initial assignment -->
+      <!-- Effective-from date (REQUIRED) -->
       <v-col cols="12" sm="2">
         <v-text-field
           v-model="form.shiftEffectiveFrom"
@@ -86,6 +94,8 @@
           autocomplete="off"
           :ref="setRef(4)"
           @keydown.enter.prevent="focusNext(4)"
+          required
+          :rules="[v => !!v || 'Effective date is required']"
         />
       </v-col>
 
@@ -240,32 +250,54 @@
 
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue'
+import dayjs from '@/plugins/dayjs'
 import axios from '@/utils/axios'
 
-const props = defineProps({ form: Object })
+/** Parent supplies a single reactive `form` object */
+const props = defineProps({
+  form: { type: Object, required: true }
+})
 const form = props.form
 
-/* ───────── enums (keep existing API for status, sources, etc.) ───────── */
+/* ───────── enums ───────── */
 const enumOptions = ref({
   statusOptions: [],
   sourceOfHiringOptions: [],
   resignReasonOptions: []
 })
 
-/* ───────── shift templates (new) ───────── */
+/* ───────── shift templates ───────── */
 const shiftTemplates = ref([])
 const loadingShifts = ref(false)
 
 const templateSubtitle = (t) => {
   if (!t) return ''
-  const base = `${t.timeIn} → ${t.timeOut}`
+  const base = `${t.timeIn} → ${t.timeOut}${t.crossMidnight ? ' (+1d)' : ''}`
   const late = t.lateAfter ? ` • late ${t.lateAfter}` : ''
-  const ot   = t.ot?.mode && t.ot.mode !== 'DISABLED' ? ` • OT ${t.ot.mode}` : ''
+  const ot = t.ot?.mode && t.ot.mode !== 'DISABLED' ? ` • OT ${t.ot.mode}` : ''
   return base + late + ot
 }
 
+/* If someone accidentally feeds an object into form.shiftTemplateId, coerce to id */
+watch(
+  () => form.shiftTemplateId,
+  (val) => {
+    if (val && typeof val === 'object' && val._id) {
+      form.shiftTemplateId = String(val._id)
+    }
+  },
+  { immediate: true }
+)
+
+/* Ensure effective-from has a default (today) */
+onMounted(() => {
+  if (!form.shiftEffectiveFrom) {
+    form.shiftEffectiveFrom = dayjs().format('YYYY-MM-DD')
+  }
+})
+
 onMounted(async () => {
-  // enums (non-shift)
+  // enums
   try {
     const { data } = await axios.get('/meta/enums')
     enumOptions.value = {
@@ -296,7 +328,7 @@ watch(
   (val) => {
     if (val === 'Resign') {
       if (!form.resignDate) {
-        form.resignDate = new Date().toISOString().substring(0, 10)
+        form.resignDate = new Date().toISOString().substring(0, 10) // yyyy-MM-dd
       }
     } else {
       form.resignReason = ''
@@ -305,16 +337,14 @@ watch(
   }
 )
 
-/* Optional "Other" source input */
-const showOtherSource = computed(() =>
-  typeof form.sourceOfHiring === 'string' &&
-  form.sourceOfHiring.toLowerCase() === 'other'
-)
-const onSourceChange = (val) => {
-  if (typeof val === 'string' && val.toLowerCase() !== 'other') return
-}
+/* Optional "Other" source text input */
+const showOtherSource = computed(() => {
+  const v = form.sourceOfHiring
+  return typeof v === 'string' && v.toLowerCase() === 'other'
+})
+const onSourceChange = () => {}
 
-/* Numeric helpers (keep non-negative integers) */
+/* Numeric helpers */
 const normalizeNonNegative = (key) => {
   let v = form[key]
   if (v === '' || v === null || v === undefined) { form[key] = null; return }
@@ -329,4 +359,15 @@ const focusNext = (idx) => {
   const next = inputRefs[idx + 1]
   if (next?.focus) next.focus()
 }
+
+/* Utility for selection slot fallback */
+const resolveSelectedName = (id) => {
+  if (!id) return ''
+  const found = shiftTemplates.value.find(t => String(t._id) === String(id))
+  return found ? found.name : id
+}
 </script>
+
+<style scoped>
+/* optional styling */
+</style>
