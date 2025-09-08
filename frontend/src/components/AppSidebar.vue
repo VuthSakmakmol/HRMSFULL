@@ -102,16 +102,6 @@
           </template>
         </v-list-item>
 
-        <!-- ✅ New: Assign Shifts -->
-        <v-list-item :to="{ path: '/hrss/assign-shifts' }">
-          <template #title>
-            <div class="sidebar-link">
-              <font-awesome-icon :icon="['fas', 'user-clock']" class="sidebar-icon" />
-              Assign Shifts
-            </div>
-          </template>
-        </v-list-item>
-
         <v-list-item :to="{ path: '/hrss/shift-templates' }">
           <template #title>
             <div class="sidebar-link">

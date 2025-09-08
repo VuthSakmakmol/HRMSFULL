@@ -1,10 +1,9 @@
 // controllers/hrss/attendanceController.js
-const Attendance   = require('../../models/hrss/attendances');
-const Employee     = require('../../models/hrss/employee');
-const WorkCalendar = require('../../models/hrss/workCalendar');
-const ShiftTemplate   = require('../../models/hrss/shiftTemplate');
-const ShiftAssignment = require('../../models/hrss/shiftAssignment');
-const XLSX         = require('xlsx');
+const Attendance     = require('../../models/hrss/attendances');
+const Employee       = require('../../models/hrss/employee');
+const WorkCalendar   = require('../../models/hrss/workCalendar');
+const ShiftTemplate  = require('../../models/hrss/shiftTemplate');
+const XLSX           = require('xlsx');
 
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
@@ -158,7 +157,6 @@ const evaluateStatus = (startTime, endTime, shiftType) => {
     const B2 = toMinutes('12:00');
     const BLK = B2 - B1; // 60
 
-    // Lateness (skip the 1h break entirely)
     if (startMin == null || endMin == null) return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
 
     if (startMin <= S) {
@@ -343,16 +341,14 @@ function evaluateWithTemplate(template, startTime, endTime) {
   };
 }
 
-async function resolveEffectiveShift(company, employeeId, dateOnly /* Date */) {
-  const a = await ShiftAssignment.findOne({
-    company, employeeId,
-    from: { $lte: dateOnly },
-    $or: [{ to: null }, { to: { $gte: dateOnly } }]
-  }).lean();
-
-  if (!a) return null;
-  const tmpl = await ShiftTemplate.findOne({ _id: a.shiftTemplateId, company, active: true }).lean();
-  return tmpl || null;
+/* ────────── resolve template from employee.shiftTemplateId (no ShiftAssignment) ────────── */
+async function getEmployeeTemplate(company, employeeId) {
+  const emp = await Employee.findOne({ company, employeeId })
+    .select('shiftTemplateId shift shiftName')
+    .lean();
+  if (!emp?.shiftTemplateId) return null;
+  const tpl = await ShiftTemplate.findOne({ _id: emp.shiftTemplateId, company, active: true }).lean();
+  return tpl || null;
 }
 
 /* ───────────────────── Import attendance (validate/commit) ─────────────────────
@@ -389,7 +385,7 @@ exports.importAttendance = async (req, res) => {
     const dayType  = await getDayType(company, dateOnly);
     const isNonWorking = (dayType === 'Sunday' || dayType === 'Holiday');
 
-    /* ───────── Employee caches (NO defaultShift, NO guessing) ───────── */
+    /* ───────── Employee caches (NO defaultShift guessing) ───────── */
     const idsRaw   = [...new Set(rows.map(r => (r.employeeId || '').trim()).filter(Boolean))];
     const idsQuery = [...new Set([...idsRaw, ...idsRaw.map(s => s.toUpperCase())])];
 
@@ -422,7 +418,6 @@ exports.importAttendance = async (req, res) => {
 
     /* ───────── Build prepared rows & collect errors ───────── */
     const prepared = [];
-    const missingShift = [];   // { row, employeeId, fullName, reason }
     const missingEmployee = [];
 
     for (let idx = 0; idx < rows.length; idx++) {
@@ -454,7 +449,6 @@ exports.importAttendance = async (req, res) => {
         ? `${empDoc.englishFirstName || ''} ${empDoc.englishLastName || ''}`.trim()
         : (r.fullName || 'Unknown');
 
-      // Strict: must have employee (shift now resolved later via assignment)
       if (!empDoc) {
         missingEmployee.push({
           row: rowNo,
@@ -475,30 +469,28 @@ exports.importAttendance = async (req, res) => {
       });
     }
 
-    // VALIDATE mode: block on missing employee; shift assignment/template presence is checked below
+    // VALIDATE mode: block on missing employee; ensure employee has a shiftTemplateId
     if (mode === 'validate') {
-      // Also check that each row has an effective shift template assignment (soft check)
-      const noAssignment = [];
+      const noTemplate = [];
       for (const p of prepared) {
         if (!p.employeeId) continue;
-        const date = startOfDayTZ(p.dateStr).toDate();
-        const tmpl = await resolveEffectiveShift(company, p.employeeId, date);
+        const tmpl = await getEmployeeTemplate(company, p.employeeId);
         if (!tmpl) {
-          noAssignment.push({ employeeId: p.employeeId, date: p.dateStr, reason: 'No shift assignment/template for this date' });
+          noTemplate.push({ employeeId: p.employeeId, date: p.dateStr, reason: 'No shift template assigned on employee' });
         }
       }
 
-      if (missingEmployee.length || noAssignment.length) {
+      if (missingEmployee.length || noTemplate.length) {
         const preview = [
           ...missingEmployee.map(m => `Row ${m.row} (${m.employeeId} - ${m.fullName}): ${m.reason}`),
-          ...noAssignment.slice(0, 5).map(m => `(${m.employeeId} @ ${m.date}): ${m.reason}`)
+          ...noTemplate.slice(0, 5).map(m => `(${m.employeeId} @ ${m.date}): ${m.reason}`)
         ].join('; ');
-        const more = noAssignment.length > 5 ? ` …and ${noAssignment.length - 5} more missing assignments` : '';
+        const more = noTemplate.length > 5 ? ` …and ${noTemplate.length - 5} more without template` : '';
         return res.status(422).json({
           ok: false,
-          reason: missingEmployee.length ? 'MISSING_EMPLOYEE' : 'MISSING_SHIFT_ASSIGNMENT',
+          reason: missingEmployee.length ? 'MISSING_EMPLOYEE' : 'MISSING_SHIFT_TEMPLATE',
           message: `Cannot import: ${preview}${more}`,
-          details: { missingEmployee, noAssignment },
+          details: { missingEmployee, noTemplate },
           nonWorkingDay: isNonWorking ? dayType : null
         });
       }
@@ -573,8 +565,8 @@ exports.importAttendance = async (req, res) => {
       const empFromCache = empsById[(p.employeeId || '').trim().toUpperCase()];
       const finalShift   = empFromCache?.__empShift || null; // normalized or null
 
-      // NEW: resolve effective template/assignment
-      const tmpl = await resolveEffectiveShift(company, p.employeeId, date);
+      // NEW: resolve template from Employee.shiftTemplateId
+      const tmpl = await getEmployeeTemplate(company, p.employeeId);
 
       // Evaluate
       let computedStatus, overtimeMinutes, lateMinutes, flags = [], shiftTemplateId = null, shiftName = '', shiftSnapshot = undefined;
@@ -594,7 +586,7 @@ exports.importAttendance = async (req, res) => {
         shiftName       = tmpl.name || '';
         shiftSnapshot   = ev.snapshot;
       } else {
-        // Fallback to legacy evaluator if no assignment/template yet
+        // Fallback to legacy evaluator if no template yet
         const ev = evaluateStatus(p.startTime, p.endTime, finalShift || 'Day Shift');
         computedStatus  = ev.status;
         overtimeMinutes = ev.overtimeMinutes;
@@ -769,9 +761,8 @@ exports.updateLeavePermission = async (req, res) => {
       const formattedDateStr = formatExcelDate(row.date);
       if (!employeeId || !leaveType || !formattedDateStr) continue;
 
-      // Try resolve template (preferred)
       const date = startOfDayTZ(formattedDateStr).toDate();
-      const tmpl = await resolveEffectiveShift(company, employeeId, date);
+      const tmpl = await getEmployeeTemplate(company, employeeId); // ← no ShiftAssignment
 
       // Enforce employee-configured legacy shift only for fallback snapshot
       const emp = await Employee.findOne({ employeeId, company })
@@ -1224,14 +1215,13 @@ exports.getAttendanceSeries = async (req, res) => {
     const shiftType = req.query.shiftType && req.query.shiftType !== 'All' ? req.query.shiftType : null;
 
     const todayLocal = dayjs.tz(dayjs(), TZ);
-    let startLocal, endLocal, unit, labelFormat;
+    let startLocal, endLocal, unit;
 
     if (scope === 'day') {
       const date = req.query.date || todayLocal.format('YYYY-MM-DD');
       startLocal = dayjs.tz(`${date} 00:00:00`, TZ).startOf('day');
       endLocal   = startLocal.add(1, 'day');
       unit = 'day';
-      labelFormat = 'YYYY-MM-DD';
     } else if (scope === 'month') {
       const y = Number(req.query.year || todayLocal.year());
       const m = Number(req.query.month || (todayLocal.month() + 1)); // 1..12
@@ -1239,13 +1229,11 @@ exports.getAttendanceSeries = async (req, res) => {
       startLocal = dayjs.tz(`${y}-${mm}-01 00:00:00`, TZ).startOf('month');
       endLocal   = startLocal.add(1, 'month');
       unit = 'day';
-      labelFormat = 'YYYY-MM-DD';
     } else if (scope === 'year') {
       const y = Number(req.query.year || todayLocal.year());
       startLocal = dayjs.tz(`${y}-01-01 00:00:00`, TZ).startOf('year');
       endLocal   = startLocal.add(1, 'year');
       unit = 'month';
-      labelFormat = 'YYYY-MM';
     } else {
       return res.status(400).json({ message: "scope must be 'day' | 'month' | 'year'" });
     }

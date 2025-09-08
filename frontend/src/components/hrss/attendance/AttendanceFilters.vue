@@ -1,59 +1,62 @@
 <template>
-  <v-row class="mt-1" dense>
-    <v-col cols="12" sm="4">
-      <v-autocomplete
-        v-model="selTemplateId"
-        :items="templateItems"
+  <v-row class="gap-2" align-center="center">
+    <!-- Shift Template -->
+    <v-col cols="12" sm="3">
+      <v-select
+        :items="templates"
         item-title="name"
         item-value="_id"
         label="Shift Template"
-        density="compact"
         variant="outlined"
-        clearable
-        hide-details
-        @update:model-value="emitChanged"
+        density="comfortable"
+        :model-value="templateId"
+        @update:model-value="v => emit('update:template-id', v || '')"
       />
     </v-col>
 
-    <v-col cols="12" sm="4">
+
+
+    <!-- Search -->
+    <v-col cols="12" sm="3">
       <v-text-field
-        v-model="selShiftName"
-        label="Shift Name (legacy or quick filter)"
-        density="compact"
+        label="Search employee…"
         variant="outlined"
-        hide-details
+        density="comfortable"
+        :model-value="search"
+        @update:model-value="v => emit('update:search', v || '')"
         clearable
-        @input="emitChanged"
       />
     </v-col>
 
-    <v-col cols="12" sm="4">
-      <v-text-field
-        v-model="search"
-        label="Search employee (ID/Name)"
-        append-inner-icon="mdi-magnify"
-        density="compact"
-        variant="outlined"
-        hide-details
-        @input="emitChanged"
-      />
-    </v-col>
-
-    <v-col cols="12" sm="4">
-      <v-menu v-model="menu" :close-on-content-click="false" transition="scale-transition" offset-y>
+    <!-- Date (display DD-MM-YYYY, emit YYYY-MM-DD) -->
+    <v-col cols="12" sm="3">
+      <v-menu
+        v-model="menu"
+        :close-on-content-click="false"
+        transition="scale-transition"
+        offset-y
+        max-width="320"
+        min-width="320"
+      >
         <template #activator="{ props }">
           <v-text-field
             v-bind="props"
-            v-model="date"
             label="Filter by Date"
-            density="compact"
             variant="outlined"
-            append-inner-icon="mdi-calendar"
+            density="comfortable"
             readonly
-            hide-details
+            :model-value="formattedDate"
+            prepend-inner-icon="mdi-calendar"
+            @click:prepend-inner="menu = true"
           />
         </template>
-        <v-date-picker v-model="date" @update:modelValue="onDateChange" />
+
+        <v-date-picker
+          v-model="internalDate"
+          @update:model-value="onPick"
+          :max="maxDate"
+          show-adjacent-months
+        />
       </v-menu>
     </v-col>
   </v-row>
@@ -61,37 +64,47 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
+import dayjs from '@/plugins/dayjs'
 
 const props = defineProps({
-  templates: { type: Array, default: () => [] },
-  modelValueTemplateId: { type: String, default: '' },
-  modelValueShiftName: { type: String, default: '' },
-  modelValueSearch: { type: String, default: '' },
-  modelValueDate: { type: String, default: '' },
+  templates:  { type: Array,  default: () => [] },
+  templateId: { type: String, default: '' },
+  search:     { type: String, default: '' },
+  /** Parent passes a STRING "YYYY-MM-DD" */
+  date:       { type: String, default: '' },
 })
-const emit = defineEmits(['update:template-id','update:shift-name','update:search','update:date','changed'])
 
-const selTemplateId = ref(props.modelValueTemplateId)
-const selShiftName  = ref(props.modelValueShiftName)
-const search        = ref(props.modelValueSearch)
-const date          = ref(props.modelValueDate)
-const menu          = ref(false)
+const emit = defineEmits([
+  'update:template-id',
+  'update:shift-name',
+  'update:search',
+  'update:date',
+  'changed'
+])
 
-watch(() => props.modelValueTemplateId, v => selTemplateId.value = v)
-watch(() => props.modelValueShiftName,  v => selShiftName.value  = v)
-watch(() => props.modelValueSearch,     v => search.value        = v)
-watch(() => props.modelValueDate,       v => date.value          = v)
+const menu = ref(false)
 
-const templateItems = computed(() => props.templates || [])
+/** Internal Date object for picker UI only */
+const internalDate = ref(props.date ? dayjs(props.date).toDate() : new Date())
 
-const emitChanged = () => {
-  emit('update:template-id', selTemplateId.value || '')
-  emit('update:shift-name',  selShiftName.value || '')
-  emit('update:search',      search.value || '')
+/** Keep picker in sync if parent updates the string date */
+watch(() => props.date, (val) => {
+  if (val) internalDate.value = dayjs(val).toDate()
+})
+
+/** What the text field shows to users */
+const formattedDate = computed(() =>
+  props.date ? dayjs(props.date).format('DD-MM-YYYY') : ''
+)
+
+/** Optional picker limit */
+const maxDate = computed(() => dayjs().add(5, 'year').format('YYYY-MM-DD'))
+
+function onPick (val) {
+  // Emit API-friendly format
+  const ymd = dayjs(val).format('YYYY-MM-DD')
+  emit('update:date', ymd)
   emit('changed')
-}
-const onDateChange = () => {
-  emit('update:date', date.value)
-  emit('changed')
+  menu.value = false
 }
 </script>

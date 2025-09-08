@@ -19,10 +19,8 @@
       </div>
     </v-card>
 
-    <!-- Monthly Heatmap (unchanged) -->
     <AttendanceHeatmap :date="filters.date" class="mb-4" @reload="fetchData" />
 
-    <!-- Actions -->
     <v-card class="mb-3 elevation-1 rounded-2xl">
       <div class="pa-3">
         <v-row align="center" dense>
@@ -45,7 +43,6 @@
       </div>
     </v-card>
 
-    <!-- Table -->
     <v-card class="elevation-1 rounded-2xl">
       <AttendanceTable
         :items="rows"
@@ -54,14 +51,13 @@
         :page-size="pagination.limit"
         :total-pages="pagination.totalPages"
         :selected-ids="selectedIds"
-        @update:selected-ids="(v)=> selectedIds = v"
+        @update:selected-ids="v => (selectedIds = v)"
         @page="onPageChange"
         @page-size="onPageSizeChange"
         @edit="openEditByRecord"
       />
     </v-card>
 
-    <!-- Edit Dialog -->
     <EditAttendanceDialog
       v-model="editDialog"
       :loading="editLoading"
@@ -69,17 +65,15 @@
       @save="submitEdit"
     />
 
-    <!-- Calendar -->
     <WorkCalendarDialog v-model="calendarDialog" @saved="fetchData" />
   </v-container>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import dayjs from '@/plugins/dayjs'
 import { useRouter } from 'vue-router'
 
-// components
 import AttendanceToolbar from '@/components/hrss/attendance/AttendanceToolbar.vue'
 import AttendanceFilters from '@/components/hrss/attendance/AttendanceFilters.vue'
 import AttendanceTable from '@/components/hrss/attendance/AttendanceTable.vue'
@@ -87,16 +81,15 @@ import EditAttendanceDialog from '@/components/hrss/attendance/EditAttendanceDia
 import AttendanceHeatmap from '@/components/hrss/AttendanceHeatmap.vue'
 import WorkCalendarDialog from '@/components/hrss/WorkCalendarDialog.vue'
 
-// composables
 import { useAttendanceApi } from '@/composables/hrss/useAttendanceApi'
 import { useImportAttendance } from '@/composables/hrss/useImportAttendance'
 
 const router = useRouter()
 
-/* ───────── state ───────── */
+/* state */
 const isLoading = ref(false)
 const rows = ref([])
-const selectedIds = ref([])
+let selectedIds = ref([])
 
 const pagination = reactive({
   page: 1,
@@ -106,9 +99,10 @@ const pagination = reactive({
 
 const filters = reactive({
   shiftTemplateId: '',
-  shiftName: '',                // legacy fallback / quick typing
+  shiftName: '',
   searchText: '',
-  date: dayjs().format('YYYY-MM-DD')
+  // IMPORTANT: keep as STRING (YYYY-MM-DD)
+  date: dayjs().format('YYYY-MM-DD'),
 })
 
 const editDialog = ref(false)
@@ -120,32 +114,76 @@ const editForm = ref({
 const calendarDialog = ref(false)
 const shiftTemplates = ref([])
 
-/* ───────── api + import ───────── */
+/* api + import */
 const { listPaginated, updateAttendance, deleteAttendance, listShiftTemplates } = useAttendanceApi()
-const { importProg, importExcel } = useImportAttendance({ onAfterCommit: () => fetchData() })
+const { importProg, importExcel } = useImportAttendance({
+  onAfterCommit: async () => { return }
+})
 
-/* ───────── actions ───────── */
+/* actions */
 const fetchData = async () => {
   try {
     isLoading.value = true
+    console.log('[fetchData] filters.date =', filters.date, 'typeof =', typeof filters.date)
+
     const res = await listPaginated({
       page: pagination.page,
       limit: pagination.limit,
       date: filters.date,
       shiftTemplateId: filters.shiftTemplateId || undefined,
       shiftName: filters.shiftName || undefined,
-      search: filters.searchText || undefined, // server can ignore if not supported
+      search: filters.searchText || undefined,
     })
+    console.log('[fetchData] API response:', res)
+
     rows.value = Array.isArray(res.records) ? res.records : []
+    console.log('[fetchData] rows length =', rows.value.length)
+
     pagination.totalPages = res.totalPages || 1
+    console.log('[fetchData] totalPages =', pagination.totalPages)
+
+    if (pagination.page > pagination.totalPages && pagination.totalPages > 0) {
+      pagination.page = pagination.totalPages
+      console.log('[fetchData] snap to last page:', pagination.page)
+      const res2 = await listPaginated({
+        page: pagination.page,
+        limit: pagination.limit,
+        date: filters.date,
+        shiftTemplateId: filters.shiftTemplateId || undefined,
+        shiftName: filters.shiftName || undefined,
+        search: filters.searchText || undefined,
+      })
+      console.log('[fetchData] refetch after snap:', res2)
+      rows.value = Array.isArray(res2.records) ? res2.records : []
+    }
+  } catch (e) {
+    console.error('[fetchData] failed:', e)
   } finally {
     isLoading.value = false
   }
 }
 
+const onImport = async (file) => {
+  console.log('[onImport] starting with selectedDate =', filters.date)
+  const res = await importExcel(file, { selectedDate: filters.date })
+  console.log('[onImport] result from importExcel:', res)
+
+  if (res?.ok && res?.importDate) {
+    filters.date = dayjs(res.importDate).format('YYYY-MM-DD')
+    console.log('[onImport] filters.date snapped to importDate =', filters.date)
+  }
+  pagination.page = 1
+  console.log('[onImport] calling fetchData…')
+  await fetchData()
+}
+
 const loadTemplates = async () => {
-  const list = await listShiftTemplates()
-  shiftTemplates.value = list
+  try {
+    shiftTemplates.value = await listShiftTemplates()
+  } catch (e) {
+    console.error('loadTemplates failed:', e)
+    shiftTemplates.value = []
+  }
 }
 
 onMounted(async () => {
@@ -165,6 +203,7 @@ const openEdit = () => {
   const record = rows.value.find(r => r._id === selectedIds.value[0])
   openEditByRecord(record)
 }
+
 const openEditByRecord = (record) => {
   if (!record) return
   editForm.value = {
@@ -180,6 +219,7 @@ const openEditByRecord = (record) => {
   }
   editDialog.value = true
 }
+
 const submitEdit = async (payload) => {
   try {
     editLoading.value = true
@@ -201,9 +241,5 @@ const deleteSelected = async () => {
 
 const startEvaluation = () => {
   if (selectedIds.value.length === 1) router.push(`/hrss/evaluate/${selectedIds.value[0]}`)
-}
-
-const onImport = async (file) => {
-  await importExcel(file, { selectedDate: filters.date })
 }
 </script>

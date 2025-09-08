@@ -1,7 +1,6 @@
 // controllers/hrss/employeeController.js
 const XLSX = require('xlsx')
 const Employee = require('../../models/hrss/employee')
-const ShiftAssignment = require('../../models/hrss/shiftAssignment')
 const ShiftTemplate = require('../../models/hrss/shiftTemplate')
 const { findTemplate } = require('./_helpers/shiftLookup')
 
