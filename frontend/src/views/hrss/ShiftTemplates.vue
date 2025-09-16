@@ -1,165 +1,231 @@
-<template>
-  <v-container fluid class="pa-4">
-    <v-card class="elevation-1 rounded-2xl">
-      <v-toolbar color="primary" density="comfortable" class="rounded-t-2xl" title="Shift Templates">
-        <template #append>
-          <v-btn variant="flat" color="white" class="mr-2" @click="fetchList">
-            <v-icon start>mdi-refresh</v-icon> Refresh
-          </v-btn>
-          <v-btn color="white" variant="flat" @click="openCreate">
-            <v-icon start>mdi-plus</v-icon> New Template
-          </v-btn>
-        </template>
-      </v-toolbar>
-
-      <div class="pa-4">
-        <v-text-field v-model="q" label="Search by name" prepend-inner-icon="mdi-magnify" variant="outlined" density="compact" hide-details class="mb-4" />
-
-        <v-table density="comfortable">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Time</th>
-              <th>Late</th>
-              <th>Breaks</th>
-              <th>OT</th>
-              <th>Active</th>
-              <th>Updated</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(t,i) in filtered" :key="t._id">
-              <td>{{ i+1 }}</td>
-              <td>{{ t.name }}</td>
-              <td>{{ t.timeIn || '-' }} → {{ t.timeOut || '-' }}</td>
-              <td>{{ t.lateAfter || '-' }}</td>
-              <td>
-                <span v-if="(t.breaks||[]).length">{{ t.breaks.map(b=>`${b.start}-${b.end}${b.paid?'(paid)':''}`).join(', ') }}</span>
-                <span v-else>-</span>
-              </td>
-              <td>
-                <span v-if="t.ot?.mode==='TIERS'">Tiers: {{ (t.ot.tiers||[]).join(',') }} (start {{ t.ot.startAfterMin }}m)</span>
-                <span v-else-if="t.ot?.mode==='ANY_MINUTES'">Any (start {{ t.ot.startAfterMin }}m)</span>
-                <span v-else>None</span>
-              </td>
-              <td>
-                <v-chip :color="t.active ? 'green' : 'grey'" size="small" variant="flat">{{ t.active ? 'Yes' : 'No' }}</v-chip>
-              </td>
-              <td>{{ fmt(t.updatedAt) }}</td>
-              <td class="text-right">
-                <v-btn size="small" variant="text" @click="openEdit(t)"><v-icon>mdi-pencil</v-icon></v-btn>
-                <v-btn size="small" variant="text" color="error" @click="remove(t)"><v-icon>mdi-delete</v-icon></v-btn>
-              </td>
-            </tr>
-            <tr v-if="!loading && !filtered.length">
-              <td colspan="9" class="text-center text-medium-emphasis">No templates</td>
-            </tr>
-          </tbody>
-        </v-table>
-
-        <div v-if="loading" class="d-flex justify-center pa-8">
-          <v-progress-circular indeterminate />
-        </div>
-      </div>
-    </v-card>
-
-    <!-- Dialog -->
-    <v-dialog v-model="dialog" max-width="860">
-      <v-card class="rounded-2xl">
-        <v-card-title class="text-h6 font-weight-bold">{{ editing? 'Edit Template' : 'New Template' }}</v-card-title>
-        <v-card-text>
-          <ShiftTemplateForm :value="form" :loading="saving" @save="save" @cancel="dialog=false" />
-          <v-alert v-if="error" type="error" class="mt-2">{{ error }}</v-alert>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
-  </v-container>
-</template>
-
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import dayjs from '@/plugins/dayjs'
+import { ref, onMounted } from 'vue'
+import api from '@/utils/axios'
+import Swal from 'sweetalert2'
 import ShiftTemplateForm from '@/components/hrss/shift/ShiftTemplateForm.vue'
-import { useShiftApi } from '@/composables/hrss/useShiftApi'
 
-const { listTemplates, createTemplate, updateTemplate, deleteTemplate } = useShiftApi()
+/* ───────── state ───────── */
+const loading   = ref(false)
+const rows      = ref([])
+const q         = ref('')
 
-const items = ref([])
-const loading = ref(false)
-const dialog = ref(false)
-const saving = ref(false)
-const error = ref('')
-const editing = ref(false)
-const form = ref({})
-const q = ref('')
+/* dialog/form state */
+const dialogOpen = ref(false)
+const formKey    = ref(0)     // force re-mount to reset form
+const editingRow = ref(null)  // null=create; object=edit
 
-const fmt = (v) => v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-'
+/* busy state per row (disable/tiny spinners) */
+const busyIds = ref(new Set())
+const setBusy = (id, v) => {
+  const s = new Set(busyIds.value)
+  v ? s.add(id) : s.delete(id)
+  busyIds.value = s
+}
 
-const fetchList = async () => {
+/* helpers */
+const toast = (title, icon='success') =>
+  Swal.fire({ toast:true, position:'top-end', timer:1500, showConfirmButton:false, icon, title })
+
+/* ───────── data load ───────── */
+async function load () {
   loading.value = true
   try {
-    items.value = await listTemplates({ limit: 500 })
+    const { data } = await api.get('/hrss/shift-templates', { params: { q: q.value || undefined } })
+    rows.value = Array.isArray(data) ? data : (data?.data || [])
   } finally {
     loading.value = false
   }
 }
 
-onMounted(fetchList)
-
-const filtered = computed(() => {
-  const k = q.value.trim().toLowerCase()
-  if (!k) return items.value
-  return items.value.filter(t => (t.name || '').toLowerCase().includes(k))
-})
-
-const openCreate = () => {
-  error.value = ''
-  editing.value = false
-  form.value = {
-    name: '',
-    timeIn: '', lateAfter: '', timeOut: '',
-    breaks: [],
-    ot: { mode: 'ANY_MINUTES', startAfterMin: 1, tiers: [] },
-    window: { earliestIn: '', latestIn: '', allowCrossMidnight: false },
-    active: true
-  }
-  dialog.value = true
+/* ───────── CRUD actions ───────── */
+function openCreate () {
+  editingRow.value = null
+  formKey.value++
+  dialogOpen.value = true
+}
+function openEdit (row) {
+  editingRow.value = { ...row } // pass a copy
+  formKey.value++
+  dialogOpen.value = true
+}
+function closeDialog () {
+  dialogOpen.value = false
 }
 
-const openEdit = (row) => {
-  error.value = ''
-  editing.value = true
-  form.value = JSON.parse(JSON.stringify(row))
-  dialog.value = true
+async function handleSaved () {
+  await load()
+  closeDialog()
+  toast('Saved')
 }
 
-const save = async (payload) => {
-  error.value = ''
-  saving.value = true
+async function onDelete (row) {
+  const { isConfirmed } = await Swal.fire({
+    title: `Delete template "${row.name}"?`,
+    text: 'This action cannot be undone.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#d33',
+    cancelButtonColor: '#3085d6',
+    confirmButtonText: 'Yes, delete it',
+    cancelButtonText: 'Cancel',
+    reverseButtons: true,
+    allowEnterKey: true,
+  })
+  if (!isConfirmed) return
+
+  setBusy(row._id, true)
   try {
-    if (editing.value && form.value._id) {
-      await updateTemplate(form.value._id, payload)
-    } else {
-      await createTemplate(payload)
-    }
-    dialog.value = false
-    await fetchList()
-  } catch (e) {
-    error.value = e?.response?.data?.message || e.message || 'Save failed'
+    await api.delete(`/hrss/shift-templates/${row._id}`)
+    // remove from list immediately
+    rows.value = rows.value.filter(r => r._id !== row._id)
+    toast('Deleted!')
+  } catch (err) {
+    const msg = err?.response?.data?.message || err.message || 'Delete failed'
+    Swal.fire({ icon:'error', title:'Error', text: msg })
   } finally {
-    saving.value = false
+    setBusy(row._id, false)
   }
 }
 
-const remove = async (row) => {
-  if (!confirm(`Delete template "${row.name}"?`)) return
+async function toggleActive (row) {
+  const prev = !!row.active
+  row.active = !prev // optimistic
+  setBusy(row._id, true)
   try {
-    await deleteTemplate(row._id)
-    await fetchList()
-  } catch (e) {
-    alert(e?.response?.data?.message || e.message || 'Delete failed')
+    await api.patch(`/hrss/shift-templates/${row._id}`, { active: row.active })
+    toast(row.active ? 'Activated' : 'Deactivated')
+  } catch (err) {
+    row.active = prev // revert
+    const msg = err?.response?.data?.message || err.message || 'Update failed'
+    Swal.fire({ icon:'error', title:'Error', text: msg })
+  } finally {
+    setBusy(row._id, false)
   }
 }
+
+onMounted(load)
 </script>
+
+<template>
+  <v-card class="elevation-1 rounded-2xl">
+    <v-toolbar color="primary" density="comfortable" class="rounded-t-2xl">
+      <v-toolbar-title>Shift Templates</v-toolbar-title>
+      <v-spacer />
+      <v-text-field
+        v-model="q"
+        placeholder="Search by name"
+        hide-details
+        density="compact"
+        variant="solo"
+        prepend-inner-icon="mdi-magnify"
+        class="ma-2"
+        style="max-width: 340px"
+        @keyup.enter="load"
+      />
+      <v-btn color="secondary" class="mr-2" @click="openCreate">
+        <v-icon start>mdi-plus</v-icon>New Template
+      </v-btn>
+      <v-btn variant="tonal" @click="load">
+        <v-icon start>mdi-refresh</v-icon>Refresh
+      </v-btn>
+    </v-toolbar>
+
+    <v-table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Name</th>
+          <th>Time</th>
+          <th>Late</th>
+          <th>Breaks</th>
+          <th>OT</th>
+          <th>Active</th>
+          <th>Updated</th>
+          <th style="width:128px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="(r,i) in rows" :key="r._id">
+          <td>{{ i + 1 }}</td>
+          <td>{{ r.name }}</td>
+          <td>{{ r.timeIn }} → {{ r.timeOut }}</td>
+          <td>{{ r.lateAfter }}</td>
+          <td>
+            <template v-if="(r.breaks||[]).length">
+              {{ r.breaks.map(b => `${b.start}-${b.end}${b.paid?'(paid)':''}`).join(', ') }}
+            </template>
+            <span v-else>—</span>
+          </td>
+          <td>
+            <span v-if="r.ot?.mode==='DISABLED'">—</span>
+            <span v-else-if="r.ot?.mode==='ANY_MINUTES'">Any (start {{ r.ot?.startAfterMin||0 }}m)</span>
+            <span v-else>Tiers: {{ (r.ot?.tiers||[]).join(',') }} (start {{ r.ot?.startAfterMin||0 }}m)</span>
+          </td>
+
+          <!-- one-click Active/Inactive -->
+          <td>
+            <v-btn
+              size="x-small"
+              :loading="busyIds.has(r._id)"
+              :color="r.active ? 'green' : 'grey'"
+              variant="tonal"
+              class="rounded-pill"
+              @click="toggleActive(r)"
+            >
+              {{ r.active ? 'Active' : 'Inactive' }}
+            </v-btn>
+          </td>
+
+          <td>{{ r.updatedAt ? new Date(r.updatedAt).toLocaleString() : '—' }}</td>
+
+          <td class="text-right">
+            <v-btn
+              icon size="small" color="primary" variant="text"
+              :disabled="busyIds.has(r._id)"
+              @click="openEdit(r)"
+            >
+              <v-icon>mdi-pencil</v-icon>
+            </v-btn>
+            <v-btn
+              icon size="small" color="error" variant="text"
+              :loading="busyIds.has(r._id)"
+              @click="onDelete(r)"
+            >
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
+          </td>
+        </tr>
+
+        <tr v-if="!rows.length">
+          <td colspan="9" class="text-medium-emphasis text-center py-8">
+            <v-progress-circular v-if="loading" indeterminate />
+            <span v-else>No data</span>
+          </td>
+        </tr>
+      </tbody>
+    </v-table>
+  </v-card>
+
+  <!-- Dialog: Create/Edit -->
+  <v-dialog v-model="dialogOpen" max-width="900" scrollable>
+    <v-card class="rounded-2xl">
+      <v-toolbar color="primary" density="comfortable" class="rounded-t-2xl">
+        <v-toolbar-title>{{ editingRow ? 'Edit Shift Template' : 'New Shift Template' }}</v-toolbar-title>
+        <v-spacer />
+        <v-btn icon variant="text" @click="dialogOpen = false">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </v-toolbar>
+
+      <v-card-text class="pa-4">
+        <!-- key forces fresh mount to reset internal state -->
+        <ShiftTemplateForm
+          :key="formKey"
+          :value="editingRow || {}"
+          @saved="handleSaved"
+          @cancel="dialogOpen = false"
+        />
+      </v-card-text>
+    </v-card>
+  </v-dialog>
+</template>

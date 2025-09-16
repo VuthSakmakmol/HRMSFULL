@@ -1,32 +1,26 @@
 // controllers/hrss/shiftTemplateController.js
-const ShiftTemplate     = require('../../models/hrss/shiftTemplate');
-
+const ShiftTemplate    = require('../../models/hrss/shiftTemplate');
+const ShiftAssignment  = require('../../models/hrss/shiftAssignment'); // <-- required for "in use" check
 
 /* ───────────────────────── Helpers ───────────────────────── */
 
 const HHMM = /^\d{2}:\d{2}$/;
 const asUndef = v => (v === '' || v === null ? undefined : v);
-
 const isHHmm = v => HHMM.test(String(v || ''));
+const err400 = (res, message, extra = {}) => res.status(400).json({ message, ...extra });
 
-const err400 = (res, message, extra = {}) =>
-  res.status(400).json({ message, ...extra });
-
-/** compare "HH:mm" on anchor date */
+/** compare "HH:mm" on an anchor date */
 const toDate = (hhmm, addDay = 0) => {
   const [h, m] = String(hhmm).split(':').map(Number);
-  const d = new Date(Date.UTC(2000, 0, 1 + addDay, h, m, 0, 0));
-  return d;
+  return new Date(Date.UTC(2000, 0, 1 + addDay, h, m, 0, 0));
 };
-
-/** returns negative/zero/positive like Date - Date */
 const cmpHHmm = (a, b) => toDate(a) - toDate(b);
 
 /** prepare+validate request body → normalized payload (or throw Error) */
 function buildPayload(raw) {
   const body = raw || {};
   const payload = {
-    company: undefined, // filled by caller
+    company: undefined, // set by caller
     name: asUndef(body.name),
     code: asUndef(body.code),
     active: body.active ?? true,
@@ -38,7 +32,6 @@ function buildPayload(raw) {
     lateAfter: asUndef(body.lateAfter),
     timeOut: asUndef(body.timeOut),
 
-    // NEW: accept crossMidnight at top-level for convenience
     crossMidnight: !!body.crossMidnight,
 
     // window is optional object: { earliestIn?, latestIn? }
@@ -68,7 +61,7 @@ function buildPayload(raw) {
     excludeHolidays: !!body.excludeHolidays
   };
 
-  /* ─────────── field-level checks with precise messages ─────────── */
+  /* ───── field-level checks with precise messages ───── */
   if (!payload.name || !String(payload.name).trim())
     throw new Error('name is required');
 
@@ -124,7 +117,6 @@ exports.createShiftTemplate = async (req, res) => {
     const saved = await doc.save();
     return res.status(201).json(saved);
   } catch (err) {
-    // surface first Mongoose validation error if present
     const first = err?.errors ? Object.values(err.errors)[0]?.message : null;
     return err400(res, 'Create failed', { error: first || err.message });
   }
@@ -162,8 +154,7 @@ exports.updateShiftTemplate = async (req, res) => {
     if (!existing) return res.status(404).json({ message: 'Not found' });
 
     const payload = buildPayload(req.body);
-    // preserve company & _id
-    delete payload.company;
+    delete payload.company; // never overwrite
 
     // assign fields (whitelist)
     [
@@ -186,7 +177,9 @@ exports.deleteShiftTemplate = async (req, res) => {
     const company = req.company;
     const id = req.params.id;
 
+    // If any assignment references this template → soft-delete (active=false)
     const inUse = await ShiftAssignment.exists({ company, shiftTemplateId: id });
+
     if (inUse) {
       await ShiftTemplate.updateOne({ _id: id, company }, { $set: { active: false } });
       return res.json({ message: '🔕 Template in use → set active=false (soft-deleted)' });

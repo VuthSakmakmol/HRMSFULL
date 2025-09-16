@@ -59,7 +59,7 @@ app.use('/api/hrss/manpower', require('./routes/hrss/manpower'));
 app.use('/api/evaluations', require('./routes/hrss/evaluationRoutes'));
 app.use('/api/hrss/dashboard', require('./routes/hrss/dashboardRoutes'));
 app.use('/api/hrss/shift-templates', require('./routes/hrss/shiftTemplateRoutes'));
-
+app.use('/api/hrss/shift-assignments', require('./routes/hrss/shiftAssignmentRoutes'));
 
 // Upload routes (if any)
 app.use('/api/upload', require('./routes/hrss/upload'));
