@@ -17,6 +17,7 @@ declare module 'vue' {
     AttendanceToolbar: typeof import('./src/components/hrss/attendance/AttendanceToolbar.vue')['default']
     EditAttendanceDialog: typeof import('./src/components/hrss/attendance/EditAttendanceDialog.vue')['default']
     EmployeeCard: typeof import('./src/components/hrss/EmployeeCard.vue')['default']
+    ImportAttendanceDialog: typeof import('./src/components/hrss/attendance/ImportAttendanceDialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ShiftAssignmentBulk: typeof import('./src/components/hrss/shift/ShiftAssignmentBulk.vue')['default']

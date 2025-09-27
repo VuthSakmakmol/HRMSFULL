@@ -5,7 +5,7 @@
         :import-prog="importProg"
         @refresh="fetchData"
         @open-calendar="calendarDialog = true"
-        @import="onImport"
+        @import="openImportDialog"
       />
       <div class="pa-4">
         <AttendanceFilters
@@ -58,14 +58,10 @@
       />
     </v-card>
 
-    <EditAttendanceDialog
-      v-model="editDialog"
-      :loading="editLoading"
-      :value="editForm"
-      @save="submitEdit"
-    />
-
+    <EditAttendanceDialog v-model="editDialog" :loading="editLoading" :value="editForm" @save="submitEdit" />
     <WorkCalendarDialog v-model="calendarDialog" @saved="fetchData" />
+
+    <ImportAttendanceDialog v-model="importDialog" :selected-date="filters.date" @done="onImported" />
   </v-container>
 </template>
 
@@ -73,6 +69,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import dayjs from '@/plugins/dayjs'
 import { useRouter } from 'vue-router'
+import Swal from 'sweetalert2'
 
 import AttendanceToolbar from '@/components/hrss/attendance/AttendanceToolbar.vue'
 import AttendanceFilters from '@/components/hrss/attendance/AttendanceFilters.vue'
@@ -80,121 +77,70 @@ import AttendanceTable from '@/components/hrss/attendance/AttendanceTable.vue'
 import EditAttendanceDialog from '@/components/hrss/attendance/EditAttendanceDialog.vue'
 import AttendanceHeatmap from '@/components/hrss/AttendanceHeatmap.vue'
 import WorkCalendarDialog from '@/components/hrss/WorkCalendarDialog.vue'
+import ImportAttendanceDialog from '@/components/hrss/attendance/ImportAttendanceDialog.vue'
 
 import { useAttendanceApi } from '@/composables/hrss/useAttendanceApi'
 import { useImportAttendance } from '@/composables/hrss/useImportAttendance'
 
 const router = useRouter()
 
-/* state */
 const isLoading = ref(false)
 const rows = ref([])
 let selectedIds = ref([])
 
-const pagination = reactive({
-  page: 1,
-  limit: '50',
-  totalPages: 1,
-})
-
+const pagination = reactive({ page: 1, limit: '50', totalPages: 1 })
 const filters = reactive({
-  shiftTemplateId: '',
-  shiftName: '',
-  searchText: '',
-  // IMPORTANT: keep as STRING (YYYY-MM-DD)
-  date: dayjs().format('YYYY-MM-DD'),
+  shiftTemplateId: '', shiftName: '', searchText: '', date: dayjs().format('YYYY-MM-DD'),
 })
 
 const editDialog = ref(false)
 const editLoading = ref(false)
 const editForm = ref({
-  _id: '', employeeId: '', fullName: '', date: '',
-  status: '', leaveType: '', riskStatus: 'None', overtimeHours: 0, note: ''
+  _id:'', employeeId:'', fullName:'', date:'', status:'', leaveType:'', riskStatus:'None', overtimeHours:0, note:''
 })
 const calendarDialog = ref(false)
 const shiftTemplates = ref([])
+const importDialog = ref(false)
 
-/* api + import */
 const { listPaginated, updateAttendance, deleteAttendance, listShiftTemplates } = useAttendanceApi()
-const { importProg, importExcel } = useImportAttendance({
-  onAfterCommit: async () => { return }
-})
+const { importProg } = useImportAttendance({ onAfterCommit: async () => {} })
 
-/* actions */
 const fetchData = async () => {
   try {
     isLoading.value = true
-    console.log('[fetchData] filters.date =', filters.date, 'typeof =', typeof filters.date)
-
     const res = await listPaginated({
-      page: pagination.page,
-      limit: pagination.limit,
-      date: filters.date,
+      page: pagination.page, limit: pagination.limit, date: filters.date,
       shiftTemplateId: filters.shiftTemplateId || undefined,
       shiftName: filters.shiftName || undefined,
       search: filters.searchText || undefined,
     })
-    console.log('[fetchData] API response:', res)
-
     rows.value = Array.isArray(res.records) ? res.records : []
-    console.log('[fetchData] rows length =', rows.value.length)
-
     pagination.totalPages = res.totalPages || 1
-    console.log('[fetchData] totalPages =', pagination.totalPages)
-
     if (pagination.page > pagination.totalPages && pagination.totalPages > 0) {
       pagination.page = pagination.totalPages
-      console.log('[fetchData] snap to last page:', pagination.page)
       const res2 = await listPaginated({
-        page: pagination.page,
-        limit: pagination.limit,
-        date: filters.date,
+        page: pagination.page, limit: pagination.limit, date: filters.date,
         shiftTemplateId: filters.shiftTemplateId || undefined,
         shiftName: filters.shiftName || undefined,
         search: filters.searchText || undefined,
       })
-      console.log('[fetchData] refetch after snap:', res2)
       rows.value = Array.isArray(res2.records) ? res2.records : []
     }
-  } catch (e) {
-    console.error('[fetchData] failed:', e)
-  } finally {
-    isLoading.value = false
-  }
+  } finally { isLoading.value = false }
 }
 
-const onImport = async (file) => {
-  console.log('[onImport] starting with selectedDate =', filters.date)
-  const res = await importExcel(file, { selectedDate: filters.date })
-  console.log('[onImport] result from importExcel:', res)
-
-  if (res?.ok && res?.importDate) {
-    filters.date = dayjs(res.importDate).format('YYYY-MM-DD')
-    console.log('[onImport] filters.date snapped to importDate =', filters.date)
-  }
-  pagination.page = 1
-  console.log('[onImport] calling fetchData…')
-  await fetchData()
+const openImportDialog = () => { importDialog.value = true }
+const onImported = async (payload) => {
+  if (payload?.importDate) filters.date = dayjs(payload.importDate).format('YYYY-MM-DD')
+  pagination.page = 1; await fetchData()
 }
 
 const loadTemplates = async () => {
-  try {
-    shiftTemplates.value = await listShiftTemplates()
-  } catch (e) {
-    console.error('loadTemplates failed:', e)
-    shiftTemplates.value = []
-  }
+  try { shiftTemplates.value = await listShiftTemplates() } catch { shiftTemplates.value = [] }
 }
+onMounted(async () => { await Promise.all([fetchData(), loadTemplates()]) })
 
-onMounted(async () => {
-  await Promise.all([fetchData(), loadTemplates()])
-})
-
-const onFiltersChanged = () => {
-  pagination.page = 1
-  fetchData()
-}
-
+const onFiltersChanged = () => { pagination.page = 1; fetchData() }
 const onPageChange = (p) => { pagination.page = p; fetchData() }
 const onPageSizeChange = (size) => { pagination.limit = size; pagination.page = 1; fetchData() }
 
@@ -203,40 +149,32 @@ const openEdit = () => {
   const record = rows.value.find(r => r._id === selectedIds.value[0])
   openEditByRecord(record)
 }
-
 const openEditByRecord = (record) => {
   if (!record) return
   editForm.value = {
-    _id: record._id,
-    employeeId: record.employeeId,
-    fullName: record.fullName,
-    date: dayjs(record.date).format('YYYY-MM-DD'),
-    status: record.status,
-    leaveType: record.leaveType || '',
-    riskStatus: record.riskStatus || 'None',
-    overtimeHours: record.overtimeHours || 0,
-    note: record.note || ''
+    _id: record._id, employeeId: record.employeeId, fullName: record.fullName,
+    date: dayjs(record.date).format('YYYY-MM-DD'), status: record.status,
+    leaveType: record.leaveType || '', riskStatus: record.riskStatus || 'None',
+    overtimeHours: record.overtimeHours || 0, note: record.note || ''
   }
   editDialog.value = true
 }
-
 const submitEdit = async (payload) => {
-  try {
-    editLoading.value = true
-    await updateAttendance(editForm.value._id, payload)
-    editDialog.value = false
-    await fetchData()
-  } finally {
-    editLoading.value = false
-  }
+  try { editLoading.value = true; await updateAttendance(editForm.value._id, payload); editDialog.value = false; await fetchData() }
+  finally { editLoading.value = false }
 }
 
 const deleteSelected = async () => {
   if (selectedIds.value.length === 0) return
-  if (!confirm(`Delete ${selectedIds.value.length} records?`)) return
+  const { isConfirmed } = await Swal.fire({
+    title: `Delete ${selectedIds.value.length} record(s)?`, icon:'warning',
+    showCancelButton:true, confirmButtonColor:'#d33', cancelButtonColor:'#3085d6',
+    confirmButtonText:'Yes, delete', cancelButtonText:'Cancel', reverseButtons:true, allowEnterKey:true
+  })
+  if (!isConfirmed) return
   await Promise.all(selectedIds.value.map(id => deleteAttendance(id)))
-  selectedIds.value = []
-  fetchData()
+  selectedIds.value = []; await fetchData()
+  await Swal.fire({ icon:'success', title:'Deleted', timer:1200, showConfirmButton:false })
 }
 
 const startEvaluation = () => {
