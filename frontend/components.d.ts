@@ -24,7 +24,6 @@ declare module 'vue' {
     ShiftAssignmentForm: typeof import('./src/components/hrss/shift/ShiftAssignmentForm.vue')['default']
     ShiftAssignmentTable: typeof import('./src/components/hrss/shift/ShiftAssignmentTable.vue')['default']
     ShiftTemplateForm: typeof import('./src/components/hrss/shift/ShiftTemplateForm.vue')['default']
-    ShiftTemplates: typeof import('./src/components/hrss/shift/ShiftTemplates.vue')['default']
     TimeField: typeof import('./src/components/common/TimeField.vue')['default']
     WorkCalendarDialog: typeof import('./src/components/hrss/WorkCalendarDialog.vue')['default']
   }

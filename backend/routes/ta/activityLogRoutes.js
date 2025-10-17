@@ -1,15 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const {
-  getAllLogs,
-  restoreDeleted
-} = require('../../controllers/ta/activityLogController');
 const { authenticate } = require('../../middlewares/authMiddleware');
+const { getAllLogs, restoreDeleted } = require('../../controllers/ta/activityLogController');
 
-// 🔐 GM-only: get full logs
+// GM-only
 router.get('/', authenticate, getAllLogs);
-
-// 🔁 Restore a deleted document by log ID
 router.post('/restore/:logId', authenticate, restoreDeleted);
 
 module.exports = router;

@@ -1,7 +1,7 @@
 const User = require('../models/User');
-const ActivityLog = require('../models/ta/ActivityLog');
+const { logActivity } = require('../utils/logActivity');
 
-// ✅ Get all users (excluding General Manager)
+// Get all users (exclude GM)
 exports.getAll = async (req, res) => {
   try {
     const users = await User.find({ role: { $ne: 'GeneralManager' } });
@@ -11,17 +11,18 @@ exports.getAll = async (req, res) => {
   }
 };
 
-// ✅ Get user emails and names for filter dropdown
+// Names/emails for dropdown (GM/Manager)
 exports.getUserEmails = async (req, res) => {
   try {
-    const users = await User.find({ role: { $ne: 'GeneralManager' } }, 'name email').sort({ email: 1 });
+    const users = await User.find({ role: { $ne: 'GeneralManager' } }, 'name email')
+      .sort({ email: 1 });
     res.json(users);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch user emails', error: err.message });
   }
 };
 
-// ✅ Create Manager or HR Officer
+// Create Manager/HROfficer
 exports.create = async (req, res) => {
   try {
     const { name, email, password, role, company } = req.body;
@@ -29,29 +30,21 @@ exports.create = async (req, res) => {
     if (!['Manager', 'HROfficer'].includes(role)) {
       return res.status(400).json({ message: 'Invalid role' });
     }
-
-    if (!company && role !== 'GeneralManager') {
+    if (!company) {
       return res.status(400).json({ message: 'Company name is required' });
     }
 
-    const user = new User({
-      name,
-      email,
-      password,
-      role,
-      company: role === 'GeneralManager' ? undefined : company
-    });
-
+    const user = new User({ name, email, password, role, company });
     await user.save();
 
-    // 📝 Log creation
-    await ActivityLog.create({
+    await logActivity({
       actionType: 'CREATE',
       collectionName: 'User',
       documentId: user._id,
-      newData: user.toObject(),
+      previousData: null,
+      newData: user.toJSON(),
       performedBy: req.user.email,
-      company: req.user.company
+      company: user.company
     });
 
     res.status(201).json({ message: 'User created', user });
@@ -60,29 +53,30 @@ exports.create = async (req, res) => {
   }
 };
 
-// ✅ Update name or password (with activity log)
+// Update name/password
 exports.update = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const previousData = user.toObject(); // 🔁 snapshot before update
-
+    const previousData = user.toJSON();
     const { name, password } = req.body;
+
     if (name) user.name = name;
-    if (password) user.password = password;
+    if (typeof password === 'string' && password.trim().length > 0) {
+      user.password = password;
+    }
 
     await user.save();
 
-    // 📝 Log update
-    await ActivityLog.create({
+    await logActivity({
       actionType: 'UPDATE',
       collectionName: 'User',
       documentId: user._id,
       previousData,
-      newData: user.toObject(),
+      newData: user.toJSON(),
       performedBy: req.user.email,
-      company: req.user.company
+      company: user.company
     });
 
     res.json({ message: 'User updated', user });
@@ -91,24 +85,23 @@ exports.update = async (req, res) => {
   }
 };
 
-// ✅ Delete user (with activity log)
+// Delete user
 exports.remove = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const previousData = user.toObject();
+    const previousData = user.toJSON();
+    await user.deleteOne();
 
-    await user.remove();
-
-    // 📝 Log deletion
-    await ActivityLog.create({
+    await logActivity({
       actionType: 'DELETE',
       collectionName: 'User',
       documentId: user._id,
       previousData,
+      newData: null,
       performedBy: req.user.email,
-      company: req.user.company
+      company: user.company
     });
 
     res.json({ message: 'User deleted' });

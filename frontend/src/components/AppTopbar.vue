@@ -51,7 +51,6 @@
   </v-app-bar>
 </template>
 
-
 <script setup>
 import { ref, watch } from 'vue'
 import Swal from 'sweetalert2'
@@ -62,7 +61,7 @@ import { useI18n } from 'vue-i18n'
 const token = localStorage.getItem('token')
 let decoded = { role: 'Unknown', company: 'Unknown' }
 try {
-  decoded = JSON.parse(atob(token.split('.')[1]))
+  decoded = JSON.parse(atob((token || '').split('.')[1] || ''))
 } catch (e) {
   console.warn('Invalid token:', e)
 }
@@ -70,12 +69,20 @@ try {
 const role = decoded.role
 const companies = ['TH-ROI', 'TH-CYP', 'VN-A1A', 'VN-TRANS', 'CAM-TAC']
 
-// Reactive selected company from localStorage
-const storedCompany = localStorage.getItem('company') || decoded.company || 'CAM-TAC'
-const selectedCompany = ref(storedCompany)
+// ✅ Normalize initial company:
+// 1) use localStorage if present
+// 2) if token has array (GM), take first
+// 3) if token has string, use it
+// 4) default to 'CAM-TAC'
+const initialCompany =
+  localStorage.getItem('company') ||
+  (Array.isArray(decoded.company) ? (decoded.company[0] || 'CAM-TAC') : (decoded.company || 'CAM-TAC'))
+
+const selectedCompany = ref(initialCompany)
 
 // Watch changes to update localStorage and show success alert
-watch(selectedCompany, (newCompany) => {
+watch(selectedCompany, (newCompany, oldCompany) => {
+  if (newCompany === oldCompany) return
   localStorage.setItem('company', newCompany)
   Swal.fire({
     icon: 'success',
@@ -126,4 +133,3 @@ const changeLanguage = (lang) => {
   localStorage.setItem('lang', lang)
 }
 </script>
-

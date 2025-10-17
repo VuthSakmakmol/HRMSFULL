@@ -1,13 +1,13 @@
 const ActivityLog = require('../models/ta/ActivityLog');
 
 exports.logActivity = async ({
-  actionType, 
-  collectionName, 
+  actionType,
+  collectionName,
   documentId,
-  previousData = null, 
+  previousData = null,
   newData = null,
-  performedBy, 
-  company,
+  performedBy,
+  company
 }) => {
   try {
     await ActivityLog.create({

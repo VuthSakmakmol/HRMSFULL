@@ -7,14 +7,6 @@
     app
     class="pa-3"
   >
-    <!-- Header -->
-    <div class="d-flex justify-space-between align-center mb-2">
-      <span class="text-subtitle-1 font-weight-bold">{{ company }}</span>
-      <v-btn icon size="small" @click="drawerInternal = false" v-if="isMobile">
-        <v-icon>mdi-close</v-icon>
-      </v-btn>
-    </div>
-
     <!-- Navigation -->
     <v-list nav dense>
       <v-list-group>

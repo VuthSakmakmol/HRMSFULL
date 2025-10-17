@@ -1,0 +1,5 @@
+:root {
+  --v-font-family: "Kantumruy Pro", ui-sans-serif, system-ui, -apple-system,
+                   "Segoe UI", Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+html, body, #app { font-family: var(--v-font-family); }
