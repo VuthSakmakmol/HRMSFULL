@@ -1,3 +1,4 @@
+<!--src/components/hrss/attendance/AttendanceToolbar.vue-->
 <template>
   <v-toolbar color="primary" density="comfortable" class="rounded-t-2xl">
     <v-toolbar-title>Attendance</v-toolbar-title>

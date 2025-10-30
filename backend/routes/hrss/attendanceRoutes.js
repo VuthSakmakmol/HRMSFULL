@@ -1,6 +1,7 @@
-// routes/hrss/attendanceRoutes.js
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const upload = multer(); // default: stores file in memory (req.file.buffer)
 
 const { authenticate } = require('../../middlewares/authMiddleware');
 const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware');
@@ -20,13 +21,21 @@ const {
   getAttendanceSeries,
 } = require('../../controllers/hrss/attendanceController');
 
-// 📥 Import Attendance (validate/commit supported by controller)
-router.post('/import', authenticate, authorizeCompanyAccess, importAttendance);
+/* ──────────────────────────────── ROUTES ──────────────────────────────── */
+
+// 📥 Import Attendance (validate/commit, supports file upload)
+router.post(
+  '/import',
+  authenticate,
+  authorizeCompanyAccess,
+  upload.single('file'),        // <-- ✅ enables multipart/form-data support
+  importAttendance
+);
 
 // ✅ Update Leave Permission
 router.post('/update-leave', authenticate, authorizeCompanyAccess, updateLeavePermission);
 
-// 📄 Fetch All Attendances (with new filters: shiftTemplateId, shiftName, department, line, etc.)
+// 📄 Fetch All Attendances (with filters: shiftTemplateId, shiftName, department, line, etc.)
 router.get('/', authenticate, authorizeCompanyAccess, getAllAttendance);
 
 // ☀️ Day Shift (LEGACY, use /?shiftName=Day Shift instead)
@@ -41,25 +50,25 @@ router.get('/night', authenticate, authorizeCompanyAccess, (req, res, next) => {
   return getNightShiftAttendance(req, res, next);
 });
 
-// 📃 Paginated (with new filters: shiftTemplateId, shiftName)
+// 📃 Paginated (with filters: shiftTemplateId, shiftName)
 router.get('/paginated', authenticate, authorizeCompanyAccess, getPaginatedAttendance);
 
-// 🟩 GitHub-style monthly dots (Working / Missing / Holiday / Sunday)
+// 🟩 GitHub-style monthly dots
 router.get('/dots', authenticate, authorizeCompanyAccess, getAttendanceDotSummary);
 
-// 📊 Time-series analytics (daily / monthly / yearly)
+// 📊 Time-series analytics
 router.get('/series', authenticate, authorizeCompanyAccess, getAttendanceSeries);
 
-// 🆕 Get Single Attendance by ID (used by Evaluate page)
+// 🆕 Get Single Attendance by ID
 router.get('/attendances/:id', authenticate, authorizeCompanyAccess, getAttendanceById);
 
 // 🆕 Full Attendance History by Employee ID
 router.get('/history/:employeeId', authenticate, authorizeCompanyAccess, getAttendanceHistoryByEmployeeId);
 
-// ✏️ Update Attendance row
+// ✏️ Update Attendance
 router.put('/:id', authenticate, authorizeCompanyAccess, updateAttendance);
 
-// 🗑️ Delete Attendance row
+// 🗑️ Delete Attendance
 router.delete('/:id', authenticate, authorizeCompanyAccess, deleteAttendance);
 
 module.exports = router;

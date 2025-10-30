@@ -20,7 +20,7 @@ const employeeSchema = new Schema({
   profileImage: { type: String, default: '' },
 
   // 🔖 Identification
-  employeeId: { type: String, default: '' },
+  employeeId: { type: String, required: true, index: true },
   company: { type: String, default: '' },
 
   // 🧑‍💼 Personal Info
@@ -89,9 +89,9 @@ const employeeSchema = new Schema({
   workingBook: { type: String, default: '' },
 
   // 📥 Source & Skills
-  sourceOfHiring: { type: String, enum: ['Agency', 'Banner / Job Announcement Board', 'Brochure', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'LinkedIn','Telegram', 'Other',  ''], default: '' },
+  sourceOfHiring: { type: String, enum: ['Agency', 'Job Announcement Board', 'Brochure', 'MOL', 'FIF Fail', 'FIF', 'Facebook', 'HR Call', 'Job Portal', 'Banner', 'LinkedIn','Telegram', ''], default: '' },
   introducerId: { type: String, default: '' },
-  employeeType: { type: String, enum: ['Direct','Indirect','Marketing',''], default: '' },
+  employeeType: { type: String, enum: ['Direct','Indirect','Marketing',''], default: '' }, 
   singleNeedle: { type: String, default: '' },
   overlock: { type: String, default: '' },
   coverstitch: { type: String, default: '' },

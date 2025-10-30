@@ -31,15 +31,17 @@ module.exports = {
 
   sourceOfHiringOptions: [
     'Agency',
-    'Banner / Job Announcement Board',
+    'Job Announcement Board',
     'Brochure',
+    'MOL',
+    'FIF Fail',
     'FIF',
     'Facebook',
     'HR Call',
     'Job Portal',
+    'Banner',
     'LinkedIn',
     'Telegram',
-    'Other'
   ],
 
   employeeTypeOptions: ['Direct', 'Indirect', 'Marketing'],

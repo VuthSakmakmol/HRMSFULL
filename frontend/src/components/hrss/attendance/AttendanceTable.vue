@@ -1,3 +1,4 @@
+<!--src/components/hrss/attendance/AttendanceTable.vue-->
 <template>
   <div class="table-scroll-wrapper">
     <table class="scrollable-table">

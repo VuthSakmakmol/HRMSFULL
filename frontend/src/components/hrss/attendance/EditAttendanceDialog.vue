@@ -1,3 +1,4 @@
+<!--src/components/hrss/attendance/EditAttendanceDialog.vue-->
 <template>
   <v-dialog v-model="model" max-width="640">
     <v-card class="rounded-2xl">

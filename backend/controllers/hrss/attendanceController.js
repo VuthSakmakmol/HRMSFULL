@@ -1,752 +1,376 @@
 // controllers/hrss/attendanceController.js
-const Attendance     = require('../../models/hrss/attendances');
-const Employee       = require('../../models/hrss/employee');
-const WorkCalendar   = require('../../models/hrss/workCalendar');
-const ShiftTemplate  = require('../../models/hrss/shiftTemplate');
-const XLSX           = require('xlsx');
-
-const dayjs = require('dayjs');
-const utc = require('dayjs/plugin/utc');
-const timezone = require('dayjs/plugin/timezone');
+const Attendance      = require('../../models/hrss/attendances');
+const Employee        = require('../../models/hrss/employee');
+const ShiftAssignment = require('../../models/hrss/shiftAssignment');
+const WorkCalendar    = require('../../models/hrss/workCalendar');
+const ShiftTemplate   = require('../../models/hrss/shiftTemplate');
+const XLSX            = require('xlsx');
+const dayjs           = require('dayjs');
+const utc             = require('dayjs/plugin/utc');
+const timezone        = require('dayjs/plugin/timezone');
 dayjs.extend(utc);
 dayjs.extend(timezone);
+
 const TZ = 'Asia/Phnom_Penh';
 
-/* ───────────────────────── helpers ───────────────────────── */
-// Robust "time string" -> minutes since 00:00 (supports "12:00 PM", "11am", "7", "07:30")
-const toMinutes = (time) => {
-  if (time == null || time === '') return null; // keep null to detect "no scan"
-  if (typeof time === 'number' && isFinite(time)) return Math.max(0, Math.floor(time));
+/* ────────────────────── Helper Utilities ────────────────────── */
 
-  let s = String(time).trim().toLowerCase().replace(/\s+/g, ''); // "12:00 PM" -> "12:00pm"
-  const isPM = /pm$/.test(s);
-  const isAM = /am$/.test(s);
-  if (isPM || isAM) s = s.replace(/(am|pm)$/, '');
+// Convert "HH:mm" or Excel float → minutes
+function toMinutes(t) {
+  if (t == null || t === '') return null;
+  let str = String(t).trim();
+  if (!isNaN(str) && Number(str) < 1) return Math.round(Number(str) * 1440); // Excel float like 0.25
+  if (/^\d{3,4}$/.test(str)) {
+    str = str.padStart(4, '0');
+    const h = Number(str.slice(0, 2)), m = Number(str.slice(2, 4));
+    return h * 60 + m;
+  }
+  if (/^([01]?\d|2[0-3]):[0-5]\d$/.test(str)) {
+    const [h, m] = str.split(':').map(Number);
+    return h * 60 + m;
+  }
+  const ampm = str.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i);
+  if (ampm) {
+    let h = Number(ampm[1]);
+    const m = Number(ampm[2] || 0);
+    const isPM = ampm[3].toLowerCase() === 'pm';
+    if (isPM && h < 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 60 + m;
+  }
+  return null;
+}
 
-  const parts = s.split(':');
-  let h = Number(parts[0] || 0);
-  let m = Number(parts[1] || 0);
-  if (!isFinite(h)) h = 0;
-  if (!isFinite(m)) m = 0;
+// Normalize Excel numeric time → HH:mm
+function normalizeExcelTime(str) {
+  if (!str && str !== 0) return '';
+  if (typeof str === 'number') {
+    const totalMinutes = Math.round(str * 24 * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+  str = String(str).trim();
+  if (/^\d{3,4}$/.test(str)) {
+    const h = str.slice(0, -2);
+    const m = str.slice(-2);
+    return `${h.padStart(2, '0')}:${m}`;
+  }
+  if (/^\d{1,2}[.: ]\d{1,2}$/.test(str)) {
+    const [h, m] = str.split(/[.: ]/);
+    return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+  }
+  if (/^\d{1,2}:\d{2}$/.test(str)) return str;
+  return '';
+}
 
-  if (isPM && h < 12) h += 12;
-  if (isAM && h === 12) h = 0;
 
-  return h * 60 + m;
-};
-
-const startOfDayTZ = (dLike) => dayjs.tz(dLike, TZ).startOf('day');
-
-const parseTimeToDateTZ = (baseDateStr, timeStr) => {
-  if (!timeStr) return null;
-  const [h, m] = String(timeStr).split(':').map(Number);
-  return dayjs.tz(baseDateStr, TZ).hour(h || 0).minute(m || 0).second(0).millisecond(0).toDate();
-};
-
-/**
- * Accept many date formats & Excel serials and return "YYYY-MM-DD" or null.
- */
-const formatExcelDate = (value) => {
+// Excel date formatter
+function formatExcelDate(value) {
   if (value == null || value === '') return null;
-
-  // Excel serial (incl. fractional time) -> date part only
   if (typeof value === 'number' && isFinite(value)) {
     const parsed = XLSX.SSF.parse_date_code(value);
-    if (parsed && parsed.y && parsed.m && parsed.d) {
-      const y = parsed.y;
-      const m = String(parsed.m).padStart(2, '0');
-      const d = String(parsed.d).padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
-    return null;
+    if (parsed && parsed.y && parsed.m && parsed.d)
+      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
   }
-
   if (typeof value === 'string') {
-    let s = value.trim();
-    if (!s) return null;
-    s = s.replace(/[./\\\s]+/g, '-');
-
-    // YYYY-MM-DD or YYYY-M-D
-    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (m) {
-      const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
-      if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
-        return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      }
-      return null;
-    }
-
-    // DD-MM-YYYY or D-M-YYYY
-    m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-    if (m) {
-      const d = Number(m[1]), mo = Number(m[2]), y = Number(m[3]);
-      if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
-        return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      }
-      return null;
-    }
-
+    const s = value.trim().replace(/[./\\\s]+/g, '-');
+    const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, '0')}-${ymd[3].padStart(2, '0')}`;
+    const dmy = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
     const tentative = dayjs(s);
     if (tentative.isValid()) return tentative.format('YYYY-MM-DD');
   }
   return null;
+}
+
+const startOfDayTZ = (dLike) => dayjs.tz(dLike, TZ).startOf('day');
+const parseTimeToDateTZ = (baseDateStr, timeStr) => {
+  if (!timeStr) return null;
+  const [h, m] = String(timeStr).split(':').map(Number);
+  return dayjs.tz(baseDateStr, TZ).hour(h || 0).minute(m || 0).second(0).toDate();
 };
 
-const normalizeShift = (s) => {
-  if (!s) return null;
-  const v = String(s).trim().toLowerCase();
-  if (['day', 'day shift', 'dayshift', 'd', 'day_shift'].includes(v)) return 'Day Shift';
-  if (['night', 'night shift', 'nightshift', 'n', 'night_shift'].includes(v)) return 'Night Shift';
-  return null;
-};
-
-const getDayType = async (company, dateOnly) => {
+// Determine day type from WorkCalendar
+async function getDayType(company, dateOnly) {
   const d0 = startOfDayTZ(dateOnly).toDate();
   const cal = await WorkCalendar.findOne({ company, date: d0 }).lean();
   if (cal?.dayType) return cal.dayType;
-  const dow = dayjs.tz(d0, TZ).day(); // 0=Sunday
+  const dow = dayjs.tz(d0, TZ).day();
   return dow === 0 ? 'Sunday' : 'Working';
-};
+}
 
-/* ───────── Strict windows to decide if scans plausibly belong to a shift (LEGACY) ───────── */
-const scansMatchShift = (startTime, endTime, shiftType) => {
-  const sm = toMinutes(startTime);
-  const em = toMinutes(endTime);
-
-  // if no scans, we don't call it a mismatch here (caller decides Absent/Leave)
-  if (sm == null && em == null) return true;
-
-  if (shiftType === 'Day Shift') {
-    // Day-like scans: starts between 05:00–15:59; any end up to 23:59 is OK
-    if (sm != null && (sm < toMinutes('05:00') || sm >= toMinutes('16:00'))) return false;
-    if (em != null && em < toMinutes('00:00')) return false; // impossible anyway
-    return true;
-  }
-
-  if (shiftType === 'Night Shift') {
-    // Night-like scans: start 16:00–23:59 or 00:00–02:59 (some devices post-midnight)
-    if (sm != null) {
-      const nightStart = (sm >= toMinutes('16:00') && sm <= toMinutes('23:59')) || (sm >= 0 && sm < toMinutes('03:00'));
-      if (!nightStart) return false;
-    }
-    return true;
-  }
-
-  return false;
-};
-
-/* ───────── LEGACY lateness & overtime (break-aware, strict by shift) ───────── */
-const evaluateStatus = (startTime, endTime, shiftType) => {
-  // No scans at all
-  if (!startTime && !endTime) return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
-
-  // If scans obviously don't belong to this shift window -> Absent
-  if (!scansMatchShift(startTime, endTime, shiftType)) {
-    return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
-  }
-
-  let startMin = toMinutes(startTime);
-  let endMin   = toMinutes(endTime);
-  let overtimeMinutes = 0;
-  let lateMinutes = 0;
-
-  if (shiftType === 'Day Shift') {
-    const S = toMinutes('07:00');
-    const E = toMinutes('16:00');
-    const B1 = toMinutes('11:00');
-    const B2 = toMinutes('12:00');
-    const BLK = B2 - B1; // 60
-
-    if (startMin == null || endMin == null) return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
-
-    if (startMin <= S) {
-      lateMinutes = 0;
-    } else if (startMin <= B1) {
-      lateMinutes = startMin - S;               // before break
-    } else if (startMin < B2) {
-      lateMinutes = B1 - S;                     // during break -> cap at morning max
-    } else {
-      lateMinutes = (startMin - S) - BLK;       // after break -> subtract 60
-    }
-
-    const late = lateMinutes > 15;              // 15' grace
-    if (endMin > E + 1) overtimeMinutes = endMin - (E + 1);
-
-    return { status: late ? 'Late' : 'OnTime', overtimeMinutes, lateMinutes };
-  }
-
-  if (shiftType === 'Night Shift') {
-    const S   = toMinutes('18:00');
-    const E   = toMinutes('03:00');
-    const B1  = toMinutes('22:00');
-    const B2  = toMinutes('23:00');
-    const BLK = B2 - B1; // 60
-
-    if (startMin == null || endMin == null) return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
-
-    // roll post-midnight only
-    const MID_CUTOFF = toMinutes('06:00');
-    if (startMin < MID_CUTOFF) startMin += 1440;
-    if (endMin   < startMin)   endMin   += 1440;
-
-    const E_norm = (endMin >= 1440) ? (E + 1440) : E;
-
-    if (startMin <= S) {
-      lateMinutes = 0;
-    } else if (startMin <= B1) {
-      lateMinutes = startMin - S;
-    } else if (startMin < B2) {
-      lateMinutes = B1 - S;
-    } else {
-      lateMinutes = (startMin - S) - BLK;
-    }
-
-    const late = lateMinutes > 15;
-
-    if (endMin > E_norm + 1) overtimeMinutes = endMin - (E_norm + 1);
-
-    return { status: late ? 'Late' : 'OnTime', overtimeMinutes, lateMinutes };
-  }
-
-  return { status: 'Absent', overtimeMinutes: 0, lateMinutes: 0 };
-};
-
-/* ───────────────────── Template-based evaluator (NEW) ───────────────────── */
-const isHHMM = (s) => typeof s === 'string' && /^([01]\d|2[0-3]):([0-5]\d)$/.test(s);
 const hhmmToMin = (s) => {
-  if (!isHHMM(s)) return null;
+  if (!s || typeof s !== 'string' || !/^\d{2}:\d{2}$/.test(s)) return null;
   const [h, m] = s.split(':').map(Number);
   return h * 60 + m;
 };
 
-function subtractUnpaidBreaks(totalMinutes, inMin, outMin, breaks = [], allowCrossMidnight = false) {
-  if (inMin == null || outMin == null || outMin < inMin) return totalMinutes;
-  let worked = totalMinutes;
-  for (const b of breaks) {
-    const bs = hhmmToMin(b.start);
-    const be = hhmmToMin(b.end);
-    if (bs == null || be == null || be <= bs) continue;
-
-    // map break to the same "day frame" as in/out; if cross-midnight and bs<inMin, shift by +1440
-    let bStart = bs;
-    let bEnd   = be;
-    if (allowCrossMidnight && bStart < inMin) {
-      bStart += 1440; bEnd += 1440;
+// Convert Excel → JSON while preserving leading zeros
+function readExcelAsStrings(buffer) {
+  const wb = XLSX.read(buffer, { type: 'buffer', cellText: false, cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[addr];
+      if (cell && typeof cell.v !== 'string') cell.v = String(cell.v).padStart(4, '0');
     }
-    const overlap = Math.max(0, Math.min(outMin, bEnd) - Math.max(inMin, bStart));
-    if (!b.paid && overlap > 0) worked -= overlap;
   }
-  return worked;
-}
-function applyRounding(minutes, roundingMin = 0) {
-  if (!roundingMin || roundingMin <= 0) return minutes;
-  return Math.floor(minutes / roundingMin) * roundingMin;
+  return XLSX.utils.sheet_to_json(ws, { defval: '' });
 }
 
+/* ────────────────────── Evaluation with Template ────────────────────── */
 function evaluateWithTemplate(template, startTime, endTime) {
   const flags = [];
-  if (!template) return { status: 'Absent', lateMinutes: 0, overtimeMinutes: 0, flags, snapshot: null };
+  if (!template) return { status: 'Absent', lateMinutes: 0, overtimeMinutes: 0, flags };
 
-  const allowX = !!template.window?.allowCrossMidnight;
+  const allowX = !!template.crossMidnight || !!template.window?.allowCrossMidnight;
 
-  // expected windows
-  const tIn  = hhmmToMin(template.timeIn);
+  const tIn = hhmmToMin(template.timeIn);
   const tOut = hhmmToMin(template.timeOut);
-  const lateAfter = hhmmToMin(template.lateAfter);
-  if (tIn == null || tOut == null || lateAfter == null) {
-    return { status: 'Absent', lateMinutes: 0, overtimeMinutes: 0, flags, snapshot: null };
-  }
+  const tLate = hhmmToMin(template.lateAfter);
+  const earliestIn = hhmmToMin(template.window?.earliestIn);
+  const latestIn = hhmmToMin(template.window?.latestIn);
 
-  // scans -> minutes in the same frame as expected times
-  let inMin  = toMinutes(startTime);
+  if (tIn == null || tOut == null) return { status: 'Absent', lateMinutes: 0, overtimeMinutes: 0, flags };
+
+  let inMin = toMinutes(startTime);
   let outMin = toMinutes(endTime);
+  if (inMin == null && outMin == null) return { status: 'Absent', lateMinutes: 0, overtimeMinutes: 0, flags };
 
-  if (inMin == null && outMin == null) {
-    return { status: 'Absent', lateMinutes: 0, overtimeMinutes: 0, flags, snapshot: template };
-  }
-
-  // allow post-midnight roll only when flagged
-  const MID_CUTOFF = toMinutes('06:00');
   if (allowX) {
-    if (inMin != null && inMin < MID_CUTOFF) inMin += 1440;
+    const MID = 360; // 06:00 AM
+    if (inMin != null && inMin < MID) inMin += 1440;
     if (outMin != null && outMin < (inMin ?? tIn)) outMin += 1440;
   }
 
-  // optional scan-window guard
-  if (template.window) {
-    const ei = template.window.earliestIn  ? hhmmToMin(template.window.earliestIn)  : null;
-    const li = template.window.latestIn    ? hhmmToMin(template.window.latestIn)    : null;
-    const eo = template.window.earliestOut ? hhmmToMin(template.window.earliestOut) : null;
-    const lo = template.window.latestOut   ? hhmmToMin(template.window.latestOut)   : null;
+  if (earliestIn && inMin && inMin < earliestIn) flags.push('SCAN_BEFORE_EARLIEST_IN');
+  if (latestIn && inMin && inMin > latestIn) flags.push('SCAN_AFTER_LATEST_IN');
 
-    const _in  = inMin  == null ? null : (inMin % 1440);
-    const _out = outMin == null ? null : (outMin % 1440);
+  const lateMinutes = inMin && tLate && inMin > tLate ? inMin - tLate : 0;
+  const expOut = allowX && tOut < tIn ? tOut + 1440 : tOut;
+  const overtimeMinutes = outMin && outMin > expOut ? outMin - expOut : 0;
 
-    if (ei != null && _in != null && _in < ei) flags.push('SCAN_BEFORE_EARLIEST_IN');
-    if (li != null && _in != null && _in > li) flags.push('SCAN_AFTER_LATEST_IN');
-    if (eo != null && _out != null && _out < eo) flags.push('SCAN_BEFORE_EARLIEST_OUT');
-    if (lo != null && _out != null && _out > lo) flags.push('SCAN_AFTER_LATEST_OUT');
-    if (allowX) flags.push('CROSS_MIDNIGHT_APPLIED');
-  }
+  let status;
+  if (inMin == null || outMin == null) status = 'Absent';
+  else if (lateMinutes > 15) status = 'Late';
+  else status = 'OnTime';
 
-  // LATE: starts after 'lateAfter'
-  let lateMinutes = 0;
-  if (inMin != null && inMin > lateAfter) lateMinutes = inMin - lateAfter;
-
-  // WORKED
-  let worked = 0;
-  if (inMin != null && outMin != null && outMin > inMin) {
-    worked = outMin - inMin;
-    worked = subtractUnpaidBreaks(worked, inMin, outMin, template.breaks || [], allowX);
-  }
-
-  // OVERTIME
-  let overtimeMinutes = 0;
-  if (outMin != null) {
-    const expOut = allowX && tOut < tIn ? tOut + 1440 : tOut;
-    const beyond = outMin - expOut;
-    if (beyond > 0) {
-      const ot = template.ot || { mode: 'DISABLED' };
-      if (ot.mode === 'ANY_MINUTES') {
-        const afterGrace = Math.max(0, beyond - (ot.startAfterMin || 0));
-        overtimeMinutes = applyRounding(afterGrace, ot.roundingMin || 0);
-      } else if (ot.mode === 'TIERS') {
-        const tiers = Array.isArray(ot.tiers) ? ot.tiers : [];
-        const afterGrace = Math.max(0, beyond - (ot.startAfterMin || 0));
-        const eligible = tiers.filter(x => x <= afterGrace).sort((a,b)=>a-b);
-        overtimeMinutes = eligible.length ? eligible[eligible.length - 1] : 0;
-      }
-    }
-  }
-
-  const status = (inMin == null || outMin == null)
-    ? 'Absent'
-    : (lateMinutes > 0 ? 'Late' : 'OnTime');
-
-  return {
-    status,
-    lateMinutes,
-    overtimeMinutes,
-    flags,
-    snapshot: {
-      version: template.version || 1,
-      name: template.name || '',
-      timeIn: template.timeIn,
-      lateAfter: template.lateAfter,
-      timeOut: template.timeOut,
-      breaks: template.breaks || [],
-      window: template.window || undefined,
-      ot: template.ot || undefined
-    }
-  };
+  return { status, lateMinutes, overtimeMinutes, flags };
 }
 
-/* ────────── resolve template from employee.shiftTemplateId (no ShiftAssignment) ────────── */
-async function getEmployeeTemplate(company, employeeId) {
-  const emp = await Employee.findOne({ company, employeeId })
-    .select('shiftTemplateId shift shiftName')
-    .lean();
-  if (!emp?.shiftTemplateId) return null;
-  const tpl = await ShiftTemplate.findOne({ _id: emp.shiftTemplateId, company, active: true }).lean();
-  return tpl || null;
+/* ────────────────────── Get Employee Template ────────────────────── */
+async function getEmployeeTemplate(company, employeeId, date) {
+  if (!employeeId) return null;
+  const assign = await ShiftAssignment.findOne({
+    company,
+    employeeId, // ✅ use employeeId string, not _id
+    effectiveFrom: { $lte: date },
+    $or: [{ effectiveTo: null }, { effectiveTo: { $gte: date } }],
+  }).populate('shiftTemplateId').lean();
+  return assign?.shiftTemplateId || null;
 }
 
-/* ───────────────────── Import attendance (validate/commit) ─────────────────────
-Body:
-{
-  mode?: 'validate' | 'commit'      // default 'commit'
-  allowNonWorking?: boolean         // default false
-  rows: [{ employeeId?, fullName?, date, startTime, endTime, leaveType? }]
-}
-*/
+/* ───────────────────── Import Attendance (Per-Employee Shift Detection + Evaluation) ───────────────────── */
 exports.importAttendance = async (req, res) => {
   try {
-    const {
-      mode = 'commit',
-      allowNonWorking = false,
-      rows = []
-    } = req.body;
-
+    const { mode = 'commit', allowUnknown = true, allowNonWorking = false } = req.body;
     const company = req.company;
-    if (!company || !Array.isArray(rows) || rows.length === 0) {
-      return res.status(400).json({ message: 'Missing company or empty rows' });
-    }
+    if (!company) return res.status(400).json({ message: 'Missing company context' });
+    if (!req.file?.buffer) return res.status(400).json({ message: 'No Excel file provided' });
 
-    // Detect date of import
-    const firstValidDateStr = rows.map(r => formatExcelDate(r.date)).find(Boolean);
-    if (!firstValidDateStr) {
-      const sample = rows.slice(0, 3).map((r,i) => `[${i}] date=${JSON.stringify(r.date)}`).join(', ');
-      return res.status(400).json({
-        message: 'Cannot detect date from file.',
-        hint: `Sample values: ${sample}`
-      });
-    }
-    const dateOnly = startOfDayTZ(firstValidDateStr).toDate();
-    const dayType  = await getDayType(company, dateOnly);
-    const isNonWorking = (dayType === 'Sunday' || dayType === 'Holiday');
+    const rows = readExcelAsStrings(req.file.buffer);
+    if (!rows.length) return res.status(400).json({ message: 'Empty Excel file' });
 
-    /* ───────── Employee caches (NO defaultShift guessing) ───────── */
-    const idsRaw   = [...new Set(rows.map(r => (r.employeeId || '').trim()).filter(Boolean))];
-    const idsQuery = [...new Set([...idsRaw, ...idsRaw.map(s => s.toUpperCase())])];
+    // 🗓 Determine date from file
+    const firstDateStr = rows.map(r => formatExcelDate(r.date)).find(Boolean);
+    if (!firstDateStr) return res.status(400).json({ message: 'Invalid date in Excel' });
+    const dateOnly = startOfDayTZ(firstDateStr).toDate();
 
-    const empsById = {};
-    if (idsQuery.length) {
-      const empDocs = await Employee.find({ company, employeeId: { $in: idsQuery } })
-        .select('employeeId englishFirstName englishLastName department position line shift shiftName')
-        .lean();
+    // 🗓 Check if day is Sunday/Holiday
+    const dayType = await getDayType(company, dateOnly);
+    const isNonWorking = ['Sunday', 'Holiday'].includes(dayType);
 
-      for (const e of empDocs) {
-        const key = e.employeeId.trim().toUpperCase();
-        const empShift = normalizeShift(e.shift) || normalizeShift(e.shiftName) || null;
-        empsById[key] = { ...e, __empShift: empShift };
+    // 🧩 Load all employee docs by employeeId
+    const empIds = [...new Set(rows.map(r => String(r.employeeId || '').trim()).filter(Boolean))];
+    const empDocs = await Employee.find({ company, employeeId: { $in: empIds } })
+      .select('employeeId englishFirstName englishLastName department position line shiftTemplateId')
+      .lean();
+
+    /* ───────── STEP 1: Map employees ───────── */
+    const empMap = {};
+    for (const e of empDocs) empMap[e.employeeId.trim().toUpperCase()] = e;
+
+    /* ───────── STEP 2: Load their current assigned shiftTemplateId (direct on employee) ───────── */
+    const tmplCache = {};
+    const empShiftIds = empDocs
+      .map(e => e.shiftTemplateId)
+      .filter(Boolean)
+      .map(id => String(id));
+
+    if (empShiftIds.length) {
+      const tmplDocs = await ShiftTemplate.find({ _id: { $in: empShiftIds } }).lean();
+      for (const emp of empDocs) {
+        const tmpl = tmplDocs.find(t => String(t._id) === String(emp.shiftTemplateId));
+        if (tmpl) {
+          tmplCache[emp.employeeId.trim().toUpperCase()] = tmpl;
+        }
       }
     }
 
-    const needNameLookup = rows.some(r => !r.employeeId && r.fullName);
-    const empsByName = {};
-    if (needNameLookup) {
-      const allDocs = await Employee.find({ company })
-        .select('employeeId englishFirstName englishLastName department position line shift shiftName')
+    /* ───────── STEP 3: For employees missing direct shift, check ShiftAssignment ───────── */
+    const missingEmpIds = empDocs
+      .filter(e => !tmplCache[e.employeeId.trim().toUpperCase()])
+      .map(e => e._id);
+
+    if (missingEmpIds.length) {
+      const assigns = await ShiftAssignment.find({
+        company,
+        employeeId: { $in: missingEmpIds },
+        effectiveFrom: { $lte: dateOnly },
+        $or: [{ effectiveTo: null }, { effectiveTo: { $gte: dateOnly } }],
+      })
+        .populate('shiftTemplateId')
         .lean();
 
-      for (const e of allDocs) {
-        const key = `${(e.englishFirstName||'').trim()} ${(e.englishLastName||'').trim()}`.trim().toLowerCase();
-        const empShift = normalizeShift(e.shift) || normalizeShift(e.shiftName) || null;
-        if (key) empsByName[key] = { ...e, __empShift: empShift };
+      for (const a of assigns) {
+        const empDoc = empDocs.find(e => String(e._id) === String(a.employeeId));
+        if (empDoc && a.shiftTemplateId) {
+          tmplCache[empDoc.employeeId.trim().toUpperCase()] = a.shiftTemplateId;
+        }
       }
     }
 
-    /* ───────── Build prepared rows & collect errors ───────── */
-    const prepared = [];
-    const missingEmployee = [];
+    /* ───────── STEP 4: Fallback default shifts ───────── */
+    const defaultDayShift = await ShiftTemplate.findOne({ company, name: /day/i, active: true }).lean();
+    const defaultNightShift = await ShiftTemplate.findOne({ company, name: /night/i, active: true }).lean();
 
-    for (let idx = 0; idx < rows.length; idx++) {
-      const r = rows[idx];
-      const rowNo = idx + 1;
+    // 🧮 Prepare batch insert/update
+    const bulkOps = [];
+    const missingEmployees = [];
 
-      const employeeIdRaw = (r.employeeId || '').trim();
-      const idKey         = employeeIdRaw.toUpperCase();
-      const dateStr       = formatExcelDate(r.date);
+    for (const r of rows) {
+      const empIdStr = String(r.employeeId || '').trim().toUpperCase();
+      if (!empIdStr) continue;
+
+      const emp = empMap[empIdStr];
+      const dateStr = formatExcelDate(r.date);
       if (!dateStr) continue;
 
-      const startTime = (r.startTime || '').trim();
-      const endTime   = (r.endTime   || '').trim();
-      const leaveType = (r.leaveType || '').trim() || null;
+      const startTime = normalizeExcelTime(r.startTime);
+      const endTime = normalizeExcelTime(r.endTime);
+      const startMin = toMinutes(startTime);
 
-      // Lookup by ID first (uppercased), else by full name
-      let empDoc = employeeIdRaw ? empsById[idKey] : null;
-      if (!empDoc && r.fullName) {
-        const key = String(r.fullName).trim().toLowerCase();
-        empDoc = empsByName[key] || null;
-        if (empDoc?.employeeId) {
-          const injectKey = empDoc.employeeId.trim().toUpperCase();
-          if (!empsById[injectKey]) empsById[injectKey] = empDoc;
+      // ───────── Find Template ─────────
+      let tmpl = tmplCache[empIdStr] || null;
+      let shiftSource = 'Employee'; // default origin label
+
+      if (!tmpl) {
+        // auto-detect if no shiftTemplate assigned
+        if (startMin != null && startMin >= 1080 && defaultNightShift) {
+          tmpl = defaultNightShift;
+          shiftSource = 'AutoDetect-Night';
+        } else if (defaultDayShift) {
+          tmpl = defaultDayShift;
+          shiftSource = 'AutoDetect-Day';
+        } else {
+          shiftSource = 'Fallback';
         }
       }
 
-      const resolvedId = employeeIdRaw || (empDoc?.employeeId || '');
-      const fullName   = empDoc
-        ? `${empDoc.englishFirstName || ''} ${empDoc.englishLastName || ''}`.trim()
-        : (r.fullName || 'Unknown');
+      // 🧮 Evaluate based on template
+      const ev = tmpl
+        ? evaluateWithTemplate(tmpl, startTime, endTime)
+        : { status: 'Absent', lateMinutes: 0, overtimeMinutes: 0 };
 
-      if (!empDoc) {
-        missingEmployee.push({
-          row: rowNo,
-          employeeId: resolvedId || '-',
-          fullName,
-          reason: 'Employee not found'
-        });
+      // 🧾 Log per employee
+      const logLabel = tmpl?.name || 'None';
+      console.log(
+        `🕓 [ShiftMatch] ${empIdStr} → ${logLabel} (${shiftSource}) | Status=${ev.status}`
+      );
+
+      if (!emp && !allowUnknown) {
+        missingEmployees.push(empIdStr);
+        continue;
       }
 
-      prepared.push({
-        employeeId: resolvedId,
-        dateStr, startTime, endTime, leaveType,
-        expectedShift: empDoc ? (empDoc.__empShift || null) : null, // legacy only
-        fullName,
-        department: empDoc?.department || '',
-        position:   empDoc?.position   || '',
-        line:       empDoc?.line       || ''
+      const fullName = emp
+        ? `${emp.englishFirstName || ''} ${emp.englishLastName || ''}`.trim()
+        : r.fullName || 'Unknown';
+
+      // 🧩 Upsert attendance record
+      bulkOps.push({
+        updateOne: {
+          filter: {
+            employeeId: empIdStr,
+            date: startOfDayTZ(dateStr).toDate(),
+            company,
+          },
+          update: {
+            $set: {
+              employeeId: empIdStr,
+              company,
+              date: startOfDayTZ(dateStr).toDate(),
+              fullName,
+              department: emp?.department || '',
+              position: emp?.position || '',
+              line: emp?.line || '',
+              shiftTemplateId: tmpl?._id || null,
+              shiftName: tmpl?.name || 'Unknown Shift',
+              shiftType: tmpl?.name || 'Unknown',
+              status: ev.status,
+              lateMinutes: ev.lateMinutes,
+              overtimeHours: (ev.overtimeMinutes || 0) / 60,
+              timeIn: parseTimeToDateTZ(dateStr, startTime),
+              timeOut: parseTimeToDateTZ(dateStr, endTime),
+            },
+          },
+          upsert: true,
+        },
       });
     }
 
-    // VALIDATE mode: block on missing employee; ensure employee has a shiftTemplateId
+    // 🧪 Validation Mode
     if (mode === 'validate') {
-      const noTemplate = [];
-      for (const p of prepared) {
-        if (!p.employeeId) continue;
-        const tmpl = await getEmployeeTemplate(company, p.employeeId);
-        if (!tmpl) {
-          noTemplate.push({ employeeId: p.employeeId, date: p.dateStr, reason: 'No shift template assigned on employee' });
-        }
-      }
-
-      if (missingEmployee.length || noTemplate.length) {
-        const preview = [
-          ...missingEmployee.map(m => `Row ${m.row} (${m.employeeId} - ${m.fullName}): ${m.reason}`),
-          ...noTemplate.slice(0, 5).map(m => `(${m.employeeId} @ ${m.date}): ${m.reason}`)
-        ].join('; ');
-        const more = noTemplate.length > 5 ? ` …and ${noTemplate.length - 5} more without template` : '';
-        return res.status(422).json({
-          ok: false,
-          reason: missingEmployee.length ? 'MISSING_EMPLOYEE' : 'MISSING_SHIFT_TEMPLATE',
-          message: `Cannot import: ${preview}${more}`,
-          details: { missingEmployee, noTemplate },
-          nonWorkingDay: isNonWorking ? dayType : null
-        });
-      }
-
       return res.json({
         ok: true,
-        nonWorkingDay: isNonWorking ? dayType : null,
+        message: '✅ Validation passed',
         totalRows: rows.length,
-        preparedCount: prepared.length
+        validRows: bulkOps.length,
+        unknownEmployees: missingEmployees,
+        nonWorkingDay: isNonWorking ? dayType : null,
       });
     }
 
-    /* ───────── COMMIT gates ───────── */
+    // 🛑 Prevent import on holiday if not allowed
     if (isNonWorking && !allowNonWorking) {
       return res.status(409).json({
         ok: false,
-        reason: 'NON_WORKING_DAY',
-        dayType,
-        message: `This date (${firstValidDateStr}) is ${dayType}. Change calendar or allow override.`
+        message: `This date (${dayType}) is marked as non-working. Enable override to import.`,
       });
     }
 
-    if (missingEmployee.length) {
-      const preview = missingEmployee.slice(0, 8)
-        .map(m => `Row ${m.row} (${m.employeeId} - ${m.fullName}): ${m.reason}`)
-        .join('; ');
-      const more = missingEmployee.length > 8
-        ? ` …and ${missingEmployee.length - 8} more`
-        : '';
-      return res.status(409).json({
-        ok: false,
-        reason: 'MISSING_EMPLOYEE',
-        message: `Cannot import: ${preview}${more}`,
-        details: { missingEmployee }
-      });
-    }
+    // 💾 Bulk write
+    if (bulkOps.length) await Attendance.bulkWrite(bulkOps, { ordered: false });
 
-    /* ───────── COMMIT ───────── */
-    const summary = [];
-
-    // helper: compute consecutive ABSENT streak ending at a given date (includes that date)
-    async function consecutiveAbsentDays(employeeId, company, endDate /* Date */, lookback = 14) {
-      let streak = 0;
-      const end = new Date(endDate);
-      for (let i = 0; i < lookback; i++) {
-        const d0 = new Date(end);
-        d0.setDate(end.getDate() - i);
-        const dayStart = new Date(d0.setHours(0,0,0,0));
-        const dayEnd   = new Date(d0.setHours(23,59,59,999));
-
-        const rec = await Attendance.findOne({
-          employeeId, company,
-          date: { $gte: dayStart, $lte: dayEnd }
-        }).lean();
-
-        if (!rec) break;
-        if (rec.status === 'Leave') break;    // Permission does not count
-        if (rec.status !== 'Absent') break;   // any presence breaks the streak
-        streak++;
-      }
-      return streak;
-    }
-
-    for (const p of prepared) {
-      if (!p.employeeId) continue;
-
-      const date    = startOfDayTZ(p.dateStr).toDate();
-      const timeIn  = parseTimeToDateTZ(p.dateStr, p.startTime);
-      const timeOut = parseTimeToDateTZ(p.dateStr, p.endTime);
-
-      // LEGACY cache: employee shift (used only for fallback)
-      const empFromCache = empsById[(p.employeeId || '').trim().toUpperCase()];
-      const finalShift   = empFromCache?.__empShift || null; // normalized or null
-
-      // NEW: resolve template from Employee.shiftTemplateId
-      const tmpl = await getEmployeeTemplate(company, p.employeeId);
-
-      // Evaluate
-      let computedStatus, overtimeMinutes, lateMinutes, flags = [], shiftTemplateId = null, shiftName = '', shiftSnapshot = undefined;
-
-      if (!p.startTime && !p.endTime && p.leaveType) {
-        // Leave override
-        computedStatus = 'Leave';
-        overtimeMinutes = 0;
-        lateMinutes = 0;
-      } else if (tmpl) {
-        const ev = evaluateWithTemplate(tmpl, p.startTime, p.endTime);
-        computedStatus  = ev.status;
-        overtimeMinutes = ev.overtimeMinutes;
-        lateMinutes     = ev.lateMinutes;
-        flags           = ev.flags || [];
-        shiftTemplateId = tmpl._id;
-        shiftName       = tmpl.name || '';
-        shiftSnapshot   = ev.snapshot;
-      } else {
-        // Fallback to legacy evaluator if no template yet
-        const ev = evaluateStatus(p.startTime, p.endTime, finalShift || 'Day Shift');
-        computedStatus  = ev.status;
-        overtimeMinutes = ev.overtimeMinutes;
-        lateMinutes     = ev.lateMinutes;
-      }
-
-      const overtimeHours = overtimeMinutes > 0 ? parseFloat((overtimeMinutes / 60).toFixed(2)) : 0;
-
-      const updated = await Attendance.findOneAndUpdate(
-        { employeeId: p.employeeId, date, company },
-        {
-          employeeId: p.employeeId,
-          date,
-
-          // legacy field preserved for compatibility (remove later)
-          shiftType: finalShift || (shiftName ? shiftName : 'Day Shift'),
-
-          // NEW template metadata
-          shiftTemplateId,
-          shiftName,
-          shiftSnapshot,
-
-          timeIn,
-          timeOut,
-          status: computedStatus,
-          leaveType: computedStatus === 'Leave' ? p.leaveType : null,
-          overtimeHours,
-          lateMinutes,                 // lateness after configured rules
-          riskStatus: 'None',
-          fullName: p.fullName || 'Unknown',
-          company,
-          department: p.department,
-          position:   p.position,
-          line:       p.line,
-          note: (p.note || ''),
-          flags
-        },
-        { upsert: true, new: true }
-      );
-
-      // Presence update
-      if (['OnTime','Late'].includes(updated.status)) {
-        await Employee.findOneAndUpdate(
-          { employeeId: p.employeeId, company },
-          { status: 'Working' }
-        );
-      }
-
-      /* ───────────── Risk logic (unchanged) ───────────── */
-      if (updated.status === 'Absent') {
-        const currentDate = new Date(updated.date);
-        let consecutiveAbsent = 1;
-        let earliestWorkingAbsent = new Date(currentDate);
-
-        for (let i = 1; i <= 14; i++) {
-          const prevLocal = dayjs.tz(currentDate, TZ).subtract(i, 'day');
-          const prevStart = prevLocal.startOf('day').toDate();
-          const prevEnd   = prevLocal.endOf('day').toDate();
-
-          const prevType = await getDayType(company, prevStart);
-          if (prevType === 'Sunday' || prevType === 'Holiday') {
-            continue; // skip non-working days entirely
-          }
-
-          const prev = await Attendance.findOne({
-            employeeId: p.employeeId, company,
-            date: { $gte: prevStart, $lt: prevEnd }
-          });
-
-          if (prev?.status === 'Absent') {
-            consecutiveAbsent += 1;
-            earliestWorkingAbsent = prevStart;
-            if (consecutiveAbsent >= 6) break;
-          } else {
-            break;
-          }
-        }
-
-        if (consecutiveAbsent >= 6) {
-          await Attendance.updateMany(
-            { employeeId: p.employeeId, company, date: { $gte: earliestWorkingAbsent, $lte: currentDate }, status: 'Absent' },
-            { riskStatus: 'Abandon' }
-          );
-          await Employee.findOneAndUpdate({ employeeId: p.employeeId, company }, { status: 'Abandon' });
-        } else if (consecutiveAbsent >= 3) {
-          await Attendance.updateMany(
-            { employeeId: p.employeeId, company, date: { $gte: earliestWorkingAbsent, $lte: currentDate }, status: 'Absent' },
-            { riskStatus: 'NearlyAbandon' }
-          );
-        }
-      }
-
-      if (['OnTime', 'Late'].includes(updated.status)) {
-        // Coming back after ≥3-day absence streak? -> mark TODAY Risk
-        let hadStreak = false;
-
-        for (let i = 1; i <= 10; i++) {
-          const prevDate = new Date(updated.date);
-          prevDate.setDate(updated.date.getDate() - i);
-          const dayStart = new Date(prevDate.setHours(0,0,0,0));
-          const dayEnd   = new Date(prevDate.setHours(23,59,59,999));
-          const rec = await Attendance.findOne({
-            employeeId: p.employeeId, company,
-            date: { $gte: dayStart, $lte: dayEnd }
-          }).lean();
-          if (rec?.riskStatus === 'Abandon' || rec?.riskStatus === 'NearlyAbandon') {
-            hadStreak = true;
-            break;
-          }
-        }
-
-        if (!hadStreak) {
-          const y = new Date(updated.date);
-          y.setDate(updated.date.getDate() - 1);
-          const absStreak = await consecutiveAbsentDays(p.employeeId, company, y, 14);
-          hadStreak = absStreak >= 3;
-        }
-
-        updated.riskStatus = hadStreak ? 'Risk' : 'None';
-        await updated.save();
-      }
-
-      if (updated.status === 'Leave') {
-        updated.riskStatus = updated.riskStatus && updated.riskStatus !== 'None'
-          ? updated.riskStatus
-          : 'None';
-        await updated.save();
-      }
-
-      summary.push({
-        employeeId: p.employeeId,
-        date: p.dateStr,
-        status: updated.status,
-        leaveType: updated.leaveType,
-        overtimeHours: updated.overtimeHours,
-        lateMinutes: updated.lateMinutes,
-        shiftType: updated.shiftType,
-        shiftTemplateId: updated.shiftTemplateId,
-        shiftName: updated.shiftName,
-        riskStatus: updated.riskStatus,
-        flags: updated.flags || []
-      });
-    }
-
-    return res.json({
+    res.json({
       ok: true,
-      message: `✅ Imported ${summary.length} attendance records.`,
-      warnings: {
-        nonWorkingDay: isNonWorking ? dayType : null
-      },
-      summary
+      message: `✅ Imported ${bulkOps.length} attendance records successfully.`,
+      unknownEmployees: missingEmployees.length,
+      warnings: { dayType },
     });
-
   } catch (err) {
     console.error('❌ Import error:', err);
     res.status(500).json({ message: 'Import failed', error: err.message });
   }
 };
 
-/* ───────────────────── Leave update ───────────────────── */
+
+
+/* ────────────────────── LEAVE UPDATE ────────────────────── */
 exports.updateLeavePermission = async (req, res) => {
   try {
     const { rows } = req.body;
@@ -754,6 +378,7 @@ exports.updateLeavePermission = async (req, res) => {
     if (!company || !Array.isArray(rows)) {
       return res.status(400).json({ message: 'Invalid input' });
     }
+
     const result = [];
     for (const row of rows) {
       const employeeId = row.employeeId?.trim();
@@ -762,69 +387,37 @@ exports.updateLeavePermission = async (req, res) => {
       if (!employeeId || !leaveType || !formattedDateStr) continue;
 
       const date = startOfDayTZ(formattedDateStr).toDate();
-      const tmpl = await getEmployeeTemplate(company, employeeId); // ← no ShiftAssignment
-
-      // Enforce employee-configured legacy shift only for fallback snapshot
+      const tmpl = await getEmployeeTemplate(company, employeeId, date);
       const emp = await Employee.findOne({ employeeId, company })
-        .select('englishFirstName englishLastName shift shiftName')
+        .select('englishFirstName englishLastName')
         .lean();
-      const empShift = normalizeShift(emp?.shift) || normalizeShift(emp?.shiftName) || null;
-      const shiftType = empShift || 'Day Shift';
 
       const existing = await Attendance.findOne({ employeeId, company, date });
-
       if (existing) {
         existing.status = 'Leave';
         existing.leaveType = leaveType;
-
-        // attach template metadata if available
-        if (tmpl) {
-          existing.shiftTemplateId = tmpl._id;
-          existing.shiftName = tmpl.name || '';
-          existing.shiftSnapshot = {
-            version: tmpl.version || 1,
-            name: tmpl.name || '',
-            timeIn: tmpl.timeIn, lateAfter: tmpl.lateAfter, timeOut: tmpl.timeOut,
-            breaks: tmpl.breaks || [], window: tmpl.window || undefined, ot: tmpl.ot || undefined
-          };
-        } else {
-          existing.shiftType = shiftType;
-        }
-
+        if (tmpl) existing.shiftName = tmpl.name;
         await existing.save();
         result.push({ employeeId, date: formattedDateStr, updated: true });
       } else {
-        const fullName = emp ? `${emp.englishFirstName || ''} ${emp.englishLastName || ''}`.trim() : 'Unknown';
-        const newLeave = new Attendance({
-          employeeId, date,
+        await Attendance.create({
+          company, employeeId, date,
           status: 'Leave',
           leaveType,
-          company,
-          fullName,
-          // legacy snapshot
-          shiftType
+          fullName: emp ? `${emp.englishFirstName} ${emp.englishLastName}`.trim() : 'Unknown',
         });
-        if (tmpl) {
-          newLeave.shiftTemplateId = tmpl._id;
-          newLeave.shiftName = tmpl.name || '';
-          newLeave.shiftSnapshot = {
-            version: tmpl.version || 1,
-            name: tmpl.name || '',
-            timeIn: tmpl.timeIn, lateAfter: tmpl.lateAfter, timeOut: tmpl.timeOut,
-            breaks: tmpl.breaks || [], window: tmpl.window || undefined, ot: tmpl.ot || undefined
-          };
-        }
-        await newLeave.save();
         result.push({ employeeId, date: formattedDateStr, created: true });
       }
     }
 
-    res.json({ message: `✅ Leave records processed: ${result.length}`, result });
+    res.json({ message: `✅ Leave processed: ${result.length}`, result });
   } catch (err) {
     console.error('❌ Leave update error:', err.message);
     res.status(500).json({ message: 'Leave update failed', error: err.message });
   }
 };
+
+
 
 /* ───────────────────── Dot summary (GitHub-style) ───────────────────── */
 // GET /api/attendance/dots?year=2025&month=8  (month 1..12)
@@ -886,97 +479,20 @@ exports.getAttendanceDotSummary = async (req, res) => {
   }
 };
 
-/* ───────────────────── Basic fetch endpoints ───────────────────── */
+/* ───────────────────── Remaining endpoints (short form) ───────────────────── */
+
+// Fetch all
 exports.getAllAttendance = async (req, res) => {
   try {
     const company = req.company;
-
-    // ── Build query ────────────────────────────────────────────────────────────
-    const {
-      shiftTemplateId,
-      shiftName,
-      employeeId,
-      department,
-      position,
-      line,
-      status,
-      riskStatus,
-      date,          // single day (YYYY-MM-DD)
-      dateFrom,      // inclusive (YYYY-MM-DD)
-      dateTo         // inclusive (YYYY-MM-DD)
-    } = req.query || {};
-
     const query = { company };
-
-    // date filters
-    if (date) {
-      const start = startOfDayTZ(date).toDate();
-      const end   = startOfDayTZ(date).add(1, 'day').toDate();
-      query.date = { $gte: start, $lt: end };
-    } else if (dateFrom || dateTo) {
-      const start = dateFrom ? startOfDayTZ(dateFrom).toDate() : new Date('1970-01-01T00:00:00Z');
-      // end is exclusive, so add 1 day to dateTo
-      const end   = dateTo ? startOfDayTZ(dateTo).add(1, 'day').toDate() : new Date('2999-12-31T00:00:00Z');
-      query.date = { $gte: start, $lt: end };
+    if (req.query.date) {
+      const d = startOfDayTZ(req.query.date);
+      query.date = { $gte: d.toDate(), $lt: d.add(1, 'day').toDate() };
     }
-
-    // shift filters
-    if (shiftTemplateId) {
-      const { Types } = require('mongoose');
-      if (Types.ObjectId.isValid(shiftTemplateId)) {
-        query.shiftTemplateId = shiftTemplateId;
-      } else {
-        return res.status(400).json({ message: 'Invalid shiftTemplateId' });
-      }
-    }
-    if (shiftName) {
-      // Match either new snapshot name or (legacy) shiftType string
-      query.$or = [
-        { shiftName: { $regex: `^${shiftName}$`, $options: 'i' } },
-        { shiftType: { $regex: `^${shiftName}$`, $options: 'i' } }  // legacy fallback
-      ];
-    }
-
-    // other filters
-    if (employeeId) query.employeeId = employeeId;
-    if (status)     query.status = status;
-    if (riskStatus) query.riskStatus = riskStatus;
-
-    // org filters (we enrich these, but also store on Attendance now — so filter directly)
-    if (department) query.department = department;
-    if (position)   query.position   = position;
-    if (line)       query.line       = line;
-
-    // ── Fetch & enrich ────────────────────────────────────────────────────────
-    const records = await Attendance.find(query).sort({ date: -1 });
-
-    // enrich with employee org data (fallbacks)
-    const employeeIds = [...new Set(records.map(r => r.employeeId))];
-    const employees = await Employee.find({ employeeId: { $in: employeeIds }, company })
-      .select('employeeId department position line').lean();
-
-    const employeeMap = {};
-    employees.forEach(emp => {
-      employeeMap[emp.employeeId] = {
-        department: emp.department || '',
-        position:   emp.position   || '',
-        line:       emp.line       || ''
-      };
-    });
-
-    const enriched = records.map(record => {
-      const empInfo = employeeMap[record.employeeId] || {};
-      return {
-        ...record.toObject(),
-        department: record.department || empInfo.department || '-',
-        position:   record.position   || empInfo.position   || '-',
-        line:       record.line       || empInfo.line       || '-'
-      };
-    });
-
-    res.json(enriched);
+    const rec = await Attendance.find(query).sort({ date: -1 });
+    res.json(rec);
   } catch (err) {
-    console.error('❌ Fetch error:', err.message);
     res.status(500).json({ message: 'Fetch failed', error: err.message });
   }
 };

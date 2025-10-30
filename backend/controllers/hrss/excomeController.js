@@ -790,14 +790,14 @@ exports.getDirectLaborInAndOutByMonth = async (req, res) => {
       // ✅ Count Direct Labor JOINED (Jumper + Sewer)
       const joined = await Employee.countDocuments({
         company,
-        position: { $in: ['Jumper', 'Sewer'] },
+        position: { $in: ['Sewer-Jumper', 'Sewer'] },
         joinDate: { $gte: start, $lte: end }
       })
 
       // ✅ Count Direct Labor RESIGNED (Employee model where status === 'Resign')
       const resigned = await Employee.countDocuments({
         company,
-        position: { $in: ['Jumper', 'Sewer'] },
+        position: { $in: ['Sewer-Jumper', 'Sewer'] },
         status: 'Resign',
         resignDate: { $gte: start, $lte: end }
       })
