@@ -1,28 +1,25 @@
-// controllers/hrss/shiftTemplateController.js
+/* eslint-disable no-console */
 const ShiftTemplate = require('../../models/hrss/shiftTemplate');
 const ShiftAssignment = require('../../models/hrss/shiftAssignment');
 
-/* ───────────────────────── Helpers ───────────────────────── */
-
+/* ───────────────────────── helpers ───────────────────────── */
 const HHMM = /^\d{2}:\d{2}$/;
-const asUndef = (v) => (v === '' || v === null ? undefined : v);
 const isHHmm = (v) => HHMM.test(String(v || ''));
-const err400 = (res, message, extra = {}) => res.status(400).json({ message, ...extra });
+const asUndef = (v) => (v === '' || v === null ? undefined : v);
+const err400 = (res, msg, extra = {}) => res.status(400).json({ message: msg, ...extra });
 
-/** Convert "HH:mm" → Date (for comparison) */
-const toDate = (hhmm, addDay = 0) => {
+/** convert HH:mm → Date for comparison */
+const toDate = (hhmm) => {
   const [h, m] = String(hhmm).split(':').map(Number);
-  return new Date(Date.UTC(2000, 0, 1 + addDay, h, m, 0, 0));
+  return new Date(Date.UTC(2000, 0, 1, h, m, 0, 0));
 };
 const cmpHHmm = (a, b) => toDate(a) - toDate(b);
 
-/**
- * Validate and normalize a raw body → canonical ShiftTemplate payload
- */
+/* ───────────────────────── payload builder ───────────────────────── */
 function buildPayload(raw) {
   const body = raw || {};
   const payload = {
-    company: undefined, // filled in by controller
+    company: undefined, // filled in controller
     name: asUndef(body.name),
     code: asUndef(body.code),
     active: body.active ?? true,
@@ -66,59 +63,35 @@ function buildPayload(raw) {
     excludeHolidays: !!body.excludeHolidays,
   };
 
-  /* ──────────────── Field validation ──────────────── */
-  if (!payload.name || !String(payload.name).trim()) throw new Error('name is required');
-
-  // core times
+  /* basic required */
+  if (!payload.name) throw new Error('name is required');
   ['timeIn', 'lateAfter', 'timeOut'].forEach((f) => {
     if (!isHHmm(payload[f])) throw new Error(`${f} must be HH:mm`);
   });
 
-  // lateAfter ≥ timeIn
   if (cmpHHmm(payload.lateAfter, payload.timeIn) < 0)
     throw new Error('lateAfter must be ≥ timeIn');
 
-  // optional window
-  if (payload.window) {
-    const { earliestIn, latestIn, earliestOut, latestOut } = payload.window;
-    if (earliestIn && !isHHmm(earliestIn)) throw new Error('window.earliestIn must be HH:mm');
-    if (latestIn && !isHHmm(latestIn)) throw new Error('window.latestIn must be HH:mm');
-    if (earliestOut && !isHHmm(earliestOut)) throw new Error('window.earliestOut must be HH:mm');
-    if (latestOut && !isHHmm(latestOut)) throw new Error('window.latestOut must be HH:mm');
-
-    if (earliestIn && cmpHHmm(payload.timeIn, earliestIn) < 0)
-      throw new Error('timeIn must be ≥ window.earliestIn');
-    if (latestIn && cmpHHmm(latestIn, payload.timeIn) < 0)
-      throw new Error('window.latestIn must be ≥ timeIn');
-  }
-
-  // timeOut rule: if not crossMidnight, timeOut ≥ timeIn
   if (!payload.crossMidnight && cmpHHmm(payload.timeOut, payload.timeIn) < 0)
-    throw new Error('timeOut must be ≥ timeIn unless crossMidnight = true');
-
-  // breaks
-  payload.breaks.forEach((br, i) => {
-    if (!isHHmm(br.start) || !isHHmm(br.end))
-      throw new Error(`breaks[${i}].start/end must be HH:mm`);
-    const sameDay = cmpHHmm(br.end, br.start) > 0;
-    if (!sameDay && !payload.crossMidnight) {
-      throw new Error(`breaks[${i}] end must be after start (or enable crossMidnight)`);
-    }
-  });
+    throw new Error('timeOut must be ≥ timeIn unless crossMidnight=true');
 
   return payload;
 }
 
-/* ───────────────────────── Controllers ───────────────────────── */
+/* ───────────────────────── controllers ───────────────────────── */
 
-// ➕ Create
+// ➕ CREATE
 exports.createShiftTemplate = async (req, res) => {
   try {
+    const company = req.company;
+    if (!company) return err400(res, 'Unauthorized: company missing');
     const payload = buildPayload(req.body);
-    payload.company = req.company;
+    payload.company = company;
+
     const doc = new ShiftTemplate(payload);
     await doc.validate();
     const saved = await doc.save();
+
     return res.status(201).json(saved);
   } catch (err) {
     const first = err?.errors ? Object.values(err.errors)[0]?.message : null;
@@ -126,15 +99,15 @@ exports.createShiftTemplate = async (req, res) => {
   }
 };
 
-// 📋 List
+// 📋 LIST
 exports.listShiftTemplates = async (req, res) => {
   try {
-    const company = req.company;
-    const { active, q } = req.query;
+    const { company } = req;
+    const { q, active } = req.query;
     const filter = { company };
+    if (q) filter.name = { $regex: q, $options: 'i' };
     if (active === 'true') filter.active = true;
     if (active === 'false') filter.active = false;
-    if (q) filter.name = { $regex: q, $options: 'i' };
 
     const rows = await ShiftTemplate.find(filter).sort({ name: 1 });
     return res.json(rows);
@@ -143,10 +116,13 @@ exports.listShiftTemplates = async (req, res) => {
   }
 };
 
-// 🔍 Get single
+// 🔍 GET
 exports.getShiftTemplate = async (req, res) => {
   try {
-    const row = await ShiftTemplate.findOne({ _id: req.params.id, company: req.company });
+    const row = await ShiftTemplate.findOne({
+      _id: req.params.id,
+      company: req.company,
+    });
     if (!row) return res.status(404).json({ message: 'Not found' });
     return res.json(row);
   } catch (err) {
@@ -154,7 +130,7 @@ exports.getShiftTemplate = async (req, res) => {
   }
 };
 
-// ✏️ Update
+// ✏️ UPDATE
 exports.updateShiftTemplate = async (req, res) => {
   try {
     const company = req.company;
@@ -164,30 +140,10 @@ exports.updateShiftTemplate = async (req, res) => {
     const payload = buildPayload(req.body);
     delete payload.company;
 
-    const whitelist = [
-      'name',
-      'code',
-      'active',
-      'version',
-      'effectiveFrom',
-      'effectiveTo',
-      'timeIn',
-      'lateAfter',
-      'timeOut',
-      'crossMidnight',
-      'breaks',
-      'window',
-      'ot',
-      'daysOfWeek',
-      'excludeHolidays',
-    ];
-
-    for (const key of whitelist) {
-      if (payload[key] !== undefined) existing[key] = payload[key];
-    }
-
+    Object.assign(existing, payload);
     await existing.validate();
     const saved = await existing.save();
+
     return res.json({ message: '✅ Updated', data: saved });
   } catch (err) {
     const first = err?.errors ? Object.values(err.errors)[0]?.message : null;
@@ -195,17 +151,16 @@ exports.updateShiftTemplate = async (req, res) => {
   }
 };
 
-// 🗑️ Delete / Soft delete
+// 🗑️ DELETE (soft if in use)
 exports.deleteShiftTemplate = async (req, res) => {
   try {
     const company = req.company;
     const id = req.params.id;
 
-    // If used by any ShiftAssignment → soft delete
     const inUse = await ShiftAssignment.exists({ company, shiftTemplateId: id });
     if (inUse) {
       await ShiftTemplate.updateOne({ _id: id, company }, { $set: { active: false } });
-      return res.json({ message: '🔕 Template in use → set active=false (soft deleted)' });
+      return res.json({ message: '🔕 Template in use — deactivated instead of deleted.' });
     }
 
     await ShiftTemplate.deleteOne({ _id: id, company });

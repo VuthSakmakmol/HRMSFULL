@@ -2,49 +2,36 @@
 const ShiftTemplate = require('../../../models/hrss/shiftTemplate');
 
 /**
- * Find an active ShiftTemplate for a company that matches a canonical label.
- * - Tries exact name match first
- * - Then tries exact code match
- * - Then fuzzy name contains "day"/"night" if canonical hints those
- * Returns the lean() doc or null.
- *
- * @param {string} company
- * @param {string} canonical - e.g. "Day Shift", "Night Shift", or a concrete template name/code
+ * Smarter shift template finder.
+ * Tries: exact → code → case-insensitive partial → keyword match (day/night/morning/evening)
  */
-async function findTemplate(company, canonical) {
-  if (!company || !canonical) return null;
+async function findTemplate(company, label) {
+  if (!company || !label) return null;
 
-  // Prefer exact NAME match
-  let t = await ShiftTemplate.findOne({
+  const text = String(label).trim();
+  if (!text) return null;
+
+  // Normalize (e.g. “Day Shift” → “day”)
+  const canonical = text.toLowerCase();
+
+  // 1️⃣ Exact match (case-insensitive)
+  let tpl = await ShiftTemplate.findOne({
     company,
     active: true,
-    name: canonical
+    name: { $regex: new RegExp(`^${canonical}$`, 'i') },
   }).lean();
-  if (t) return t;
+  if (tpl) return tpl;
 
-  // Try exact CODE match next (if you use codes)
-  t = await ShiftTemplate.findOne({
+  // 2️⃣ Match by code (if template has code)
+  tpl = await ShiftTemplate.findOne({
     company,
     active: true,
-    code: canonical
+    code: { $regex: new RegExp(`^${canonical}$`, 'i') },
   }).lean();
-  if (t) return t;
+  if (tpl) return tpl;
 
-  // Fallback fuzzy: detect "day"/"night" and search by name contains
-  const isNight = /night/i.test(canonical);
-  const isDay   = /day/i.test(canonical);
-
-  if (isNight || isDay) {
-    t = await ShiftTemplate.findOne({
-      company,
-      active: true,
-      name: { $regex: isNight ? 'night' : 'day', $options: 'i' },
-    }).lean();
-    if (t) return t;
-  }
-
-  // Final fallback: loose regex on name OR code
-  t = await ShiftTemplate.findOne({
+  // 3️⃣ Partial match (contains)
+  tpl = await ShiftTemplate.findOne({
     company,
     active: true,
     $or: [
@@ -52,8 +39,32 @@ async function findTemplate(company, canonical) {
       { code: { $regex: canonical, $options: 'i' } },
     ],
   }).lean();
+  if (tpl) return tpl;
 
-  return t || null;
+  // 4️⃣ Keyword-based heuristic match
+  const keywords = [
+    { key: ['day', 'morning', 'a'], match: /day|morning|a/i },
+    { key: ['night', 'evening', 'b'], match: /night|evening|b/i },
+    { key: ['swing'], match: /swing/i },
+    { key: ['line'], match: /line/i },
+  ];
+
+  for (const k of keywords) {
+    if (k.match.test(canonical)) {
+      const t = await ShiftTemplate.findOne({
+        company,
+        active: true,
+        $or: [
+          { name: { $regex: k.key.join('|'), $options: 'i' } },
+          { code: { $regex: k.key.join('|'), $options: 'i' } },
+        ],
+      }).lean();
+      if (t) return t;
+    }
+  }
+
+  // 5️⃣ Nothing matched
+  return null;
 }
 
 module.exports = { findTemplate };

@@ -1,52 +1,40 @@
-// controllers/hrss/employeeController.js
-/* eslint-disable no-console */
-
+/* ───────────────────────── Excel Import: DIRECT SHIFT-AWARE ───────────────────────── */
 const XLSX = require('xlsx');
 const mongoose = require('mongoose');
-
 const Employee = require('../../models/hrss/employee');
-const ShiftTemplate = require('../../models/hrss/shiftTemplate');
+const ShiftTemplate = require('../../models/hrss/shiftTemplate'); 
 const { findTemplate } = require('./_helpers/shiftLookup');
 
-// --- Robust ShiftAssignment import (handles circular loads / path issues) ---
 let ShiftAssignment;
 try {
-  ShiftAssignment = require('../../models/hrss/shiftAssignment'); // case-sensitive path
+  ShiftAssignment = require('../../models/hrss/shiftAssignment');
 } catch (e) {
   try {
-    ShiftAssignment = mongoose.model('ShiftAssignment'); // fallback if already registered
-  } catch (_) {
-    /* noop */
-  }
+    ShiftAssignment = mongoose.model('ShiftAssignment');
+  } catch (_) { /* noop */ }
 }
+
 if (!ShiftAssignment) {
   console.error('[BOOT] ShiftAssignment model not loaded. Check models/hrss/shiftAssignment.js export.');
 }
 
-console.log('[BOOT] employeeController loaded from', __filename);
-
-/* ───────────────────────── helpers: strings & dates ───────────────────────── */
+/* ---------- small helpers ---------- */
 const s = (v) => (v === undefined || v === null ? '' : String(v).trim());
-
-// Excel serial number → Date
-function excelSerialToDate(serial) {
-  const utcDays = Math.floor(serial - 25569);
-  const utcMillis = utcDays * 86400 * 1000;
-  return new Date(utcMillis);
-}
-
-// Normalize anything that might be a date into Date|null
-function normalizeDate(v) {
-  if (v === null || v === undefined || v === '') return null;
+const normalizeDate = (v) => {
+  if (!v) return null;
   if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
-  if (typeof v === 'number') return excelSerialToDate(v);
+  if (typeof v === 'number') {
+    const utcDays = Math.floor(v - 25569);
+    const utcMillis = utcDays * 86400 * 1000;
+    return new Date(utcMillis);
+  }
   if (typeof v === 'string') {
     const tryVal = v.replace(/\./g, '-').replace(/\//g, '-');
     const d = new Date(tryVal);
     return isNaN(d.getTime()) ? null : d;
   }
   return null;
-}
+};
 
 /* ───────────── current shift summary (from assignments) ───────────── */
 async function fetchCurrentShift(company, employeeId) {
@@ -282,246 +270,240 @@ function validateEmployeeData(row) {
   return errors;
 }
 
-/* ───────────────────────── Excel Import: FILE PREVIEW ───────────────────────── */
-exports.importPreviewExcel = async (req, res) => {
+
+/* ───────────────────────── Excel Import: Employee (Exact Model Columns) ───────────────────────── */
+exports.importEmployees = async (req, res) => {
   try {
     const company = req.company;
-    if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
-    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    if (!company)
+      return res.status(400).json({ message: 'Unauthorized: company missing' });
+    if (!req.file)
+      return res.status(400).json({ message: 'No Excel file uploaded' });
 
+    console.log(`[IMPORT] Reading file: ${req.file.originalname}`);
+
+    // 1️⃣ Parse Excel
     const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-    const parsed = rows.map(mapRowToEmployee);
-    const incomingIds = [...new Set(parsed.map(r => r.employeeId).filter(Boolean))];
-    const existingIds = await Employee.find({ company, employeeId: { $in: incomingIds } }).distinct('employeeId');
+    if (!rows.length)
+      return res.status(400).json({ message: 'No data rows found in Excel' });
 
-    const duplicates = [];
-    const toImport = [];
-    const invalid = [];
+    // 2️⃣ Normalize headers (remove BOM or spaces)
+    const normalizeHeaders = (row = {}) => {
+      const clean = {};
+      for (const [key, val] of Object.entries(row)) {
+        const normalizedKey = key
+          .replace(/\uFEFF/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        clean[normalizedKey] = val;
+      }
+      return clean;
+    };
 
-    parsed.forEach((row, idx) => {
-      const rowNum = idx + 2;
-      const errs = validateEmployeeData(row);
-
-      if (errs.length) invalid.push({ row: rowNum, employeeId: row.employeeId || '', errors: errs });
-      else if (row.employeeId && existingIds.includes(row.employeeId)) duplicates.push(row);
-      else if (row.employeeId) toImport.push(row);
-    });
-
-    return res.json({ toImport, duplicates, invalid });
-  } catch (err) {
-    console.error('❌ importPreviewExcel error:', err);
-    return res.status(500).json({ message: 'Preview failed', error: err.message });
-  }
-};
-
-/* ───────────────────────── Excel Import: JSON PREVIEW ───────────────────────── */
-exports.previewImport = async (req, res) => {
-  try {
-    const company = req.company;
-    if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
-    const data = Array.isArray(req.body) ? req.body : [];
-    if (!data.length) return res.status(400).json({ message: 'No data received' });
-
-    const parsed = data.map(mapRowToEmployee);
-    const incomingIds = [...new Set(parsed.map(r => r.employeeId).filter(Boolean))];
-    const existingIds = await Employee.find({ company, employeeId: { $in: incomingIds } }).distinct('employeeId');
-
-    const duplicates = [];
-    const toImport = [];
-    const invalid = [];
-
-    parsed.forEach((row, idx) => {
-      const rowNum = idx + 2;
-      const errs = validateEmployeeData(row);
-      if (errs.length) invalid.push({ row: rowNum, employeeId: row.employeeId || '', errors: errs });
-      else if (row.employeeId && existingIds.includes(row.employeeId)) duplicates.push(row);
-      else if (row.employeeId) toImport.push(row);
-    });
-
-    return res.json({ toImport, duplicates, invalid });
-  } catch (err) {
-    console.error('❌ previewImport error:', err);
-    return res.status(500).json({ message: 'Preview failed', error: err.message });
-  }
-};
-
-/* ───────────────────────── Excel Import: CONFIRM (JSON) ────────────────────── */
-exports.importConfirmExcel = async (req, res) => {
-  try {
-    const company = req.company;
-    if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
-
-    const io = req.app.get('io');
-    const room = req.body?.room ? String(req.body.room) : null;
-
-    const toImportRaw = Array.isArray(req.body?.toImport) ? req.body.toImport : [];
-    if (!toImportRaw.length) return res.status(400).json({ message: 'No data to import' });
-
-    // 1) Normalize
-    const parsed = toImportRaw.map(mapRowToEmployee);
-
-    // 2) In-file duplicates
-    const idCount = new Map();
-    for (const r of parsed) {
-      const id = (r.employeeId || '').trim();
-      if (!id) continue;
-      idCount.set(id, (idCount.get(id) || 0) + 1);
-    }
-    const inFileDuplicates = [...idCount.entries()]
-      .filter(([_, cnt]) => cnt > 1)
-      .map(([id, cnt]) => ({ employeeId: id, count: cnt }));
-    if (inFileDuplicates.length) {
-      return res.status(409).json({
-        message: 'Duplicate employeeId(s) found in uploaded file. Import blocked.',
-        duplicatesInFile: inFileDuplicates
-      });
-    }
-
-    // 3) DB duplicates
-    const incomingIds = [...new Set(parsed.map(r => r.employeeId).filter(Boolean))];
-    const existingIds = await Employee
-      .find({ company, employeeId: { $in: incomingIds } })
-      .distinct('employeeId');
-    if (existingIds.length) {
-      return res.status(409).json({
-        message: 'Duplicate employeeId(s) already exist in database. Import blocked.',
-        duplicatesInDb: existingIds
-      });
-    }
-
-    // 4) Validate + insert (+ initial shift assignment if resolvable)
-    const total = parsed.length;
-    let done = 0;
-    const inserted = [];
+    const success = [];
     const failed = [];
 
-    for (let i = 0; i < parsed.length; i++) {
-      const data = parsed[i];
+    // 3️⃣ Loop through rows
+    for (let i = 0; i < rows.length; i++) {
+      const row = normalizeHeaders(rows[i]);
+      const line = i + 2;
+
       try {
-        const errs = validateEmployeeData(data);
-        if (errs.length) throw new Error(errs.join(' | '));
+        // --- Required Columns ---
+        const employeeId = s(row['Employee ID'] || row['ID']);
+        if (!employeeId) throw new Error('Missing Employee ID');
 
-        const emp = new Employee({ ...data, company });
-        await emp.validate();
-        await emp.save();
-        inserted.push(emp.employeeId);
+        // Names
+        const khmerFirstName = s(row['Khmer First Name']);
+        const khmerLastName = s(row['Khmer Last Name']);
+        const englishFirstName = s(row['English First Name']);
+        const englishLastName = s(row['English Last Name']);
+        const employeeName = s(row['Employee Name']); // fallback if one column
 
-        // Try to create initial assignment (prefer explicit id; else map defaultShift)
-        if (ShiftAssignment) {
-          let tplId = data.shiftTemplateId || null;
-          if (!tplId && data.defaultShift) {
-            const t = await findTemplate(company, data.defaultShift);
-            if (t) tplId = t._id;
-          }
-          if (tplId) {
-            const from = data.joinDate || new Date();
-            await ShiftAssignment.create({
-              company,
-              employeeId: emp.employeeId,   // <- string
-              shiftTemplateId: tplId,
-              from,
-              to: null,
-              reason: 'Initial assignment (import)',
-              createdBy: req.user?.name || '',
-            });
+        // Auto-split if only one column
+        if (!englishFirstName && !englishLastName && employeeName) {
+          const parts = employeeName.trim().split(/\s+/);
+          if (parts.length > 1) {
+            row['English First Name'] = parts[0];
+            row['English Last Name'] = parts.slice(1).join(' ');
+          } else {
+            row['English First Name'] = parts[0];
+            row['English Last Name'] = '';
           }
         }
 
-      } catch (err) {
-        failed.push({
-          row: i + 2,
-          employeeId: data?.employeeId || '',
-          reason: (err.message || '').split(' | ')
-        });
-      } finally {
-        done++;
-        if (io && room) io.to(room).emit('employee-import:progress', { done, total });
-      }
-    }
+        // --- Resolve shift template ---
+        const shiftName = s(row['Shift'] || row['Shift Name']);
+        let shiftTemplateId = null;
+        let shiftTemplate = null;
 
-    return res.status(200).json({
-      message: `Imported ${inserted.length} employees.`,
-      insertedCount: inserted.length,
-      failedCount: failed.length,
-      failed
-    });
-  } catch (err) {
-    console.error('❌ importConfirmExcel error:', err);
-    return res.status(500).json({ message: 'Import failed', error: err.message });
-  }
-};
-
-// legacy alias
-exports.confirmImport = exports.importConfirmExcel;
-
-/* ───────────────────────── Excel Import: DIRECT SAVE ───────────────────────── */
-exports.importExcelDirect = async (req, res) => {
-  try {
-    const company = req.company;
-    if (!company) return res.status(403).json({ message: 'Unauthorized: company missing' });
-    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-
-    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-
-    const inserted = [];
-    const failed = [];
-
-    for (let i = 0; i < rows.length; i++) {
-      const raw = rows[i];
-      try {
-        const data = mapRowToEmployee(raw);
-        const errs = validateEmployeeData(data);
-        if (errs.length) throw new Error(errs.join(' | '));
-
-        const emp = new Employee({ ...data, company });
-        await emp.validate();
-        await emp.save();
-        inserted.push(emp);
-
-        // Initial assignment if possible
-        if (ShiftAssignment) {
-          let tplId = data.shiftTemplateId || null;
-          if (!tplId && data.defaultShift) {
-            const t = await findTemplate(company, data.defaultShift);
-            if (t) tplId = t._id;
+        if (shiftName) {
+          const tpl = await findTemplate(company, shiftName);
+          if (tpl) {
+            shiftTemplate = tpl;
+            shiftTemplateId = tpl._id;
+          } else {
+            console.warn(`⚠️ Row ${line}: Shift "${shiftName}" not found`);
           }
-          if (tplId) {
-            const from = data.joinDate || new Date();
+        }
+
+        // --- Build Employee Data matching model exactly ---
+        const now = new Date();
+        const data = {
+          company,
+          profileImage: s(row['Profile Image']),
+          employeeId,
+          khmerFirstName: s(row['Khmer First Name']),
+          khmerLastName: s(row['Khmer Last Name']),
+          englishFirstName: s(row['English First Name']),
+          englishLastName: s(row['English Last Name']),
+          gender: s(row['Gender']),
+          dob: parseDate(row['Date of Birth']),
+          age: toInt(row['Age']),
+          email: s(row['Email']),
+          phoneNumber: s(row['Phone Number']),
+          agentPhoneNumber: s(row['Agent Phone Number']),
+          agentPerson: s(row['Agent Person']),
+          note: s(row['Note']),
+
+          marriedStatus: s(row['Married Status']),
+          spouseName: s(row['Spouse Name']),
+          spouseContactNumber: s(row['Spouse Contact Number']),
+
+          education: s(row['Education']),
+          religion: s(row['Religion']),
+          nationality: s(row['Nationality']),
+          resignReason: s(row['Resign Reason']),
+
+          placeOfBirth: {
+            provinceNameKh: s(row['Birth Province']),
+            districtNameKh: s(row['Birth District']),
+            communeNameKh: s(row['Birth Commune']),
+            villageNameKh: s(row['Birth Village']),
+          },
+          placeOfLiving: {
+            provinceNameKh: s(row['Living Province']),
+            districtNameKh: s(row['Living District']),
+            communeNameKh: s(row['Living Commune']),
+            villageNameKh: s(row['Living Village']),
+          },
+
+          joinDate: parseDate(row['Join Date']),
+          department: s(row['Department']),
+          position: s(row['Position']),
+          line: s(row['Line']),
+          team: s(row['Team']),
+          section: s(row['Section']),
+
+          shiftTemplateId: shiftTemplateId || null,
+          shiftEffectiveFrom: shiftTemplateId ? now : null,
+          shiftHistory: shiftTemplateId
+            ? [{ shiftTemplateId, from: now, to: null }]
+            : [],
+          shift: shiftTemplate ? shiftTemplate.name : shiftName,
+          shiftName: shiftTemplate ? shiftTemplate.name : shiftName,
+
+          status: s(row['Status'] || 'Working'),
+          resignDate: parseDate(row['Resign Date']),
+          remark: s(row['Remark']),
+
+          idCard: s(row['ID Card']),
+          idCardExpireDate: parseDate(row['ID Card Expire Date']),
+          nssf: s(row['NSSF']),
+          passport: s(row['Passport']),
+          passportExpireDate: parseDate(row['Passport Expire Date']),
+          visaExpireDate: parseDate(row['Visa Expire Date']),
+          medicalCheck: s(row['Medical Check']),
+          medicalCheckDate: parseDate(row['Medical Check Date']),
+          workingBook: s(row['Working Book']),
+
+          sourceOfHiring: s(row['Source of Hiring']),
+          introducerId: s(row['Introducer ID']),
+          employeeType: s(row['Employee Type']),
+          singleNeedle: s(row['Single Needle']),
+          overlock: s(row['Overlock']),
+          coverstitch: s(row['Coverstitch']),
+          totalMachine: toInt(row['Total Machine']),
+        };
+
+        // --- Upsert Employee ---
+        const emp = await Employee.findOneAndUpdate(
+          { company, employeeId },
+          { $set: data },
+          { new: true, upsert: true }
+        );
+
+        // --- Create initial ShiftAssignment if applicable ---
+        if (shiftTemplateId && ShiftAssignment) {
+          const exists = await ShiftAssignment.exists({
+            company,
+            employeeId: emp.employeeId,
+            shiftTemplateId,
+            to: null,
+          });
+          if (!exists) {
             await ShiftAssignment.create({
               company,
               employeeId: emp.employeeId,
-              shiftTemplateId: tplId,
-              from,
+              shiftTemplateId,
+              from: now,
               to: null,
-              reason: 'Initial assignment (import-direct)',
-              createdBy: req.user?.name || '',
+              reason: 'Initial import auto-assignment',
+              createdBy: req.user?.name || 'System',
             });
           }
         }
 
+        success.push(employeeId);
       } catch (err) {
+        console.error(`❌ Row ${line} failed: ${err.message}`);
         failed.push({
-          row: i + 2,
-          employeeId: raw?.employeeId || '',
-          reason: (err.message || '').split(' | ')
+          line,
+          employeeId: rows[i]['Employee ID'] || '(unknown)',
+          error: err.message || 'Unknown error',
         });
       }
     }
 
-    return res.status(200).json({
-      message: `✅ Imported ${inserted.length} employees.`,
-      failedCount: failed.length,
-      failed,
+    // 4️⃣ Return summary
+    const summary = {
+      total: rows.length,
+      imported: success.length,
+      failed: failed.length,
+    };
+
+    if (failed.length) {
+      return res.status(207).json({
+        message: 'Import finished — some rows failed',
+        summary,
+        failed,
+      });
+    }
+
+    return res.json({
+      message: '✅ All employees imported successfully',
+      summary,
     });
   } catch (err) {
-    console.error('❌ importExcelDirect error:', err);
-    return res.status(500).json({ message: 'Import failed', error: err.message });
+    console.error('❌ importEmployees error:', err);
+    res.status(500).json({ message: 'Import failed', error: err.message });
   }
+};
+
+/* ───────────────────────── helpers ───────────────────────── */
+const parseDate = (v) => {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+const toInt = (v) => {
+  if (v === undefined || v === null || v === '') return 0;
+  const n = parseInt(v, 10);
+  return isNaN(n) ? 0 : n;
 };
 
 /* ───────────────────────────────────── CRUD ─────────────────────────────────── */
