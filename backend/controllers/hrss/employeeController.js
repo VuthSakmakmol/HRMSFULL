@@ -36,6 +36,35 @@ const normalizeDate = (v) => {
   return null;
 };
 
+// ✅ Excel date normalization (handles both numbers and strings safely)
+const parseExcelDate = (v) => {
+  if (!v) return null;
+
+  // Case 1: numeric Excel serial (days since 1899-12-30)
+  if (typeof v === 'number') {
+    const jsDate = new Date(Math.round((v - 25569) * 86400 * 1000));
+    if (jsDate.getFullYear() === 1970) return null;
+    return jsDate;
+  }
+
+  // Case 2: already a Date object
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    if (v.getFullYear() === 1970) return null;
+    return v;
+  }
+
+  // Case 3: string (try multiple formats)
+  if (typeof v === 'string') {
+    const tryFormats = ['YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY', 'DD-MM-YYYY', 'MM-DD-YYYY'];
+    const parsed = moment(v.replace(/\./g, '-').trim(), tryFormats, true);
+    if (parsed.isValid() && parsed.year() >= 1900 && parsed.year() < 2100) {
+      return parsed.toDate();
+    }
+  }
+
+  return null;
+};
+
 /* ───────────── current shift summary (from assignments) ───────────── */
 async function fetchCurrentShift(company, employeeId) {
   if (!ShiftAssignment) return null;
@@ -290,52 +319,19 @@ exports.importEmployees = async (req, res) => {
     if (!rows.length)
       return res.status(400).json({ message: 'No data rows found in Excel' });
 
-    // 2️⃣ Normalize headers (remove BOM or spaces)
-    const normalizeHeaders = (row = {}) => {
-      const clean = {};
-      for (const [key, val] of Object.entries(row)) {
-        const normalizedKey = key
-          .replace(/\uFEFF/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
-        clean[normalizedKey] = val;
-      }
-      return clean;
-    };
-
     const success = [];
     const failed = [];
 
-    // 3️⃣ Loop through rows
+    // 2️⃣ Loop through rows
     for (let i = 0; i < rows.length; i++) {
-      const row = normalizeHeaders(rows[i]);
+      const row = rows[i];
       const line = i + 2;
 
       try {
-        // --- Required Columns ---
         const employeeId = s(row['Employee ID'] || row['ID']);
         if (!employeeId) throw new Error('Missing Employee ID');
 
-        // Names
-        const khmerFirstName = s(row['Khmer First Name']);
-        const khmerLastName = s(row['Khmer Last Name']);
-        const englishFirstName = s(row['English First Name']);
-        const englishLastName = s(row['English Last Name']);
-        const employeeName = s(row['Employee Name']); // fallback if one column
-
-        // Auto-split if only one column
-        if (!englishFirstName && !englishLastName && employeeName) {
-          const parts = employeeName.trim().split(/\s+/);
-          if (parts.length > 1) {
-            row['English First Name'] = parts[0];
-            row['English Last Name'] = parts.slice(1).join(' ');
-          } else {
-            row['English First Name'] = parts[0];
-            row['English Last Name'] = '';
-          }
-        }
-
-        // --- Resolve shift template ---
+        // Resolve shift template
         const shiftName = s(row['Shift'] || row['Shift Name']);
         let shiftTemplateId = null;
         let shiftTemplate = null;
@@ -350,7 +346,7 @@ exports.importEmployees = async (req, res) => {
           }
         }
 
-        // --- Build Employee Data matching model exactly ---
+        // Build Employee data
         const now = new Date();
         const data = {
           company,
@@ -361,7 +357,7 @@ exports.importEmployees = async (req, res) => {
           englishFirstName: s(row['English First Name']),
           englishLastName: s(row['English Last Name']),
           gender: s(row['Gender']),
-          dob: parseDate(row['Date of Birth']),
+          dob: parseExcelDate(row['Date of Birth']),
           age: toInt(row['Age']),
           email: s(row['Email']),
           phoneNumber: s(row['Phone Number']),
@@ -391,7 +387,7 @@ exports.importEmployees = async (req, res) => {
             villageNameKh: s(row['Living Village']),
           },
 
-          joinDate: parseDate(row['Join Date']),
+          joinDate: parseExcelDate(row['Join Date']),
           department: s(row['Department']),
           position: s(row['Position']),
           line: s(row['Line']),
@@ -407,17 +403,17 @@ exports.importEmployees = async (req, res) => {
           shiftName: shiftTemplate ? shiftTemplate.name : shiftName,
 
           status: s(row['Status'] || 'Working'),
-          resignDate: parseDate(row['Resign Date']),
+          resignDate: parseExcelDate(row['Resign Date']),
           remark: s(row['Remark']),
 
           idCard: s(row['ID Card']),
-          idCardExpireDate: parseDate(row['ID Card Expire Date']),
+          idCardExpireDate: parseExcelDate(row['ID Card Expire Date']),
           nssf: s(row['NSSF']),
           passport: s(row['Passport']),
-          passportExpireDate: parseDate(row['Passport Expire Date']),
-          visaExpireDate: parseDate(row['Visa Expire Date']),
+          passportExpireDate: parseExcelDate(row['Passport Expire Date']),
+          visaExpireDate: parseExcelDate(row['Visa Expire Date']),
           medicalCheck: s(row['Medical Check']),
-          medicalCheckDate: parseDate(row['Medical Check Date']),
+          medicalCheckDate: parseExcelDate(row['Medical Check Date']),
           workingBook: s(row['Working Book']),
 
           sourceOfHiring: s(row['Source of Hiring']),
@@ -429,14 +425,18 @@ exports.importEmployees = async (req, res) => {
           totalMachine: toInt(row['Total Machine']),
         };
 
-        // --- Upsert Employee ---
+        // Remove any 1970 fake date
+        if (data.joinDate && data.joinDate.getFullYear() === 1970) data.joinDate = null;
+        if (data.resignDate && data.resignDate.getFullYear() === 1970) data.resignDate = null;
+
+        // Save/Upsert Employee
         const emp = await Employee.findOneAndUpdate(
           { company, employeeId },
           { $set: data },
           { new: true, upsert: true }
         );
 
-        // --- Create initial ShiftAssignment if applicable ---
+        // Create initial ShiftAssignment if needed
         if (shiftTemplateId && ShiftAssignment) {
           const exists = await ShiftAssignment.exists({
             company,
@@ -468,7 +468,7 @@ exports.importEmployees = async (req, res) => {
       }
     }
 
-    // 4️⃣ Return summary
+    // Summary
     const summary = {
       total: rows.length,
       imported: success.length,
