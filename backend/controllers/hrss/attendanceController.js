@@ -8,6 +8,7 @@ const XLSX            = require('xlsx');
 const dayjs           = require('dayjs');
 const utc             = require('dayjs/plugin/utc');
 const timezone        = require('dayjs/plugin/timezone');
+const mongoose = require('mongoose');
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
@@ -721,14 +722,18 @@ exports.getAttendanceHistoryByEmployeeId = async (req, res) => {
   }
 };
 
-// ───────────────────── Analytics (time series for charts) ─────────────────────
+/* ───────────────────── Analytics (time series for charts) ───────────────────── */
 exports.getAttendanceSeries = async (req, res) => {
   try {
     const company = req.company;
     if (!company) return res.status(400).json({ message: 'Missing company' });
 
     const scope = (req.query.scope || 'day').toLowerCase(); // 'day' | 'month' | 'year'
-    const shiftType = req.query.shiftType && req.query.shiftType !== 'All' ? req.query.shiftType : null;
+
+    const shiftTemplateId =
+      req.query.shiftTemplateId && req.query.shiftTemplateId !== 'All'
+        ? req.query.shiftTemplateId
+        : null;
 
     const todayLocal = dayjs.tz(dayjs(), TZ);
     let startLocal, endLocal, unit;
@@ -736,85 +741,103 @@ exports.getAttendanceSeries = async (req, res) => {
     if (scope === 'day') {
       const date = req.query.date || todayLocal.format('YYYY-MM-DD');
       startLocal = dayjs.tz(`${date} 00:00:00`, TZ).startOf('day');
-      endLocal   = startLocal.add(1, 'day');
+      endLocal = startLocal.add(1, 'day');
       unit = 'day';
     } else if (scope === 'month') {
       const y = Number(req.query.year || todayLocal.year());
-      const m = Number(req.query.month || (todayLocal.month() + 1)); // 1..12
+      const m = Number(req.query.month || todayLocal.month() + 1);
       const mm = String(m).padStart(2, '0');
       startLocal = dayjs.tz(`${y}-${mm}-01 00:00:00`, TZ).startOf('month');
-      endLocal   = startLocal.add(1, 'month');
+      endLocal = startLocal.add(1, 'month');
       unit = 'day';
     } else if (scope === 'year') {
       const y = Number(req.query.year || todayLocal.year());
       startLocal = dayjs.tz(`${y}-01-01 00:00:00`, TZ).startOf('year');
-      endLocal   = startLocal.add(1, 'year');
+      endLocal = startLocal.add(1, 'year');
       unit = 'month';
     } else {
       return res.status(400).json({ message: "scope must be 'day' | 'month' | 'year'" });
     }
 
     const start = startLocal.toDate();
-    const end   = endLocal.toDate();
+    const end = endLocal.toDate();
 
+    /* ───────────────────── MATCH FILTER ───────────────────── */
     const match = { company, date: { $gte: start, $lt: end } };
-    if (shiftType) match.shiftType = shiftType;
 
+    // 🧩 Support both shiftTemplateId and legacy shiftType
+    if (shiftTemplateId) {
+      const template = await ShiftTemplate.findById(shiftTemplateId).lean();
+      const shiftName = template?.name || null;
+
+      // Match by either shiftTemplateId or old shiftType text
+      match.$or = [{ shiftTemplateId: new mongoose.Types.ObjectId(shiftTemplateId) }];
+      if (shiftName) match.$or.push({ shiftType: shiftName });
+    }
+
+    /* ───────────────────── LEAVE SWITCH ───────────────────── */
     const leaveBucketSwitch = {
       branches: [
-        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /sick/i } },       then: 'Sick Leave' },
-        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /annual/i } },     then: 'Annual Leave' },
-        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /maternity/i } },  then: 'Maternity Leave' },
-        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /unpaid/i } },     then: 'Unpaid Leave' },
-        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /spec?ial/i } },   then: 'Special Leave' },
+        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /sick/i } }, then: 'Sick Leave' },
+        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /annual/i } }, then: 'Annual Leave' },
+        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /maternity/i } }, then: 'Maternity Leave' },
+        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /unpaid/i } }, then: 'Unpaid Leave' },
+        { case: { $regexMatch: { input: { $ifNull: ['$leaveType', ''] }, regex: /spec?ial/i } }, then: 'Special Leave' },
       ],
-      default: 'Other'
+      default: 'Other',
     };
 
+    /* ───────────────────── AGGREGATE ───────────────────── */
     const agg = await Attendance.aggregate([
       { $match: match },
       {
         $project: {
           bucket: { $dateTrunc: { date: '$date', unit, timezone: TZ } },
           status: { $ifNull: ['$status', 'None'] },
-          risk:   { $ifNull: ['$riskStatus', 'None'] },
+          risk: { $ifNull: ['$riskStatus', 'None'] },
           leaveBucket: {
             $cond: [
               { $eq: ['$status', 'Leave'] },
               { $switch: leaveBucketSwitch },
-              null
-            ]
-          }
-        }
+              null,
+            ],
+          },
+        },
       },
       {
         $group: {
           _id: '$bucket',
           OnTime: { $sum: { $cond: [{ $eq: ['$status', 'OnTime'] }, 1, 0] } },
-          Late:   { $sum: { $cond: [{ $eq: ['$status', 'Late'] }, 1, 0] } },
+          Late: { $sum: { $cond: [{ $eq: ['$status', 'Late'] }, 1, 0] } },
           Absent: { $sum: { $cond: [{ $eq: ['$status', 'Absent'] }, 1, 0] } },
-          Leave:  { $sum: { $cond: [{ $eq: ['$status', 'Leave'] }, 1, 0] } },
+          Leave: { $sum: { $cond: [{ $eq: ['$status', 'Leave'] }, 1, 0] } },
           NoneStatus: { $sum: { $cond: [{ $eq: ['$status', 'None'] }, 1, 0] } },
           RiskNearlyAbandon: { $sum: { $cond: [{ $eq: ['$risk', 'NearlyAbandon'] }, 1, 0] } },
-          RiskAbandon:       { $sum: { $cond: [{ $eq: ['$risk', 'Abandon'] }, 1, 0] } },
-          RiskRisk:          { $sum: { $cond: [{ $eq: ['$risk', 'Risk'] }, 1, 0] } },
-          RiskNone:          { $sum: { $cond: [{ $eq: ['$risk', 'None'] }, 1, 0] } },
-          LeaveSick:      { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Sick Leave'] }, 1, 0] } },
-          LeaveAnnual:    { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Annual Leave'] }, 1, 0] } },
+          RiskAbandon: { $sum: { $cond: [{ $eq: ['$risk', 'Abandon'] }, 1, 0] } },
+          RiskRisk: { $sum: { $cond: [{ $eq: ['$risk', 'Risk'] }, 1, 0] } },
+          RiskNone: { $sum: { $cond: [{ $eq: ['$risk', 'None'] }, 1, 0] } },
+          LeaveSick: { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Sick Leave'] }, 1, 0] } },
+          LeaveAnnual: { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Annual Leave'] }, 1, 0] } },
           LeaveMaternity: { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Maternity Leave'] }, 1, 0] } },
-          LeaveUnpaid:    { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Unpaid Leave'] }, 1, 0] } },
-          LeaveSpecial:   { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Special Leave'] }, 1, 0] } },
-          LeaveOther:     { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Other'] }, 1, 0] } },
-        }
+          LeaveUnpaid: { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Unpaid Leave'] }, 1, 0] } },
+          LeaveSpecial: { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Special Leave'] }, 1, 0] } },
+          LeaveOther: { $sum: { $cond: [{ $eq: ['$leaveBucket', 'Other'] }, 1, 0] } },
+        },
       },
       { $sort: { _id: 1 } },
     ]);
 
+    /* ───────────────────── BUILD BUCKETS ───────────────────── */
     const map = new Map(agg.map(r => [new Date(r._id).toISOString(), r]));
-
     const buckets = [];
+
     let cursor = startLocal.clone();
-    const step = unit === 'day' ? { n: 1, u: 'day' } : unit === 'month' ? { n: 1, u: 'month' } : { n: 1, u: 'year' };
+    const step =
+      unit === 'day'
+        ? { n: 1, u: 'day' }
+        : unit === 'month'
+        ? { n: 1, u: 'month' }
+        : { n: 1, u: 'year' };
 
     while (cursor.isBefore(endLocal)) {
       const keyISO = cursor.startOf(unit).toDate().toISOString();
@@ -841,24 +864,36 @@ exports.getAttendanceSeries = async (req, res) => {
           'Maternity Leave': found?.LeaveMaternity || 0,
           'Unpaid Leave': found?.LeaveUnpaid || 0,
           'Special Leave': found?.LeaveSpecial || 0,
-          'Other': found?.LeaveOther || 0,
-        }
+          Other: found?.LeaveOther || 0,
+        },
       });
 
       cursor = cursor.add(step.n, step.u);
     }
 
-    const totals = buckets.reduce((acc, b) => {
-      for (const [k, v] of Object.entries(b.status)) acc.status[k] += v;
-      for (const [k, v] of Object.entries(b.risk))   acc.risk[k]   += v;
-      for (const [k, v] of Object.entries(b.leaves)) acc.leaves[k] += v;
-      return acc;
-    }, {
-      status: { OnTime:0, Late:0, Absent:0, Leave:0, None:0 },
-      risk:   { NearlyAbandon:0, Abandon:0, Risk:0, None:0 },
-      leaves: { 'Sick Leave':0, 'Annual Leave':0, 'Maternity Leave':0, 'Unpaid Leave':0, 'Special Leave':0, 'Other':0 }
-    });
+    /* ───────────────────── TOTALS ───────────────────── */
+    const totals = buckets.reduce(
+      (acc, b) => {
+        for (const [k, v] of Object.entries(b.status)) acc.status[k] += v;
+        for (const [k, v] of Object.entries(b.risk)) acc.risk[k] += v;
+        for (const [k, v] of Object.entries(b.leaves)) acc.leaves[k] += v;
+        return acc;
+      },
+      {
+        status: { OnTime: 0, Late: 0, Absent: 0, Leave: 0, None: 0 },
+        risk: { NearlyAbandon: 0, Abandon: 0, Risk: 0, None: 0 },
+        leaves: {
+          'Sick Leave': 0,
+          'Annual Leave': 0,
+          'Maternity Leave': 0,
+          'Unpaid Leave': 0,
+          'Special Leave': 0,
+          Other: 0,
+        },
+      }
+    );
 
+    /* ───────────────────── RESPONSE ───────────────────── */
     return res.json({
       ok: true,
       scope,
@@ -867,7 +902,7 @@ exports.getAttendanceSeries = async (req, res) => {
       start: startLocal.format('YYYY-MM-DD'),
       end: endLocal.subtract(1, unit).format(unit === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD'),
       buckets,
-      totals
+      totals,
     });
   } catch (err) {
     console.error('❌ getAttendanceSeries error:', err);

@@ -46,7 +46,7 @@ async function fetchData() {
     series.value = [
       { name: 'Joined',    data: data.map(d => d.joined ?? 0) },
       { name: 'Resigned',  data: data.map(d => d.resigned ?? 0) },
-      { name: 'Net Change',data: data.map(d => d.net ?? 0) }
+      { name: 'Balance',data: data.map(d => d.net ?? 0) }
     ]
 
     chartOptions.value = {

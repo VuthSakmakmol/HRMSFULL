@@ -1,3 +1,4 @@
+//controllers/hrss/shiftTemplateController.js
 /* eslint-disable no-console */
 const ShiftTemplate = require('../../models/hrss/shiftTemplate');
 const ShiftAssignment = require('../../models/hrss/shiftAssignment');
