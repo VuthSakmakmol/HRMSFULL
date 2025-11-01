@@ -55,7 +55,7 @@ exports.getPositionMonthlyCounts = async (req, res) => {
   }
 
   try {
-    const positions = ['Sewer','Jumper'];
+    const positions = ['Sewer','Sewer-Jumper'];
     const agg = await Employee.aggregate([
       { $match: {
           company,
@@ -86,7 +86,7 @@ exports.getPositionMonthlyCounts = async (req, res) => {
     agg.forEach(b => {
       labels.push(b._id);
       const s = b.counts.find(x=>x.position==='Sewer')?.count || 0;
-      const j = b.counts.find(x=>x.position==='Jumper')?.count|| 0;
+      const j = b.counts.find(x=>x.position==='Sewer-Jumper')?.count|| 0;
       sewer.push(s);
       jumper.push(j);
       combined.push(s+j);
@@ -141,7 +141,7 @@ exports.getOtherPositionsMonthlyJoin = async (req, res) => {
     if (!company) return res.status(400).json({ error: 'Company is required' })
 
     const excludeDept = 'Merchandising'
-    const excludePos  = ['Sewer','Jumper']
+    const excludePos  = ['Sewer','Sewer-Jumper']
 
     // 1) aggregate by month+position
     const agg = await Employee.aggregate([

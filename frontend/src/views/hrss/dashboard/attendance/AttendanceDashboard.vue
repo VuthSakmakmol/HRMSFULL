@@ -37,6 +37,7 @@
         <v-btn :value="'absentCompare'" variant="flat">Compare Absent Rate</v-btn>
         <v-btn :value="'turnover'" variant="flat">Turnover</v-btn>
         <v-btn :value="'analytics'" variant="flat">Analytics</v-btn>
+        <v-btn :value="'dailyReport'" variant="flat">Daily Report</v-btn>
       </v-btn-toggle>
     </div>
 
@@ -95,6 +96,14 @@
           />
         </v-card>
       </v-window-item>
+
+      <!-- 📅 Daily Attendance Report -->
+      <v-window-item value="dailyReport">
+        <v-card class="pa-4 mb-4">
+          <DailyAttendanceReport />
+        </v-card>
+      </v-window-item>
+
     </v-window>
   </v-container>
 </template>

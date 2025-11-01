@@ -33,16 +33,16 @@ exports.getManpowerTargets = async (req, res) => {
         key: 'direct',
         title: 'Direct',
         // target docs filter
-        matchTarget: t => ['Sewer','Jumper'].includes(t.position),
+        matchTarget: t => ['Sewer','Sewer-Jumper'].includes(t.position),
         // actual headcount filter
-        matchActual: { position: { $in: ['Sewer','Jumper'] } }
+        matchActual: { position: { $in: ['Sewer','Sewer-Jumper'] } }
       },
       {
         key: 'indirect',
         title: 'Indirect + Merchandise',
         // everyone else
-        matchTarget: t => !['Sewer','Jumper'].includes(t.position),
-        matchActual: { position: { $nin: ['Sewer','Jumper'] } }
+        matchTarget: t => !['Sewer','Sewer-Jumper'].includes(t.position),
+        matchActual: { position: { $nin: ['Sewer','Sewer-Jumper'] } }
       }
     ]
 
@@ -125,7 +125,7 @@ exports.getAverageAge = async (req, res) => {
     }
 
     const totalAvg = await computeAvg({})
-    const sewerAvg = await computeAvg({ position: { $in: ['Sewer','Jumper'] } })
+    const sewerAvg = await computeAvg({ position: { $in: ['Sewer','Sewer-Jumper'] } })
 
     return res.json({ total: totalAvg, sewer: sewerAvg })
   } catch (err) {
@@ -153,7 +153,7 @@ exports.getAverageService = async (req, res) => {
 
     const total   = await computeService({});   
     const sewer   = await computeService({ 
-      position: { $in: ['Sewer', 'Jumper'] } 
+      position: { $in: ['Sewer', 'Sewer-Jumper'] } 
     });
 
     res.json({ total, sewer });
@@ -176,7 +176,7 @@ exports.getMonthlyResignReasonDirectStats = async (req, res) => {
       return res.status(400).json({ message: 'Year and company required' });
     }
 
-    const sewerPositions = ['Sewer', 'Jumper'];
+    const sewerPositions = ['Sewer', 'Sewer-Jumper'];
     const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     // Step 1: Fetch resign employees for this year, this company, only sewer positions
@@ -251,7 +251,7 @@ exports.getResignReasonDirectLabor = async (req, res) => {
       return res.status(400).json({ message: 'Year and company required' })
     }
 
-    const directPositions = ['Sewer', 'Jumper']
+    const directPositions = ['Sewer', 'Sewer-Jumper']
     const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
     const resigns = await Employee.find({
@@ -324,7 +324,7 @@ exports.getMonthlyResignReasonIndirectStats = async (req, res) => {
       return res.status(400).json({ message: 'Year and company required' })
     }
 
-    const excludeDirectPositions = ['Sewer', 'Jumper']
+    const excludeDirectPositions = ['Sewer', 'Sewer-Jumper']
     const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
     // Step 1: Fetch resign employees for this year, this company, indirect positions
@@ -404,7 +404,7 @@ exports.getResignReasonIndirectLabor = async (req, res) => {
     const resigns = await Employee.find({
       company: { $in: Array.isArray(company) ? company : [company] },
       status: 'Resign',
-      position: { $nin: ['Sewer', 'Jumper'] },
+      position: { $nin: ['Sewer', 'Sewer-Jumper'] },
       resignReason: { $ne: '' },
       resignDate: {
         $gte: new Date(`${year}-01-01T00:00:00.000Z`),
@@ -469,7 +469,7 @@ exports.getPeriodOfDirectLaborResignByYear = async (req, res) => {
       return res.status(400).json({ message: 'Year and company required' })
     }
 
-    const directPositions = ['Sewer', 'Jumper']
+    const directPositions = ['Sewer', 'Sewer-Jumper']
     const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
     // Fetch resigned direct labor this year
@@ -563,7 +563,7 @@ exports.getPeriodOfIndirectLaborResignByYear = async (req, res) => {
       return res.status(400).json({ message: 'Year and company required' })
     }
 
-    const directPositions = ['Sewer', 'Jumper']
+    const directPositions = ['Sewer', 'Sewer-Jumper']
     const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
     // Fetch resigned INDIRECT labor (exclude direct positions)
@@ -653,7 +653,7 @@ exports.getPeriodOfDirectLaborChartResignByYear = async (req, res) => {
       return res.status(400).json({ message: 'Year and company required' })
     }
 
-    const directPositions = ['Sewer', 'Jumper']
+    const directPositions = ['Sewer', 'Sewer-Jumper']
 
     // Fetch resigned direct labor
     const resigns = await Employee.find({
@@ -724,7 +724,7 @@ exports.getPeriodOfIndirectLaborChartResignByYear = async (req, res) => {
       return res.status(400).json({ message: 'Year and company required' })
     }
 
-    const directPositions = ['Sewer', 'Jumper']
+    const directPositions = ['Sewer', 'Sewer-Jumper']
 
     const resigns = await Employee.find({
       company: { $in: Array.isArray(company) ? company : [company] },
@@ -787,7 +787,7 @@ exports.getDirectLaborInAndOutByMonth = async (req, res) => {
       const start = moment.tz({ year, month: m }, 'Asia/Phnom_Penh').startOf('month').toDate()
       const end = moment.tz({ year, month: m }, 'Asia/Phnom_Penh').endOf('month').toDate()
 
-      // ✅ Count Direct Labor JOINED (Jumper + Sewer)
+      // ✅ Count Direct Labor JOINED (Sewer-Jumper + Sewer)
       const joined = await Employee.countDocuments({
         company,
         position: { $in: ['Sewer-Jumper', 'Sewer'] },

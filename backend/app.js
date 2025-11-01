@@ -60,6 +60,7 @@ app.use('/api/evaluations', require('./routes/hrss/evaluationRoutes'));
 app.use('/api/hrss/dashboard', require('./routes/hrss/dashboardRoutes'));
 app.use('/api/hrss/shift-templates', require('./routes/hrss/shiftTemplateRoutes'));
 app.use('/api/hrss/shift-assignments', require('./routes/hrss/shiftAssignmentRoutes'));
+app.use('/api/hrss/attendance/report', require('./routes/hrss/attendanceReportRoutes'));
 
 // Upload routes (if any)
 app.use('/api/upload', require('./routes/hrss/upload'));

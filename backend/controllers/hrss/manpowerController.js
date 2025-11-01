@@ -226,19 +226,19 @@ exports.getManpowerTargets = async (req, res) => {
       {
         key: 'blueSewer',
         title: 'Blue Collar – Sewer',
-        // blue-collar sewer = positions "Sewer" or "Jumper"
-        targetFilter: t => ['Sewer','Jumper'].includes(t.position),
-        actualFilter: { position: { $in: ['Sewer','Jumper'] } }
+        // blue-collar sewer = positions "Sewer" or "Sewer-Jumper"
+        targetFilter: t => ['Sewer','Sewer-Jumper'].includes(t.position),
+        actualFilter: { position: { $in: ['Sewer','Sewer-Jumper'] } }
       },
       {
         key: 'blueNonSewer',
         title: 'Blue Collar – Non-Sewer',
-        // blue-collar non-sewer = not sewer/jumper AND not merchandising
+        // blue-collar non-sewer = not sewer/sewer-jumper AND not merchandising
         targetFilter: t =>
-          !['Sewer','Jumper'].includes(t.position) &&
+          !['Sewer','Sewer-Jumper'].includes(t.position) &&
           t.department !== 'Merchandising',
         actualFilter: {
-          position:   { $nin: ['Sewer','Jumper'] },
+          position:   { $nin: ['Sewer','Sewer-Jumper'] },
           department: { $ne: 'Merchandising' }
         }
       }

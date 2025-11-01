@@ -15,6 +15,7 @@ declare module 'vue' {
     AttendanceHeatmap: typeof import('./src/components/hrss/AttendanceHeatmap.vue')['default']
     AttendanceTable: typeof import('./src/components/hrss/attendance/AttendanceTable.vue')['default']
     AttendanceToolbar: typeof import('./src/components/hrss/attendance/AttendanceToolbar.vue')['default']
+    DailyAttendanceReport: typeof import('./src/components/hrss/DailyAttendanceReport.vue')['default']
     EditAttendanceDialog: typeof import('./src/components/hrss/attendance/EditAttendanceDialog.vue')['default']
     EmployeeCard: typeof import('./src/components/hrss/EmployeeCard.vue')['default']
     ImportAttendanceDialog: typeof import('./src/components/hrss/attendance/ImportAttendanceDialog.vue')['default']

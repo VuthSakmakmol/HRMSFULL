@@ -4,7 +4,7 @@ const moment = require('moment-timezone');
 const AttendanceTarget = require('../../models/hrss/AttendanceTarget');
 const TurnoverTarget = require('../../models/hrss/turnoverTarget');
 
-const isDirectLabor = emp => ['Sewer', 'Jumper'].includes(emp.position)
+const isDirectLabor = emp => ['Sewer', 'Sewer-Jumper'].includes(emp.position)
 
 // 📌 Shared utility function
 const buildAttendanceSummary = (attendances, empMap, excludeDepartment = null) => {
@@ -382,7 +382,7 @@ exports.getMonthlyDirectLaborTurnoverRate = async (req, res) => {
       const startLastYear = startThisYear.clone().subtract(1, 'year');
       const endLastYear = endThisYear.clone().subtract(1, 'year');
 
-      const filterPositions = { position: { $in: ['Sewer', 'Jumper'] } };
+      const filterPositions = { position: { $in: ['Sewer', 'Sewer-Jumper'] } };
 
       // Helper to count
       const countInRange = (dateField, start, end) =>
