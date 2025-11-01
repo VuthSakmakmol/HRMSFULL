@@ -13,8 +13,10 @@ const departmentSchema = new mongoose.Schema({
   },
   jobTitles: [{ type: String }],
   recruiters: { type: [String], default: [] },
-  company: { type: String, required: true }
+  company: { type: String, required: true },
 }, { timestamps: true });
 
-// ✅ Explicitly link to "tadepartments"
-module.exports = mongoose.model('Department', departmentSchema, 'tadepartments');
+// ✅ Prevent OverwriteModelError if model is already compiled elsewhere
+module.exports =
+  mongoose.models.Department ||
+  mongoose.model('Department', departmentSchema, 'tadepartments');
