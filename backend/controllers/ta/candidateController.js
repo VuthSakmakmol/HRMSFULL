@@ -1,3 +1,4 @@
+//backend/controllers/ta/candidateController.js
 const fs = require('fs');
 const Candidate = require('../../models/ta/Candidate');
 const JobRequisition = require('../../models/ta/JobRequisition');

@@ -1,3 +1,4 @@
+<!-- views/ta/gm/ActivityLog.vue -->
 <template>
   <v-container fluid>
     <v-card class="pa-4">

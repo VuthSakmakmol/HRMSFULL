@@ -1,3 +1,5 @@
+
+//backend/controllers/ta/activityLogController.js
 const ActivityLog = require('../../models/ta/ActivityLog');
 const registry = require('../../utils/modelRegistry');
 

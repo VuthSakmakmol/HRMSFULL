@@ -1,3 +1,4 @@
+//backend/controllers/ta/departmentController.js
 const Department = require('../../models/ta/Department');
 const { logActivity } = require('../../utils/logActivity') // adjust if needed
 

@@ -6,9 +6,13 @@
         <v-icon start>mdi-calendar-check</v-icon>
         Daily Attendance Report
       </v-toolbar-title>
+
       <template #append>
         <v-btn variant="text" color="white" :loading="loading" @click="loadData">
           <v-icon start>mdi-refresh</v-icon> Refresh
+        </v-btn>
+        <v-btn variant="text" color="white" @click="exportToExcel">
+          <v-icon start>mdi-file-excel</v-icon> Export
         </v-btn>
       </template>
     </v-toolbar>
@@ -102,6 +106,8 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import axios from '@/utils/axios'
 import dayjs from '@/plugins/dayjs'
+import * as XLSX from 'xlsx'
+import { saveAs } from 'file-saver'
 
 /* ---------- Filters ---------- */
 const now = dayjs()
@@ -134,7 +140,7 @@ const monthOptions = [
   { label: 'Dec', value: 12 },
 ]
 
-/* ---------- Combined rows (prevent duplicates) ---------- */
+/* ---------- Combined rows ---------- */
 const combinedRows = computed(() => {
   const summary = summaryRows.value.map((r) => ({
     label: r.label,
@@ -142,7 +148,6 @@ const combinedRows = computed(() => {
     ...r.data,
   }))
 
-  // Filter out duplicate departments by name
   const uniqueDepartments = []
   const seen = new Set()
   for (const r of departments.value) {
@@ -197,6 +202,33 @@ async function loadData() {
   }
 }
 
+/* ---------- Export to Excel ---------- */
+function exportToExcel() {
+  if (!combinedRows.value.length) {
+    alert('No data to export')
+    return
+  }
+
+  const header = ['Department / Metric', ...days.value]
+  const rows = combinedRows.value.map((item) => {
+    const row = [item.label]
+    for (const d of days.value) {
+      row.push(item[d] ?? '')
+    }
+    return row
+  })
+
+  const worksheetData = [header, ...rows]
+  const ws = XLSX.utils.aoa_to_sheet(worksheetData)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Attendance')
+
+  const monthName = monthOptions.find(m => m.value === month.value)?.label || month.value
+  const fileName = `Daily_Attendance_${year.value}_${monthName}.xlsx`
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+  saveAs(new Blob([wbout], { type: 'application/octet-stream' }), fileName)
+}
+
 /* ---------- Formatters ---------- */
 function formatStyledValue(item, day) {
   const v = item[day] ?? 0
@@ -243,13 +275,11 @@ onMounted(loadData)
   border: 1px solid #e5e7eb;
   background: white;
 }
-
 .attendance-table {
   width: max-content;
   border-collapse: collapse;
   font-size: 13px;
 }
-
 .attendance-table th,
 .attendance-table td {
   padding: 6px 10px;
@@ -257,7 +287,6 @@ onMounted(loadData)
   text-align: center;
   white-space: nowrap;
 }
-
 .sticky-left {
   position: sticky;
   left: 0;
@@ -268,7 +297,6 @@ onMounted(loadData)
   border-right: 1px solid #e0e0e0;
   padding-left: 12px;
 }
-
 .header-left {
   position: sticky;
   left: 0;
@@ -277,7 +305,6 @@ onMounted(loadData)
   background: #f6f8fb !important;
   font-weight: 700;
 }
-
 .sticky-top {
   position: sticky;
   top: 0;
@@ -285,19 +312,15 @@ onMounted(loadData)
   background: #f6f8fb;
   font-weight: 600;
 }
-
 .summary {
   color: #1976d2;
   text-transform: uppercase;
   font-weight: 600;
 }
-
 .attendance-table tr:hover td {
   background-color: #fafafa;
   transition: background 0.2s;
 }
-
-/* --- Text Pagination --- */
 .text-pagination {
   display: flex;
   align-items: center;
@@ -305,17 +328,14 @@ onMounted(loadData)
   gap: 1rem;
   margin-top: 1rem;
 }
-
 .text-btn {
   text-transform: none;
   font-weight: 600;
   color: #1976d2;
 }
-
 .text-btn:disabled {
   color: #ccc !important;
 }
-
 .page-indicator {
   font-weight: 500;
   color: #444;

@@ -1,3 +1,5 @@
+
+//backend/controllers/ta/jobRequisitionController.js
 const JobRequisition = require('../../models/ta/JobRequisition');
 const Department = require('../../models/ta/Department');
 const Counter = require('../../models/ta/Counter');
