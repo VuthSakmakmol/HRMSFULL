@@ -1,4 +1,4 @@
-// Basic role gate
+// backend/middlewares/roleMiddleware.js
 exports.authorize = (allowedRoles) => {
   return (req, res, next) => {
     const { role } = req.user || {};
@@ -9,22 +9,34 @@ exports.authorize = (allowedRoles) => {
   };
 };
 
-// Company context enforcement with GM override support
+// backend/middlewares/roleMiddleware.js
 exports.authorizeCompanyAccess = (req, res, next) => {
-  const user = req.user;
+  const { role, company: userCompany, companies: gmCompanies } = req.user || {};
   const overrideCompany = req.headers['x-company-override'];
 
-  if (user.role === 'GeneralManager') {
-    req.company = overrideCompany || user.company || null;
+  if (!role) return res.status(403).json({ message: 'Unauthorized role' });
+
+  if (role === 'GeneralManager') {
+    if (overrideCompany) {
+      if (Array.isArray(gmCompanies) && !gmCompanies.includes(overrideCompany)) {
+        return res.status(403).json({ message: 'GM not authorized for this company' });
+      }
+      req.company = overrideCompany;
+    } else {
+      req.company = null; // or some default if you want
+    }
     return next();
   }
-  if (user.role === 'Manager') {
-    req.company = overrideCompany || user.company || null;
+
+  if (role === 'Manager') {
+    req.company = overrideCompany || userCompany || null;
     return next();
   }
-  if (user.role === 'HROfficer') {
-    req.company = user.company || null; // ignore override
+
+  if (role === 'HROfficer') {
+    req.company = userCompany || null; // ignore override
     return next();
   }
+
   return res.status(403).json({ message: 'Unauthorized role' });
 };

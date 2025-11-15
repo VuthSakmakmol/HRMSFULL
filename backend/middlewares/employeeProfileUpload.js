@@ -1,4 +1,4 @@
-//middlewares/employeeProfileUpload.js
+//backend/middlewares/employeeProfileUpload.js
 const multer = require('multer')
 const path = require('path')
 const fs = require('fs')

@@ -54,7 +54,9 @@
             :items="companies"
             label="Company"
             required
+            :disabled="isEdit"
           />
+
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -122,20 +124,43 @@ const submitForm = async () => {
     if (isEdit.value) {
       await axios.put(`/users/${form.value._id}`, {
         name: form.value.name,
-        password: form.value.password
+        password: form.value.password,
+        company: form.value.company
       })
       Swal.fire('Updated', 'User updated successfully', 'success')
     } else {
       await axios.post('/users', form.value)
       Swal.fire('Created', 'User created successfully', 'success')
     }
+
     dialog.value = false
     await loadUsers()
   } catch (err) {
     console.error(err)
-    Swal.fire('Error', err.response?.data?.message || 'Submit failed', 'error')
+    const data = err.response?.data
+
+    // collect messages from backend
+    let messages = []
+
+    // top-level message
+    if (data?.message && data.message !== 'Validation failed') {
+      messages.push(data.message)
+    }
+
+    // field-level messages (e.g. password too short)
+    if (data?.errors) {
+      messages.push(...Object.values(data.errors))
+    }
+
+    const text =
+      messages.length > 0
+        ? messages.join('\n')
+        : 'Submit failed'
+
+    Swal.fire('Error', text, 'error')
   }
 }
+
 
 const deleteUser = async (user) => {
   const confirm = await Swal.fire({

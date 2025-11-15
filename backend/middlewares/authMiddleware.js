@@ -1,3 +1,4 @@
+//backend/middlewares.authMiddleware.js
 const jwt = require('jsonwebtoken');
 
 exports.authenticate = (req, res, next) => {

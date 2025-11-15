@@ -1,3 +1,4 @@
+//backend/middlewares/crudPermissionMiddleware.js
 exports.enforceCrudPermissions = (req, res, next) => {
   const { role } = req.user;
 

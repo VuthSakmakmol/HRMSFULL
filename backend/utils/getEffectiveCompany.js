@@ -1,4 +1,5 @@
 // Derive the effective company context for this request
+// backend/utils/getEffectiveCompany.js
 exports.getEffectiveCompany = (req) => {
   const role = req.user?.role;
   const override = req.headers['x-company-override'];
