@@ -1,5 +1,6 @@
-const express = require('express')
-const router = express.Router()
+//backend/routes/ta/departmentRoutes.js
+const express = require('express');
+const router = express.Router();
 
 const {
   getAll,
@@ -8,16 +9,62 @@ const {
   update,
   remove,
   removeJobTitles
-} = require('../../controllers/ta/departmentController')
+} = require('../../controllers/ta/departmentController');
 
-const { authenticate } = require('../../middlewares/authMiddleware') // ✅ Auth
+const { authenticate } = require('../../middlewares/authMiddleware');
+const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware');
+const { enforceCrudPermissions } = require('../../middlewares/crudPermissionMiddleware');
 
-// 🟢 Auth-protected routes
-router.get('/departments', authenticate, getAll)
-router.get('/departments/:id', authenticate, getById)
-router.post('/departments', authenticate, create)
-router.put('/departments/:id', authenticate, update)
-router.delete('/departments/:id', authenticate, remove)
-router.put('/departments/:id/remove-job-titles', authenticate, removeJobTitles) // optional for partial delete
+// LIST
+router.get(
+  '/departments',
+  authenticate,
+  authorizeCompanyAccess,
+  getAll
+);
 
-module.exports = router
+// GET ONE
+router.get(
+  '/departments/:id',
+  authenticate,
+  authorizeCompanyAccess,
+  getById
+);
+
+// CREATE
+router.post(
+  '/departments',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions,
+  create
+);
+
+// UPDATE
+router.put(
+  '/departments/:id',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions,
+  update
+);
+
+// DELETE
+router.delete(
+  '/departments/:id',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions,
+  remove
+);
+
+// REMOVE JOB TITLES
+router.put(
+  '/departments/:id/remove-job-titles',
+  authenticate,
+  authorizeCompanyAccess,
+  enforceCrudPermissions,
+  removeJobTitles
+);
+
+module.exports = router;

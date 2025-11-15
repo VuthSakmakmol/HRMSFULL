@@ -4,15 +4,10 @@ const { logActivity } = require('../../utils/logActivity') // adjust if needed
 
 
 // ✅ GET all departments with company, type, subType filters
+// backend/controllers/ta/departmentController.js
 exports.getAll = async (req, res) => {
   try {
-    const role = req.user?.role || 'Manager';
-    const userCompany = req.user?.company;
-    const queryCompany = req.query.company;
-
-    const companyFilter = role === 'GeneralManager'
-      ? queryCompany
-      : userCompany;
+    const companyFilter = req.company; // set by authorizeCompanyAccess
 
     if (!companyFilter) {
       return res.status(400).json({ message: 'Company is required' });

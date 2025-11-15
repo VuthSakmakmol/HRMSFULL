@@ -1,7 +1,15 @@
-const express = require('express')
-const router = express.Router()
-const { getReport } = require('../../controllers/ta/reportController')
+//backend/routes/ta/reportRoutes.js
+const express = require('express');
+const router = express.Router();
+const { getReport } = require('../../controllers/ta/reportController');
+const { authenticate } = require('../../middlewares/authMiddleware');
+const { authorizeCompanyAccess } = require('../../middlewares/roleMiddleware');
 
-router.get('/', getReport)
+router.get(
+  '/',
+  authenticate,
+  authorizeCompanyAccess,
+  getReport
+);
 
-module.exports = router
+module.exports = router;

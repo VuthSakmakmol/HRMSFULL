@@ -1,3 +1,4 @@
+//backend/routes/ta/dashboardRoutes.js
 const express = require('express');
 const router = express.Router();
 const dashboardController = require('../../controllers/ta/dashboardController');
@@ -9,7 +10,7 @@ router.post(
   '/stats',
   authenticate,
   authorizeCompanyAccess,
-  enforceCrudPermissions, // ✅ remember to allow POST as read in your middleware
+  enforceCrudPermissions,
   dashboardController.getDashboardStats
 );
 
