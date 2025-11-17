@@ -22,6 +22,48 @@ async function generateCandidateId(type, subType) {
 }
 
 // ─────────────────────────────────────────────
+// HELPER: compute "time to fill" in days from openingDate → latest Onboard date
+async function computeDaysToFill(job) {
+  if (!job.openingDate) return { daysToFill: null, latestOnboard: null };
+
+  const onboardCandidates = await Candidate.find({
+    jobRequisitionId: job._id,
+    progress: 'Onboard',
+    _onboardCounted: true,
+    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+  }).select('progressDates');
+
+  if (!onboardCandidates.length) {
+    return { daysToFill: null, latestOnboard: null };
+  }
+
+  let latestOnboard = null;
+
+  for (const c of onboardCandidates) {
+    // progressDates can be Map or plain object
+    const raw =
+      (c.progressDates && c.progressDates.Onboard) ||
+      (typeof c.progressDates?.get === 'function'
+        ? c.progressDates.get('Onboard')
+        : null);
+
+    if (!raw) continue;
+    const d = new Date(raw);
+    if (!latestOnboard || d > latestOnboard) latestOnboard = d;
+  }
+
+  if (!latestOnboard) {
+    return { daysToFill: null, latestOnboard: null };
+  }
+
+  const start = new Date(job.openingDate);
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysToFill = Math.ceil((latestOnboard - start) / msPerDay);
+
+  return { daysToFill, latestOnboard };
+}
+
+// ─────────────────────────────────────────────
 // CREATE candidate
 exports.create = async (req, res) => {
   try {
@@ -268,62 +310,54 @@ exports.updateStage = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────
-// Helper: reevaluate job status based on candidate progress
+
+// HELPER: Reevaluate job status when candidate progress changes
 async function reevaluateJobStatus(job, req = null) {
   const jobId = job._id;
+
   const offerCount = await Candidate.countDocuments({
     jobRequisitionId: jobId,
     progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
     _offerCounted: true,
     hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
   });
+
   const onboardCount = await Candidate.countDocuments({
     jobRequisitionId: jobId,
     progress: 'Onboard',
-    _onboardCounted: true
+    _onboardCounted: true,
+    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
   });
 
-  job.offerCount = offerCount;
+  job.offerCount   = offerCount;
   job.onboardCount = onboardCount;
-  job.status = onboardCount >= job.targetCandidates ? 'Filled'
-               : offerCount >= job.targetCandidates ? 'Suspended'
-               : 'Vacant';
 
-  await job.save();
-  const refreshed = await JobRequisition.findById(jobId).lean();
-  if (req) {
-    req.app.get('io').emit('jobUpdated', { ...refreshed, offerCount, onboardCount });
+  // Status
+  job.status =
+    onboardCount >= job.targetCandidates ? 'Filled'
+    : offerCount >= job.targetCandidates ? 'Suspended'
+    : 'Vacant';
+
+  // ✅ compute latest onboard + daysToFill
+  const { daysToFill, latestOnboard } = await computeDaysToFill(job);
+  job.daysToFill        = daysToFill;
+  job.latestOnboardDate = latestOnboard || null;
+
+  // (optional) also keep startDate in sync, only move forward
+  if (latestOnboard && (!job.startDate || latestOnboard > job.startDate)) {
+    job.startDate = latestOnboard;
   }
-}
-
-async function reevaluateJobStatus(job, req = null) {
-  const jobId = job._id;
-  const offerCount = await Candidate.countDocuments({
-    jobRequisitionId: jobId,
-    progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
-    _offerCounted: true,
-    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
-  });
-  const onboardCount = await Candidate.countDocuments({
-    jobRequisitionId: jobId,
-    progress: 'Onboard',
-    _onboardCounted: true
-  });
-
-  job.offerCount = offerCount;
-  job.onboardCount = onboardCount;
-  job.status = onboardCount >= job.targetCandidates ? 'Filled'
-               : offerCount >= job.targetCandidates ? 'Suspended'
-               : 'Vacant';
 
   await job.save();
+
   const refreshed = await JobRequisition.findById(jobId).lean();
   if (req) {
     const io = req.app.get('io');
     io.emit('jobUpdated', { ...refreshed, offerCount, onboardCount });
   }
 }
+
+
 
 // ─────────────────────────────────────────────
 // UPLOAD candidate documents
@@ -361,15 +395,6 @@ exports.deleteDocument = async (req, res) => {
   }
 };
 
-exports.getAvailability = async (req, res) => {
-  try {
-    const status = await getAvailabilityStatus(req.params.id);
-    if (!status) return res.status(404).json({ message: 'Job not found' });
-    res.json(status);
-  } catch (err) {
-    res.status(500).json({ message: 'Availability error', error: err.message });
-  }
-};
 
 // ─────────────────────────────────────────────
 // GET job availability (offer/onboard counts vs target)
@@ -383,6 +408,7 @@ exports.getAvailability = async (req, res) => {
     res.status(500).json({ message: 'Availability error', error: err.message });
   }
 };
+
 
 // ─────────────────────────────────────────────
 // HELPER: Get current job offer/onboard availability
@@ -409,32 +435,4 @@ async function getAvailabilityStatus(jobId) {
   };
 }
 
-// ─────────────────────────────────────────────
-// HELPER: Reevaluate job status when candidate progress changes
-async function reevaluateJobStatus(job, req = null) {
-  const jobId = job._id;
-  const offerCount = await Candidate.countDocuments({
-    jobRequisitionId: jobId,
-    progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
-    _offerCounted: true,
-    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
-  });
-  const onboardCount = await Candidate.countDocuments({
-    jobRequisitionId: jobId,
-    progress: 'Onboard',
-    _onboardCounted: true
-  });
 
-  job.offerCount = offerCount;
-  job.onboardCount = onboardCount;
-  job.status = onboardCount >= job.targetCandidates ? 'Filled'
-               : offerCount >= job.targetCandidates ? 'Suspended'
-               : 'Vacant';
-
-  await job.save();
-  const refreshed = await JobRequisition.findById(jobId).lean();
-  if (req) {
-    const io = req.app.get('io');
-    io.emit('jobUpdated', { ...refreshed, offerCount, onboardCount });
-  }
-}

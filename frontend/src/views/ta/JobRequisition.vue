@@ -181,7 +181,7 @@
                     <v-text-field
                       v-bind="props"
                       v-model="form.startDate"
-                      label="New Hire Start Date"
+                      label="New Onboard Start Date"
                       readonly
                       prepend-inner-icon="mdi-calendar"
                       variant="outlined" autocomplete="off"
@@ -356,9 +356,10 @@
               <th>Opening Date</th>
               <th>Recruiter</th>
               <th>Status</th>
-              <th>New Hire Start Date</th>
+              <th>New Onboard Start Date</th>
               <th>Hiring Cost</th>
               <th>Vacancy / Target</th>
+              <th>Time to Fill</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -380,7 +381,7 @@
                   {{ job.status }}
                 </v-chip>
               </td>
-              <td>{{ formatDate(job.startDate) }}</td>
+              <td>{{ formatDate(job.latestOnboardDate || job.startDate) }}</td>
               <td>{{ formatCost(job.hiringCost) }}</td>
               <td>
                 <div class="d-flex align-center" style="gap: 6px;">
@@ -405,6 +406,12 @@
                     </strong>
                   </v-progress-circular>
                 </div>
+              </td>
+              <td>
+                <span v-if="job.daysToFill != null">
+                  {{  job.daysToFill }} Days
+                </span>
+                <span v-else>-</span>
               </td>
               <td style="display:flex; gap:3px;">
                 <v-btn icon size="small" color="primary" @click="editJob(job)">
@@ -810,19 +817,22 @@ const deleteJob = async job => {
 
 const exportToExcel = () => {
   const exportData = requisitions.value.map((job, index) => ({
-    No: index + 1,
-    'Job ID': job.jobRequisitionId,
-    Department: job.departmentName,
-    'Job Title': job.jobTitle,
-    Recruiter: job.recruiter,
-    'Opening Date': job.openingDate ? dayjs(job.openingDate).format('DD-MMM-YYYY') : '',
-    'Start Date': job.startDate ? dayjs(job.startDate).format('DD-MMM-YYYY') : '',
-    'Hiring Cost': job.hiringCost || '',
-    Status: job.status,
-    'Target Candidates': job.targetCandidates || '',
-    'Offer Count': job.offerCount || 0,
-    'Onboard Count': job.onboardCount || 0
-  }))
+  No: index + 1,
+  'Job ID': job.jobRequisitionId,
+  Department: job.departmentName,
+  'Job Title': job.jobTitle,
+  Recruiter: job.recruiter,
+  'Opening Date': job.openingDate ? dayjs(job.openingDate).format('DD-MMM-YYYY') : '',
+  'Onboard Start Date': (job.latestOnboardDate || job.startDate)
+    ? dayjs(job.latestOnboardDate || job.startDate).format('DD-MMM-YYYY')
+    : '',
+  'Hiring Cost': job.hiringCost || '',
+  Status: job.status,
+  'Target Candidates': job.targetCandidates || '',
+  'Offer Count': job.offerCount || 0,
+  'Onboard Count': job.onboardCount || 0,
+  'Time to Fill (days)': job.daysToFill ?? ''
+}));
 
   const worksheet = XLSX.utils.json_to_sheet(exportData)
   const workbook = XLSX.utils.book_new()

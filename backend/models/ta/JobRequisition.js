@@ -35,7 +35,10 @@ const jobRequisitionSchema = new mongoose.Schema({
     }
   },
 
-  onboardCount: { type: Number, default: 0 }
+  onboardCount: { type: Number, default: 0 },
+  offerCount: { type: Number, default: 0 },
+  latestOnboardDate: { type: Date },
+  daysToFill: { type: Number, default: null }
 
 }, { timestamps: true });
 

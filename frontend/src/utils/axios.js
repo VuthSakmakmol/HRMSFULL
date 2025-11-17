@@ -10,7 +10,7 @@ function resolveBaseURL() {
   const envUrl =
     (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) ||
     (typeof process !== 'undefined' && process.env && process.env.VITE_API_URL) ||
-    // 'http://157.245.59.122:4700/api'; // ✅ default with /api
+    // 'http://157.245.59.122:4700/api'; 
     'http://localhost:4700/api'; 
   // Fix common mistakes like missing colon before port or stray slashes
   // (We can’t fix a missing colon automatically, so ensure your env is correct.)

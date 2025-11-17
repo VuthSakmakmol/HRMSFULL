@@ -2,7 +2,7 @@
 const dayjs = require('dayjs');
 const mongoose = require('mongoose');
 const Attendance = require('../../models/hrss/attendances');
-require('../../models/ta/department');
+const Department = require('../../models/ta/Department');
 
 const TZ = process.env.TZ || 'Asia/Phnom_Penh';
 
