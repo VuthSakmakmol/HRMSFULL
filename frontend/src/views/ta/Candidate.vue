@@ -82,19 +82,29 @@
         <v-row dense>
           <v-col cols="12" md="3">
             <v-autocomplete
+              v-if="!isEditMode"
               v-model="selectedRequisition"
               :items="filteredJobTitleOptions"
               :item-title="item => `${item.jobRequisitionId} - ${item.jobTitle}`"
               item-value="_id"
               label="Job Title"
-              variant="outlined" autocomplete="off"
+              variant="outlined"
               density="compact"
               return-object
               auto-select-first
               required
-              
+            />
+            <v-text-field
+              v-else
+              :model-value="`${form.jobRequisitionCode} - ${form.jobTitle || ''}`"
+              label="Job Title"
+              variant="outlined"
+              density="compact"
+              readonly
+              disabled
             />
           </v-col>
+
           <v-col cols="8" md="2">
             <v-text-field
               v-model="form.fullName"
@@ -345,6 +355,7 @@ const form = ref({
   department: '',
   recruiter: '',
   jobRequisitionCode: '',
+  jobTitle: '',
   type: '',
   subType: '',
   hireDecision: 'Candidate in Process'
@@ -463,18 +474,21 @@ const startEdit = (candidate) => {
   isEditMode.value = true
   editId.value = candidate._id
 
-  selectedRequisition.value = jobRequisitions.value.find(j => j.jobRequisitionId === candidate.jobRequisitionCode)
-
   form.value = {
     fullName: candidate.fullName,
     applicationSource: candidate.applicationSource,
     department: candidate.department,
     recruiter: candidate.recruiter,
     jobRequisitionCode: candidate.jobRequisitionCode,
+    jobTitle: candidate.jobTitle,
     type: candidate.type,
     subType: candidate.subType,
     hireDecision: candidate.hireDecision || 'Candidate in Process'
   }
+
+  // we don't actually *need* selectedRequisition in edit mode anymore
+  selectedRequisition.value = null
+
   nextTick(() => {
     const formEl = formSection.value?.$el || formSection.value
     formEl?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -482,34 +496,56 @@ const startEdit = (candidate) => {
 }
 
 const submitCandidate = async () => {
-  if (!selectedRequisition.value) {
-    Swal.fire({ icon: 'error', title: 'Please select a job title' })
-    return
-  }
-
   const user = JSON.parse(localStorage.getItem('user'))
-  const company = user?.role === 'GeneralManager'
-    ? localStorage.getItem('company')
-    : user?.company
+  const selectedCompany = localStorage.getItem('company')
+  const company =
+    user?.role === 'GeneralManager'
+      ? selectedCompany
+      : user?.company
 
   if (!company) {
-    Swal.fire({ icon: 'error', title: 'Missing Company', text: 'Company not found in localStorage' })
+    Swal.fire({
+      icon: 'error',
+      title: 'Missing Company',
+      text: 'Company not found in localStorage'
+    })
     return
   }
 
-  const job = selectedRequisition.value
-  const payload = {
-    jobRequisitionId: job._id,
-    jobRequisitionCode: job.jobRequisitionId,
-    department: job.departmentName,
-    jobTitle: job.jobTitle,
-    recruiter: job.recruiter,
-    type: job.type,
-    subType: job.subType || 'General',
-    fullName: form.value.fullName,
-    applicationSource: form.value.applicationSource,
-    company,
-    hireDecision: form.value.hireDecision
+  let payload
+
+  if (isEditMode.value && editId.value) {
+    // ✏️ EDIT MODE: only update editable fields
+    payload = {
+      fullName: form.value.fullName,
+      recruiter: form.value.recruiter,
+      applicationSource: form.value.applicationSource,
+      hireDecision: form.value.hireDecision
+    }
+  } else {
+    // ➕ CREATE MODE: must have a job selected
+    if (!selectedRequisition.value) {
+      Swal.fire({ icon: 'error', title: 'Please select a job title' })
+      return
+    }
+
+    const job = selectedRequisition.value
+
+    payload = {
+      jobRequisitionId: job._id,
+      jobRequisitionCode: job.jobRequisitionId,
+      department: job.departmentName,
+      jobTitle: job.jobTitle,
+      recruiter: job.recruiter,
+      type: job.type,
+      subType: job.subType || 'General',
+
+      fullName: form.value.fullName,
+      applicationSource: form.value.applicationSource,
+      company,
+      // new candidates always start as in-process
+      hireDecision: 'Candidate in Process'
+    }
   }
 
   try {
@@ -525,9 +561,14 @@ const submitCandidate = async () => {
     updateJobLockedMap()
     toggleForm()
   } catch (err) {
-    Swal.fire({ icon: 'error', title: 'Error', text: err.response?.data?.message || 'Failed to save candidate' })
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: err.response?.data?.message || 'Failed to save candidate'
+    })
   }
 }
+
 
 const confirmDelete = async (candidate) => {
   const result = await Swal.fire({

@@ -129,10 +129,70 @@ exports.updateJobRequisition = async (req, res) => {
     const company = req.company;
 
     const existing = await JobRequisition.findOne({ _id: id, company });
-    if (!existing) return res.status(404).json({ message: 'Requisition not found' });
+    if (!existing) {
+      return res.status(404).json({ message: 'Requisition not found' });
+    }
 
+    // ── 1) If targetCandidates is being changed, validate it ─────────────────
+    if (req.body.targetCandidates != null) {
+      let newTarget = Number(req.body.targetCandidates);
+
+      if (!Number.isFinite(newTarget) || newTarget < 1) {
+        return res.status(400).json({ message: 'Invalid target candidates value' });
+      }
+
+      // Count current onboard (already hired & onboarded)
+      const onboardCount = await Candidate.countDocuments({
+        jobRequisitionId: existing._id,
+        progress: 'Onboard',
+        _onboardCounted: true,
+        hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+      });
+
+      // ❌ Cannot set target lower than current onboard
+      if (newTarget < onboardCount) {
+        return res.status(400).json({
+          message: `Target cannot be less than current onboard (${onboardCount}).`
+        });
+      }
+
+      // Make sure we store numeric value
+      req.body.targetCandidates = newTarget;
+    }
+
+    // ── 2) Update the requisition normally ───────────────────────────────────
     const updated = await JobRequisition.findByIdAndUpdate(id, req.body, { new: true });
 
+    // ── 3) Recompute status (Vacant / Suspended / Filled) based on new target
+    //     Skip if the job is Cancel (manual override)
+    if (updated.status !== 'Cancel') {
+      const [offerCount, onboardCount] = await Promise.all([
+        Candidate.countDocuments({
+          jobRequisitionId: updated._id,
+          progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
+          _offerCounted: true,
+          hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+        }),
+        Candidate.countDocuments({
+          jobRequisitionId: updated._id,
+          progress: 'Onboard',
+          _onboardCounted: true,
+          hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+        })
+      ]);
+
+      updated.offerCount   = offerCount;
+      updated.onboardCount = onboardCount;
+
+      updated.status =
+        onboardCount >= updated.targetCandidates ? 'Filled'
+        : offerCount >= updated.targetCandidates ? 'Suspended'
+        : 'Vacant';
+
+      await updated.save();
+    }
+
+    // ── 4) Log & emit ────────────────────────────────────────────────────────
     await logActivity({
       actionType: 'UPDATE',
       collectionName: 'JobRequisition',
@@ -143,7 +203,6 @@ exports.updateJobRequisition = async (req, res) => {
       company
     });
 
-    // ✅ Emit real-time update event
     const io = req.app.get('io');
     io.emit('jobUpdated', updated);
 
@@ -153,6 +212,7 @@ exports.updateJobRequisition = async (req, res) => {
     res.status(500).json({ message: 'Failed to update requisition', error: err.message });
   }
 };
+
 
 exports.deleteJobRequisition = async (req, res) => {
   try {
