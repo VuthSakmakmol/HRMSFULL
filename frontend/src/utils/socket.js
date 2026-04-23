@@ -3,7 +3,6 @@ import { io } from 'socket.io-client'
 
 // 🌐 Setup Socket.IO client with manual control
   const socket = io('http://localhost:4700', {
-  // 🔥 Replace with production URL when deploying:
   // const socket = io('http://157.245.59.122:4700', {
   autoConnect: false,             // Manual connect (we call connect later)
   transports: ['websocket'],      // Force WebSocket transport

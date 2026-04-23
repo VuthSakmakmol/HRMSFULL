@@ -105,7 +105,7 @@ import Swal from 'sweetalert2'
 import VueApexCharts from 'vue3-apexcharts'
 
 const selectedYear = ref(new Date().getFullYear())
-const yearOptions = Array.from({ length: 6 }, (_, i) => 2020 + i)
+const yearOptions = Array.from({ length: 9 }, (_, i) => 2020 + i)
 
 const target = ref(null)        // <-- null so no red line before data
 const newTarget = ref(0)

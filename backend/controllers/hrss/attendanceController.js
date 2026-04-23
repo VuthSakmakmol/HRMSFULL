@@ -43,46 +43,66 @@ function toMinutes(t) {
 }
 
 // Normalize Excel numeric time → HH:mm
-function normalizeExcelTime(str) {
-  if (!str && str !== 0) return '';
-  if (typeof str === 'number') {
-    const totalMinutes = Math.round(str * 24 * 60);
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+function normalizeExcelTime(v) {
+  if (v == null || v === '') return ''
+
+  // ✅ time as Date (Excel may output Date for time cells)
+  if (v instanceof Date && !isNaN(v)) {
+    return `${String(v.getHours()).padStart(2, '0')}:${String(v.getMinutes()).padStart(2, '0')}`
   }
-  str = String(str).trim();
+
+  // ✅ excel float time like 0.25
+  if (typeof v === 'number' && isFinite(v)) {
+    const totalMinutes = Math.round(v * 24 * 60)
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  }
+
+  let str = String(v).trim()
+
   if (/^\d{3,4}$/.test(str)) {
-    const h = str.slice(0, -2);
-    const m = str.slice(-2);
-    return `${h.padStart(2, '0')}:${m}`;
+    str = str.padStart(4, '0')
+    return `${str.slice(0, 2)}:${str.slice(2, 4)}`
   }
+
   if (/^\d{1,2}[.: ]\d{1,2}$/.test(str)) {
-    const [h, m] = str.split(/[.: ]/);
-    return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+    const [h, m] = str.split(/[.: ]/)
+    return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`
   }
-  if (/^\d{1,2}:\d{2}$/.test(str)) return str;
-  return '';
+
+  if (/^\d{1,2}:\d{2}$/.test(str)) return str
+  return ''
 }
 
 
 // Excel date formatter
 function formatExcelDate(value) {
   if (value == null || value === '') return null;
+
+  // ✅ If Excel already provided a real Date, use it directly (no dd/mm confusion)
+  if (value instanceof Date && !isNaN(value)) {
+    return dayjs(value).format('YYYY-MM-DD');
+  }
+
   if (typeof value === 'number' && isFinite(value)) {
     const parsed = XLSX.SSF.parse_date_code(value);
-    if (parsed && parsed.y && parsed.m && parsed.d)
-      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+    if (parsed?.y && parsed?.m && parsed?.d) {
+      return `${parsed.y}-${String(parsed.m).padStart(2,'0')}-${String(parsed.d).padStart(2,'0')}`;
+    }
   }
+
   if (typeof value === 'string') {
     const s = value.trim().replace(/[./\\\s]+/g, '-');
+
     const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, '0')}-${ymd[3].padStart(2, '0')}`;
+    if (ymd) return `${ymd[1]}-${String(ymd[2]).padStart(2,'0')}-${String(ymd[3]).padStart(2,'0')}`;
+
+    // ✅ Force DD-MM-YYYY (Cambodia)
     const dmy = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
-    const tentative = dayjs(s);
-    if (tentative.isValid()) return tentative.format('YYYY-MM-DD');
+    if (dmy) return `${dmy[3]}-${String(dmy[2]).padStart(2,'0')}-${String(dmy[1]).padStart(2,'0')}`;
   }
+
   return null;
 }
 
@@ -110,17 +130,9 @@ const hhmmToMin = (s) => {
 
 // Convert Excel → JSON while preserving leading zeros
 function readExcelAsStrings(buffer) {
-  const wb = XLSX.read(buffer, { type: 'buffer', cellText: false, cellDates: true });
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  for (let R = range.s.r; R <= range.e.r; ++R) {
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const addr = XLSX.utils.encode_cell({ r: R, c: C });
-      const cell = ws[addr];
-      if (cell && typeof cell.v !== 'string') cell.v = String(cell.v).padStart(4, '0');
-    }
-  }
-  return XLSX.utils.sheet_to_json(ws, { defval: '' });
+  return XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
 }
 
 /* ────────────────────── Evaluation with Template ────────────────────── */

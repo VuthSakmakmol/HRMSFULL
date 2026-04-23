@@ -24,7 +24,14 @@ async function generateCandidateId(type, subType) {
 // ─────────────────────────────────────────────
 // HELPER: compute "time to fill" in days from openingDate → latest Onboard date
 async function computeDaysToFill(job) {
-  if (!job.openingDate) return { daysToFill: null, latestOnboard: null };
+  if (!job.openingDate) {
+    return { daysToFill: null, latestOnboard: null };
+  }
+
+  const start = new Date(job.openingDate);
+  if (Number.isNaN(start.getTime())) {
+    return { daysToFill: null, latestOnboard: null };
+  }
 
   const onboardCandidates = await Candidate.find({
     jobRequisitionId: job._id,
@@ -33,14 +40,9 @@ async function computeDaysToFill(job) {
     hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
   }).select('progressDates');
 
-  if (!onboardCandidates.length) {
-    return { daysToFill: null, latestOnboard: null };
-  }
-
   let latestOnboard = null;
 
   for (const c of onboardCandidates) {
-    // progressDates can be Map or plain object
     const raw =
       (c.progressDates && c.progressDates.Onboard) ||
       (typeof c.progressDates?.get === 'function'
@@ -48,17 +50,16 @@ async function computeDaysToFill(job) {
         : null);
 
     if (!raw) continue;
+
     const d = new Date(raw);
-    if (!latestOnboard || d > latestOnboard) latestOnboard = d;
+    if (!Number.isNaN(d.getTime()) && (!latestOnboard || d > latestOnboard)) {
+      latestOnboard = d;
+    }
   }
 
-  if (!latestOnboard) {
-    return { daysToFill: null, latestOnboard: null };
-  }
-
-  const start = new Date(job.openingDate);
+  const end = latestOnboard || new Date();
   const msPerDay = 1000 * 60 * 60 * 24;
-  const daysToFill = Math.ceil((latestOnboard - start) / msPerDay);
+  const daysToFill = Math.max(0, Math.ceil((end - start) / msPerDay));
 
   return { daysToFill, latestOnboard };
 }

@@ -14,7 +14,7 @@ async function seedGM() {
 
   const gm = new User({
     name: 'Super GM',
-    email: 'gm@hrms.com',
+    email: 'admin@hrms.com',
     password: 'Admin@123', // will be hashed
     role: 'GeneralManager'
   });
