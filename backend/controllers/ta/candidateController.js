@@ -6,6 +6,10 @@ const JobRequisition = require('../../models/ta/JobRequisition');
 const Counter = require('../../models/ta/Counter');
 const { logActivity } = require('../../utils/logActivity');
 
+const {
+  recomputeWhiteCollarActualHCByDate,
+} = require('../../utils/ta/roadmapSync');
+
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -79,6 +83,16 @@ function buildCandidateFilter(query = {}, company) {
   return filter;
 }
 
+function getProgressDate(candidate, key) {
+  if (!candidate || !candidate.progressDates) return null;
+
+  if (typeof candidate.progressDates.get === 'function') {
+    return candidate.progressDates.get(key) || null;
+  }
+
+  return candidate.progressDates[key] || null;
+}
+
 // 🎯 Generate candidateId with type/subtype-based prefix
 async function generateCandidateId(type, subType) {
   const now = new Date();
@@ -86,6 +100,7 @@ async function generateCandidateId(type, subType) {
   const year = String(now.getFullYear()).slice(-2);
 
   let prefixType = 'WC';
+
   if (type === 'Blue Collar') {
     prefixType = subType === 'Sewer' ? 'BS' : 'BN';
   }
@@ -105,12 +120,19 @@ async function generateCandidateId(type, subType) {
 // HELPER: compute "time to fill" in days from openingDate → latest Onboard date
 async function computeDaysToFill(job) {
   if (!job.openingDate) {
-    return { daysToFill: null, latestOnboard: null };
+    return {
+      daysToFill: null,
+      latestOnboard: null,
+    };
   }
 
   const start = new Date(job.openingDate);
+
   if (Number.isNaN(start.getTime())) {
-    return { daysToFill: null, latestOnboard: null };
+    return {
+      daysToFill: null,
+      latestOnboard: null,
+    };
   }
 
   const onboardCandidates = await Candidate.find({
@@ -123,15 +145,12 @@ async function computeDaysToFill(job) {
   let latestOnboard = null;
 
   for (const c of onboardCandidates) {
-    const raw =
-      (c.progressDates && c.progressDates.Onboard) ||
-      (typeof c.progressDates?.get === 'function'
-        ? c.progressDates.get('Onboard')
-        : null);
+    const raw = getProgressDate(c, 'Onboard');
 
     if (!raw) continue;
 
     const d = new Date(raw);
+
     if (!Number.isNaN(d.getTime()) && (!latestOnboard || d > latestOnboard)) {
       latestOnboard = d;
     }
@@ -141,7 +160,10 @@ async function computeDaysToFill(job) {
   const msPerDay = 1000 * 60 * 60 * 24;
   const daysToFill = Math.max(0, Math.ceil((end - start) / msPerDay));
 
-  return { daysToFill, latestOnboard };
+  return {
+    daysToFill,
+    latestOnboard,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -165,6 +187,7 @@ exports.create = async (req, res) => {
     const candidateId = await generateCandidateId(type, subType);
 
     const progressDates = req.body.progressDates || {};
+
     if (!progressDates.Application) {
       progressDates.Application = new Date();
     }
@@ -205,6 +228,7 @@ exports.create = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error creating candidate:', err);
+
     res.status(500).json({
       message: 'Failed to create candidate',
       error: err.message,
@@ -226,7 +250,10 @@ exports.getAll = async (req, res) => {
     const filter = buildCandidateFilter(req.query, company);
     const total = await Candidate.countDocuments(filter);
 
-    let query = Candidate.find(filter).sort({ createdAt: -1, _id: -1 });
+    let query = Candidate.find(filter).sort({
+      createdAt: -1,
+      _id: -1,
+    });
 
     if (!exportAll) {
       query = query.skip(skip).limit(limit);
@@ -247,6 +274,7 @@ exports.getAll = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error fetching candidates:', err);
+
     res.status(500).json({
       message: 'Fetch error',
       error: err.message,
@@ -266,12 +294,15 @@ exports.getOne = async (req, res) => {
     });
 
     if (!candidate) {
-      return res.status(404).json({ message: 'Candidate not found' });
+      return res.status(404).json({
+        message: 'Candidate not found',
+      });
     }
 
     res.json(candidate);
   } catch (err) {
     console.error('❌ Error fetching candidate:', err);
+
     res.status(500).json({
       message: 'Fetch error',
       error: err.message,
@@ -291,7 +322,9 @@ exports.update = async (req, res) => {
     });
 
     if (!candidate) {
-      return res.status(404).json({ message: 'Candidate not found' });
+      return res.status(404).json({
+        message: 'Candidate not found',
+      });
     }
 
     const previousData = candidate.toObject();
@@ -301,7 +334,9 @@ exports.update = async (req, res) => {
       const newJob = await JobRequisition.findById(req.body.jobRequisitionId);
 
       if (!newJob) {
-        return res.status(404).json({ message: 'Job requisition not found' });
+        return res.status(404).json({
+          message: 'Job requisition not found',
+        });
       }
 
       const jobChanged = String(candidate.jobRequisitionId) !== String(newJob._id);
@@ -347,8 +382,19 @@ exports.update = async (req, res) => {
       ['Candidate Refusal', 'Not Hired', 'Candidate in Process'].includes(req.body.hireDecision)
     ) {
       const job = await JobRequisition.findById(candidate.jobRequisitionId);
+
       if (job) {
         await reevaluateJobStatus(job, req);
+      }
+
+      // ✅ White Collar actualHC sync after final decision changes
+      const onboardDate = getProgressDate(candidate, 'Onboard');
+
+      if (candidate.type === 'White Collar' && onboardDate) {
+        await recomputeWhiteCollarActualHCByDate({
+          company,
+          date: onboardDate,
+        });
       }
     }
 
@@ -358,6 +404,7 @@ exports.update = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error updating candidate:', err);
+
     res.status(500).json({
       message: 'Update error',
       error: err.message,
@@ -377,10 +424,13 @@ exports.remove = async (req, res) => {
     });
 
     if (!candidate) {
-      return res.status(404).json({ message: 'Candidate not found' });
+      return res.status(404).json({
+        message: 'Candidate not found',
+      });
     }
 
     const previousData = candidate.toObject();
+    const onboardDate = getProgressDate(candidate, 'Onboard');
 
     await candidate.deleteOne();
 
@@ -397,8 +447,17 @@ exports.remove = async (req, res) => {
     });
 
     const job = await JobRequisition.findById(candidate.jobRequisitionId);
+
     if (job) {
       await reevaluateJobStatus(job, req);
+    }
+
+    // ✅ White Collar actualHC sync after delete onboarded candidate
+    if (candidate.type === 'White Collar' && onboardDate) {
+      await recomputeWhiteCollarActualHCByDate({
+        company,
+        date: onboardDate,
+      });
     }
 
     res.json({
@@ -406,6 +465,7 @@ exports.remove = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error deleting candidate:', err);
+
     res.status(500).json({
       message: 'Delete error',
       error: err.message,
@@ -426,7 +486,9 @@ exports.updateStage = async (req, res) => {
     });
 
     if (!candidate) {
-      return res.status(404).json({ message: 'Candidate not found' });
+      return res.status(404).json({
+        message: 'Candidate not found',
+      });
     }
 
     if (['Candidate Refusal', 'Not Hired'].includes(candidate.hireDecision)) {
@@ -438,7 +500,9 @@ exports.updateStage = async (req, res) => {
     const job = await JobRequisition.findById(candidate.jobRequisitionId);
 
     if (!job) {
-      return res.status(404).json({ message: 'Job requisition not found' });
+      return res.status(404).json({
+        message: 'Job requisition not found',
+      });
     }
 
     if (job.status === 'Cancel') {
@@ -448,10 +512,17 @@ exports.updateStage = async (req, res) => {
     }
 
     const previousData = candidate.toObject();
+    const previousOnboardDate = previousData?.progressDates?.Onboard || null;
 
     const stageOrder = ['Application', 'ManagerReview', 'Interview', 'JobOffer', 'Hired', 'Onboard'];
     const currentIndex = stageOrder.indexOf(candidate.progress);
     const targetIndex = stageOrder.indexOf(stage);
+
+    if (!stageOrder.includes(stage)) {
+      return res.status(400).json({
+        message: 'Invalid stage',
+      });
+    }
 
     if (targetIndex > currentIndex) {
       candidate.progress = stage;
@@ -499,6 +570,25 @@ exports.updateStage = async (req, res) => {
 
     await reevaluateJobStatus(job, req);
 
+    // ✅ White Collar Roadmap actualHC sync
+    if (candidate.type === 'White Collar') {
+      if (previousOnboardDate) {
+        await recomputeWhiteCollarActualHCByDate({
+          company,
+          date: previousOnboardDate,
+        });
+      }
+
+      const currentOnboardDate = getProgressDate(candidate, 'Onboard');
+
+      if (currentOnboardDate) {
+        await recomputeWhiteCollarActualHCByDate({
+          company,
+          date: currentOnboardDate,
+        });
+      }
+    }
+
     req.app.get('io').emit('candidateUpdated', candidate);
 
     await logActivity({
@@ -517,6 +607,7 @@ exports.updateStage = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error updating stage:', err);
+
     res.status(500).json({
       message: 'Internal server error',
       error: err.message,
@@ -568,6 +659,7 @@ async function reevaluateJobStatus(job, req = null) {
 
   if (req) {
     const io = req.app.get('io');
+
     io.emit('jobUpdated', {
       ...refreshed,
       offerCount,
@@ -596,7 +688,9 @@ exports.uploadDocument = async (req, res) => {
     });
 
     if (!candidate) {
-      return res.status(404).json({ message: 'Candidate not found' });
+      return res.status(404).json({
+        message: 'Candidate not found',
+      });
     }
 
     const uploaded = req.files.map((file) => file.filename);
@@ -611,6 +705,7 @@ exports.uploadDocument = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error uploading documents:', err);
+
     res.status(500).json({
       message: 'Upload error',
       error: err.message,
@@ -630,7 +725,9 @@ exports.deleteDocument = async (req, res) => {
     });
 
     if (!candidate) {
-      return res.status(404).json({ message: 'Candidate not found' });
+      return res.status(404).json({
+        message: 'Candidate not found',
+      });
     }
 
     const { filename } = req.body;
@@ -650,6 +747,7 @@ exports.deleteDocument = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error deleting document:', err);
+
     res.status(500).json({
       message: 'Delete error',
       error: err.message,
@@ -664,12 +762,15 @@ exports.getAvailability = async (req, res) => {
     const status = await getAvailabilityStatus(req.params.id);
 
     if (!status) {
-      return res.status(404).json({ message: 'Job not found' });
+      return res.status(404).json({
+        message: 'Job not found',
+      });
     }
 
     res.json(status);
   } catch (err) {
     console.error('❌ Error checking availability:', err);
+
     res.status(500).json({
       message: 'Availability error',
       error: err.message,

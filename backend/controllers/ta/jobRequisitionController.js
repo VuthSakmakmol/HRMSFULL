@@ -1,9 +1,14 @@
 // backend/controllers/ta/jobRequisitionController.js
+
 const JobRequisition = require('../../models/ta/JobRequisition');
 const Department = require('../../models/ta/Department');
 const Counter = require('../../models/ta/Counter');
 const Candidate = require('../../models/ta/Candidate');
 const { logActivity } = require('../../utils/logActivity');
+
+const {
+  syncWhiteCollarRoadmapForRequisitionChange,
+} = require('../../utils/ta/roadmapSync');
 
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -112,11 +117,15 @@ async function enrichJobRequisitions(jobList = []) {
   ]);
 
   const countMap = {};
+
   counts.forEach(({ _id, count }) => {
     const jobId = _id.jobRequisitionId.toString();
 
     if (!countMap[jobId]) {
-      countMap[jobId] = { offerCount: 0, onboardCount: 0 };
+      countMap[jobId] = {
+        offerCount: 0,
+        onboardCount: 0,
+      };
     }
 
     if (_id.progress === 'Onboard') {
@@ -136,6 +145,7 @@ async function enrichJobRequisitions(jobList = []) {
 
     if (!job.latestOnboardDate && job.openingDate) {
       const start = new Date(job.openingDate);
+
       if (!Number.isNaN(start.getTime())) {
         const msPerDay = 1000 * 60 * 60 * 24;
         liveDaysToFill = Math.max(0, Math.ceil((new Date() - start) / msPerDay));
@@ -162,6 +172,7 @@ exports.getAllJobTitles = async (req, res) => {
     );
 
     const jobTitleList = [];
+
     departments.forEach((dept) => {
       if (Array.isArray(dept.jobTitles)) {
         dept.jobTitles.forEach((title) => {
@@ -177,10 +188,16 @@ exports.getAllJobTitles = async (req, res) => {
       }
     });
 
-    res.status(200).json({ jobTitles: jobTitleList });
+    res.status(200).json({
+      jobTitles: jobTitleList,
+    });
   } catch (err) {
     console.error('❌ Failed to fetch job titles:', err);
-    res.status(500).json({ message: 'Error fetching job titles', error: err.message });
+
+    res.status(500).json({
+      message: 'Error fetching job titles',
+      error: err.message,
+    });
   }
 };
 
@@ -202,12 +219,16 @@ exports.createJobRequisition = async (req, res) => {
     } = req.body;
 
     const dept = await Department.findById(departmentId);
+
     if (!dept) {
-      return res.status(400).json({ message: 'Invalid department ID' });
+      return res.status(400).json({
+        message: 'Invalid department ID',
+      });
     }
 
     const company = req.company.toUpperCase();
-    const resolvedSubType = type === 'Blue Collar' ? (subType || 'Non-Sewer') : undefined;
+    const resolvedTargetCandidates = Math.max(1, Number(targetCandidates || 1));
+    const resolvedSubType = type === 'Blue Collar' ? subType || 'Non-Sewer' : undefined;
     const prefix = type === 'Blue Collar' ? 'BJR' : 'WJR';
 
     const counter = await Counter.findOneAndUpdate(
@@ -224,9 +245,9 @@ exports.createJobRequisition = async (req, res) => {
       departmentName,
       jobTitle,
       recruiter,
-      targetCandidates: targetCandidates || 1,
+      targetCandidates: resolvedTargetCandidates,
       hiringCost,
-      status,
+      status: status || 'Vacant',
       type,
       subType: resolvedSubType,
       openingDate,
@@ -235,6 +256,13 @@ exports.createJobRequisition = async (req, res) => {
     });
 
     await newRequisition.save();
+
+    // ✅ Auto White Collar Roadmap increase
+    await syncWhiteCollarRoadmapForRequisitionChange({
+      company,
+      before: null,
+      after: newRequisition.toObject(),
+    });
 
     await logActivity({
       actionType: 'CREATE',
@@ -253,6 +281,7 @@ exports.createJobRequisition = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error creating job requisition:', err);
+
     res.status(500).json({
       message: 'Failed to create job requisition',
       error: err.message,
@@ -267,15 +296,23 @@ exports.updateJobRequisition = async (req, res) => {
     const company = req.company.toUpperCase();
 
     const existing = await JobRequisition.findOne({ _id: id, company });
+
     if (!existing) {
-      return res.status(404).json({ message: 'Requisition not found' });
+      return res.status(404).json({
+        message: 'Requisition not found',
+      });
     }
+
+    // ✅ Old state for roadmap difference calculation
+    const roadmapBefore = existing.toObject();
 
     if (req.body.targetCandidates != null) {
       const newTarget = Number(req.body.targetCandidates);
 
       if (!Number.isFinite(newTarget) || newTarget < 1) {
-        return res.status(400).json({ message: 'Invalid target candidates value' });
+        return res.status(400).json({
+          message: 'Invalid target candidates value',
+        });
       }
 
       const onboardCount = await Candidate.countDocuments({
@@ -299,6 +336,12 @@ exports.updateJobRequisition = async (req, res) => {
       req.body,
       { new: true }
     );
+
+    if (!updated) {
+      return res.status(404).json({
+        message: 'Requisition not found after update',
+      });
+    }
 
     if (updated.status !== 'Cancel') {
       const [offerCount, onboardCount] = await Promise.all([
@@ -329,6 +372,13 @@ exports.updateJobRequisition = async (req, res) => {
       await updated.save();
     }
 
+    // ✅ Auto White Collar Roadmap sync for target/date/type/status changes
+    await syncWhiteCollarRoadmapForRequisitionChange({
+      company,
+      before: roadmapBefore,
+      after: updated.toObject(),
+    });
+
     await logActivity({
       actionType: 'UPDATE',
       collectionName: 'JobRequisition',
@@ -341,22 +391,35 @@ exports.updateJobRequisition = async (req, res) => {
 
     req.app.get('io').emit('jobUpdated', updated);
 
-    res.json({ message: 'Job requisition updated.', requisition: updated });
+    res.json({
+      message: 'Job requisition updated.',
+      requisition: updated,
+    });
   } catch (err) {
     console.error('❌ Error updating requisition:', err);
-    res.status(500).json({ message: 'Failed to update requisition', error: err.message });
+
+    res.status(500).json({
+      message: 'Failed to update requisition',
+      error: err.message,
+    });
   }
 };
 
+// 🔴 Delete a requisition
 exports.deleteJobRequisition = async (req, res) => {
   try {
     const { id } = req.params;
     const company = req.company.toUpperCase();
 
     const job = await JobRequisition.findOne({ _id: id, company });
+
     if (!job) {
-      return res.status(404).json({ message: 'Requisition not found' });
+      return res.status(404).json({
+        message: 'Requisition not found',
+      });
     }
+
+    const roadmapBefore = job.toObject();
 
     await logActivity({
       actionType: 'DELETE',
@@ -368,15 +431,30 @@ exports.deleteJobRequisition = async (req, res) => {
     });
 
     await JobRequisition.findByIdAndDelete(id);
+
+    // ✅ Auto White Collar Roadmap decrease
+    await syncWhiteCollarRoadmapForRequisitionChange({
+      company,
+      before: roadmapBefore,
+      after: null,
+    });
+
     req.app.get('io').emit('jobDeleted', job._id);
 
-    res.json({ message: 'Job requisition deleted successfully.' });
+    res.json({
+      message: 'Job requisition deleted successfully.',
+    });
   } catch (err) {
     console.error('❌ Error deleting requisition:', err);
-    res.status(500).json({ message: 'Failed to delete requisition', error: err.message });
+
+    res.status(500).json({
+      message: 'Failed to delete requisition',
+      error: err.message,
+    });
   }
 };
 
+// 📋 Get requisitions with backend pagination + exportAll
 exports.getJobRequisitions = async (req, res) => {
   try {
     const company = req.company.toUpperCase();
@@ -389,8 +467,10 @@ exports.getJobRequisitions = async (req, res) => {
     const filter = buildJobRequisitionFilter(req.query, company);
     const total = await JobRequisition.countDocuments(filter);
 
-    let query = JobRequisition.find(filter)
-      .sort({ createdAt: -1, _id: -1 });
+    let query = JobRequisition.find(filter).sort({
+      createdAt: -1,
+      _id: -1,
+    });
 
     if (!exportAll) {
       query = query.skip(skip).limit(limit);
@@ -412,6 +492,7 @@ exports.getJobRequisitions = async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error fetching job requisitions:', err);
+
     res.status(500).json({
       message: 'Error fetching requisitions',
       error: err.message,
@@ -433,10 +514,17 @@ exports.getVacantRequisitions = async (req, res) => {
     if (type) query.type = type;
     if (subType) query.subType = subType;
 
-    const vacant = await JobRequisition.find(query).sort({ createdAt: -1 });
+    const vacant = await JobRequisition.find(query).sort({
+      createdAt: -1,
+    });
+
     res.json(vacant);
   } catch (err) {
     console.error('❌ Error fetching vacant requisitions:', err);
-    res.status(500).json({ message: 'Failed to fetch vacant requisitions', error: err.message });
+
+    res.status(500).json({
+      message: 'Failed to fetch vacant requisitions',
+      error: err.message,
+    });
   }
 };

@@ -1,3 +1,5 @@
+<!-- src/tacomponents/MonthlyApplicationLine.vue -->
+
 <template>
   <v-card class="pa-4" elevation="3">
     <v-row justify="center">
@@ -11,7 +13,7 @@
           :series="seriesData"
         />
 
-        <div v-if="seriesData[0].data.length === 0" class="text-caption text-grey mt-2">
+        <div v-if="!hasData" class="text-caption text-grey mt-2">
           No monthly data available.
         </div>
       </v-col>
@@ -22,44 +24,89 @@
 <script setup>
 import { computed } from 'vue'
 
+const MONTH_LABELS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+]
+
 const props = defineProps({
-  labels: { type: Array, default: () => [] },
-  series: { type: Array, default: () => [] } // series of numbers
+  labels: {
+    type: Array,
+    default: () => [],
+  },
+  series: {
+    type: Array,
+    default: () => [],
+  },
 })
 
-// Wrap series inside Apex format
+const safeLabels = computed(() => {
+  return props.labels.length ? props.labels : MONTH_LABELS
+})
+
+const safeSeries = computed(() => {
+  return safeLabels.value.map((_, index) => {
+    const value = Number(props.series[index] || 0)
+    return Number.isFinite(value) ? value : 0
+  })
+})
+
+const hasData = computed(() => {
+  return safeSeries.value.some((value) => value > 0)
+})
+
 const seriesData = computed(() => [
   {
     name: 'Applications',
-    data: props.series
-  }
+    data: safeSeries.value,
+  },
 ])
 
 const chartOptions = computed(() => ({
   chart: {
     id: 'monthly-applications',
-    toolbar: { show: false },
-    animations: { enabled: false }
+    toolbar: {
+      show: false,
+    },
+    animations: {
+      enabled: false,
+    },
   },
   xaxis: {
-    categories: props.labels
+    categories: safeLabels.value,
   },
   yaxis: {
     title: {
-      text: 'Applications'
-    }
+      text: 'Applications',
+    },
+    min: 0,
+    forceNiceScale: true,
+    labels: {
+      formatter: (value) => Math.round(value),
+    },
   },
   colors: ['#3f51b5'],
   dataLabels: {
     enabled: true,
-    style: { fontSize: '12px' }
+    style: {
+      fontSize: '12px',
+    },
   },
   stroke: {
-    curve: 'smooth'
+    curve: 'smooth',
+    width: 3,
+  },
+  markers: {
+    size: 4,
   },
   tooltip: {
-    enabled: true
-  }
+    enabled: true,
+    y: {
+      formatter: (value) => {
+        return `${value} application${value === 1 ? '' : 's'}`
+      },
+    },
+  },
 }))
 </script>
 
