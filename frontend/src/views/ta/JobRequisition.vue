@@ -1180,12 +1180,46 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 
-.v-table thead th {
-  background-color: #fafafa;
+/* ✅ Freeze Job Requisition table header like Candidate table */
+.scroll-wrapper-x {
+  overflow-x: auto;
+  overflow-y: auto;
+  width: 100%;
+  display: block;
+
+  height: clamp(360px, calc(100vh - 310px), 540px);
+  max-height: clamp(360px, calc(100vh - 310px), 540px);
+
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  position: relative;
+}
+
+/* ✅ Important for Vuetify table inside scoped style */
+.scroll-wrapper-x :deep(.v-table__wrapper) {
+  overflow: visible !important;
+}
+
+.scroll-wrapper-x :deep(table) {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* ✅ Sticky header */
+.scroll-wrapper-x :deep(thead th) {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 20 !important;
+  background-color: #fafafa !important;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* ✅ Keep header above row hover/background */
+.scroll-wrapper-x :deep(thead) {
   position: sticky;
   top: 0;
-  z-index: 2;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  z-index: 21;
 }
 
 .hover-filled {

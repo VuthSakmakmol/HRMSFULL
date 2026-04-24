@@ -11,6 +11,8 @@ const MONTHS = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
+const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
+
 const sources = [
   'FIF',
   'Banner / Job Announcement Board',
@@ -57,35 +59,135 @@ function normalizeMonthParam(value) {
 
   if (!Number.isFinite(n)) return null;
 
-  // Frontend may send 1-12.
+  // Frontend sends 1-12.
   if (n >= 1 && n <= 12) return n - 1;
 
-  // Old logic may send 0-11.
+  // Support old 0-11 format.
   if (n >= 0 && n <= 11) return n;
 
   return null;
 }
 
-function getIndex(view, monthIndex) {
-  if (view === 'year') return 0;
-  if (view === 'quarter') return Math.floor(monthIndex / 3);
-  return monthIndex;
+function normalizeQuarterParam(value) {
+  if (value === null || value === undefined || value === '') return null;
+
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) return null;
+
+  // Frontend sends 1-4.
+  if (n >= 1 && n <= 4) return n - 1;
+
+  // Support old 0-3 format.
+  if (n >= 0 && n <= 3) return n;
+
+  return null;
 }
 
 function getQuarterMonths(qIndex) {
   return [qIndex * 3, qIndex * 3 + 1, qIndex * 3 + 2];
 }
 
-function initialArray(view) {
+function buildColumns(view, year, selectedMonthIndex, selectedQuarterIndex) {
+  if (view === 'year') {
+    return [String(year)];
+  }
+
+  // Quarter YTD.
+  // Q2 => Q1 | Q2 | YTD Total
+  if (view === 'quarter') {
+    if (selectedQuarterIndex !== null) {
+      return [
+        ...QUARTERS.slice(0, selectedQuarterIndex + 1),
+        'YTD Total',
+      ];
+    }
+
+    return QUARTERS;
+  }
+
+  // Month YTD.
+  // Feb => Jan | Feb | YTD Total
+  if (selectedMonthIndex !== null) {
+    return [
+      ...MONTHS.slice(0, selectedMonthIndex + 1),
+      'YTD Total',
+    ];
+  }
+
+  return MONTHS;
+}
+
+function initialArray(view, selectedMonthIndex, selectedQuarterIndex) {
   if (view === 'year') return [0];
-  if (view === 'quarter') return Array(4).fill(0);
+
+  if (view === 'quarter') {
+    if (selectedQuarterIndex !== null) {
+      return Array(selectedQuarterIndex + 2).fill(0);
+    }
+
+    return Array(4).fill(0);
+  }
+
+  if (selectedMonthIndex !== null) {
+    return Array(selectedMonthIndex + 2).fill(0);
+  }
+
   return Array(12).fill(0);
 }
 
-function buildColumns(view, year) {
-  if (view === 'year') return [String(year)];
-  if (view === 'quarter') return ['Q1', 'Q2', 'Q3', 'Q4'];
-  return MONTHS;
+function addCountToSeries(
+  series,
+  view,
+  monthIndex,
+  selectedMonthIndex,
+  selectedQuarterIndex,
+  amount = 1
+) {
+  const value = normalizeNumber(amount);
+
+  if (view === 'year') {
+    series[0] += value;
+    return;
+  }
+
+  if (view === 'quarter') {
+    const qIndex = Math.floor(monthIndex / 3);
+
+    // Quarter YTD mode.
+    if (selectedQuarterIndex !== null) {
+      if (qIndex <= selectedQuarterIndex) {
+        series[qIndex] += value;
+
+        const totalIndex = selectedQuarterIndex + 1;
+        series[totalIndex] += value;
+      }
+
+      return;
+    }
+
+    if (series[qIndex] !== undefined) {
+      series[qIndex] += value;
+    }
+
+    return;
+  }
+
+  // Month YTD mode.
+  if (selectedMonthIndex !== null) {
+    if (monthIndex <= selectedMonthIndex) {
+      series[monthIndex] += value;
+
+      const totalIndex = selectedMonthIndex + 1;
+      series[totalIndex] += value;
+    }
+
+    return;
+  }
+
+  if (series[monthIndex] !== undefined) {
+    series[monthIndex] += value;
+  }
 }
 
 function buildTypeMatch(type, subType) {
@@ -120,6 +222,23 @@ function candidateMatchesType(candidate, type, subType) {
   }
 
   return true;
+}
+
+function getRoadmapMonthIndex(value) {
+  if (value === null || value === undefined || value === '') return -1;
+
+  const n = Number(value);
+
+  if (Number.isFinite(n)) {
+    if (n >= 1 && n <= 12) return n - 1;
+    if (n >= 0 && n <= 11) return n;
+  }
+
+  const raw = normalizeText(value);
+
+  return MONTHS.findIndex(
+    (monthName) => monthName.toLowerCase() === raw.toLowerCase()
+  );
 }
 
 async function getRequisitionsForRoadmapMonth({
@@ -190,10 +309,6 @@ async function countActualHCFromRequisitions({ company, requisitionIds }) {
   return Candidate.countDocuments({
     company,
     jobRequisitionId: { $in: requisitionIds },
-
-    // Actual HC = onboarded only.
-    // Do not use updatedAt because it can mix old data into another month.
-    // Do not count all candidates in the month.
     $or: [
       { progress: 'Onboard' },
       { _onboardCounted: true },
@@ -225,33 +340,33 @@ async function getRoadmapMetricsByMonth({
     };
   }
 
-  const roadmapQuery = {
+  const manualRoadmapQuery = {
     company,
     year: Number(year),
+    type: 'Blue Collar',
   };
 
-  if (type && type !== 'All') {
-    roadmapQuery.type = type;
-  }
-
   if (type === 'Blue Collar') {
-    roadmapQuery.subType = subType || 'Non-Sewer';
-  }
-
-  // White Collar roadmap is virtual from JobRequisition, not manual Roadmap.
-  if (type === 'White Collar') {
-    roadmapQuery.type = '__NO_MANUAL_WHITE_COLLAR__';
+    manualRoadmapQuery.subType = subType || 'Non-Sewer';
   }
 
   const manualRoadmaps =
     type === 'Blue Collar' || type === 'All'
-      ? await Roadmap.find(roadmapQuery)
+      ? await Roadmap.find(manualRoadmapQuery)
       : [];
 
-  const manualRoadmapByMonth = new Map();
+  const manualRoadmapSumByMonth = new Map();
 
-  for (const r of manualRoadmaps) {
-    manualRoadmapByMonth.set(r.month, r);
+  for (const roadmap of manualRoadmaps) {
+    const monthIndex = getRoadmapMonthIndex(roadmap.month);
+
+    if (monthIndex >= 0 && monthIndex <= 11) {
+      const oldValue = manualRoadmapSumByMonth.get(monthIndex) || 0;
+      manualRoadmapSumByMonth.set(
+        monthIndex,
+        oldValue + normalizeNumber(roadmap.roadmapHC)
+      );
+    }
   }
 
   for (let i = 0; i < 12; i += 1) {
@@ -266,7 +381,6 @@ async function getRoadmapMetricsByMonth({
     });
 
     const requisitionIds = requisitions.map((req) => req._id);
-
     const requestedHC = sumTargetCandidates(requisitions);
 
     const [actualHC, cancelledHC] = await Promise.all([
@@ -286,16 +400,14 @@ async function getRoadmapMetricsByMonth({
     let roadmapHC = 0;
 
     if (type === 'White Collar') {
-      // White Collar roadmap is auto generated from active requisition targetCandidates.
-      roadmapHC = requestedHC;
+      // White Collar roadmap planning = active requested HC + cancelled HC.
+      roadmapHC = requestedHC + cancelledHC;
     } else if (type === 'Blue Collar') {
-      // Blue Collar roadmap HC is manual planning from Roadmap table.
-      const manual = manualRoadmapByMonth.get(monthName);
-      roadmapHC = normalizeNumber(manual?.roadmapHC);
+      // Blue Collar roadmap planning = manual Roadmap table.
+      roadmapHC = normalizeNumber(manualRoadmapSumByMonth.get(i));
     } else {
-      // All mode: combine manual roadmap + active requisition target.
-      const manual = manualRoadmapByMonth.get(monthName);
-      roadmapHC = normalizeNumber(manual?.roadmapHC) + requestedHC;
+      // All mode = Blue Collar manual planning + White Collar requisition demand.
+      roadmapHC = normalizeNumber(manualRoadmapSumByMonth.get(i)) + requestedHC + cancelledHC;
     }
 
     const hiringTargetHC = Math.max(0, roadmapHC - actualHC - cancelledHC);
@@ -312,7 +424,21 @@ async function getRoadmapMetricsByMonth({
   return roadmapMap;
 }
 
-function getCombinedRoadmap(key, view, months, roadmapMap) {
+function getQuarterTotal(key, quarterIndex, roadmapMap) {
+  return getQuarterMonths(quarterIndex).reduce((sum, monthIndex) => {
+    const monthName = getMonthName(monthIndex);
+    return sum + normalizeNumber(roadmapMap[monthName]?.[key]);
+  }, 0);
+}
+
+function getCombinedRoadmap(
+  key,
+  view,
+  months,
+  roadmapMap,
+  selectedMonthIndex,
+  selectedQuarterIndex
+) {
   if (view === 'year') {
     return [
       months.reduce((sum, monthName) => {
@@ -322,12 +448,35 @@ function getCombinedRoadmap(key, view, months, roadmapMap) {
   }
 
   if (view === 'quarter') {
-    return [0, 1, 2, 3].map((q) => {
-      return getQuarterMonths(q).reduce((sum, monthIndex) => {
-        const monthName = getMonthName(monthIndex);
-        return sum + normalizeNumber(roadmapMap[monthName]?.[key]);
+    // Quarter YTD.
+    if (selectedQuarterIndex !== null) {
+      const values = QUARTERS
+        .slice(0, selectedQuarterIndex + 1)
+        .map((_, qIndex) => getQuarterTotal(key, qIndex, roadmapMap));
+
+      const total = values.reduce((sum, value) => {
+        return sum + normalizeNumber(value);
       }, 0);
+
+      return [...values, total];
+    }
+
+    return [0, 1, 2, 3].map((qIndex) => {
+      return getQuarterTotal(key, qIndex, roadmapMap);
     });
+  }
+
+  // Month YTD.
+  if (selectedMonthIndex !== null) {
+    const values = months
+      .slice(0, selectedMonthIndex + 1)
+      .map((monthName) => normalizeNumber(roadmapMap[monthName]?.[key]));
+
+    const total = values.reduce((sum, value) => {
+      return sum + normalizeNumber(value);
+    }, 0);
+
+    return [...values, total];
   }
 
   return months.map((monthName) => {
@@ -335,7 +484,13 @@ function getCombinedRoadmap(key, view, months, roadmapMap) {
   });
 }
 
-function getFulfillPercent(view, months, roadmapMap) {
+function getFulfillPercent(
+  view,
+  months,
+  roadmapMap,
+  selectedMonthIndex,
+  selectedQuarterIndex
+) {
   const calcPercent = (actualHC, roadmapHC) => {
     const actual = normalizeNumber(actualHC);
     const roadmap = normalizeNumber(roadmapHC);
@@ -358,21 +513,58 @@ function getFulfillPercent(view, months, roadmapMap) {
   }
 
   if (view === 'quarter') {
-    return [0, 1, 2, 3].map((q) => {
-      const qMonths = getQuarterMonths(q);
+    if (selectedQuarterIndex !== null) {
+      const values = QUARTERS.slice(0, selectedQuarterIndex + 1).map((_, qIndex) => {
+        const actualSum = getQuarterTotal('actualHC', qIndex, roadmapMap);
+        const roadmapSum = getQuarterTotal('roadmapHC', qIndex, roadmapMap);
 
-      const actualSum = qMonths.reduce((sum, monthIndex) => {
-        const monthName = getMonthName(monthIndex);
-        return sum + normalizeNumber(roadmapMap[monthName]?.actualHC);
-      }, 0);
+        return calcPercent(actualSum, roadmapSum);
+      });
 
-      const roadmapSum = qMonths.reduce((sum, monthIndex) => {
-        const monthName = getMonthName(monthIndex);
-        return sum + normalizeNumber(roadmapMap[monthName]?.roadmapHC);
-      }, 0);
+      const totalActual = [0, 1, 2, 3]
+        .slice(0, selectedQuarterIndex + 1)
+        .reduce((sum, qIndex) => {
+          return sum + getQuarterTotal('actualHC', qIndex, roadmapMap);
+        }, 0);
+
+      const totalRoadmap = [0, 1, 2, 3]
+        .slice(0, selectedQuarterIndex + 1)
+        .reduce((sum, qIndex) => {
+          return sum + getQuarterTotal('roadmapHC', qIndex, roadmapMap);
+        }, 0);
+
+      return [...values, calcPercent(totalActual, totalRoadmap)];
+    }
+
+    return [0, 1, 2, 3].map((qIndex) => {
+      const actualSum = getQuarterTotal('actualHC', qIndex, roadmapMap);
+      const roadmapSum = getQuarterTotal('roadmapHC', qIndex, roadmapMap);
 
       return calcPercent(actualSum, roadmapSum);
     });
+  }
+
+  if (selectedMonthIndex !== null) {
+    const values = months.slice(0, selectedMonthIndex + 1).map((monthName) => {
+      return calcPercent(
+        roadmapMap[monthName]?.actualHC,
+        roadmapMap[monthName]?.roadmapHC
+      );
+    });
+
+    const totalActual = months
+      .slice(0, selectedMonthIndex + 1)
+      .reduce((sum, monthName) => {
+        return sum + normalizeNumber(roadmapMap[monthName]?.actualHC);
+      }, 0);
+
+    const totalRoadmap = months
+      .slice(0, selectedMonthIndex + 1)
+      .reduce((sum, monthName) => {
+        return sum + normalizeNumber(roadmapMap[monthName]?.roadmapHC);
+      }, 0);
+
+    return [...values, calcPercent(totalActual, totalRoadmap)];
   }
 
   return months.map((monthName) => {
@@ -380,6 +572,71 @@ function getFulfillPercent(view, months, roadmapMap) {
       roadmapMap[monthName]?.actualHC,
       roadmapMap[monthName]?.roadmapHC
     );
+  });
+}
+
+function buildActiveVacantValues(
+  view,
+  months,
+  roadmapMap,
+  selectedMonthIndex,
+  selectedQuarterIndex
+) {
+  const roadmapValues = getCombinedRoadmap(
+    'roadmapHC',
+    view,
+    months,
+    roadmapMap,
+    selectedMonthIndex,
+    selectedQuarterIndex
+  );
+
+  const actualValues = getCombinedRoadmap(
+    'actualHC',
+    view,
+    months,
+    roadmapMap,
+    selectedMonthIndex,
+    selectedQuarterIndex
+  );
+
+  return roadmapValues.map((roadmapHC, index) => {
+    return Math.max(0, normalizeNumber(roadmapHC) - normalizeNumber(actualValues[index]));
+  });
+}
+
+function buildFillRateValues(
+  view,
+  months,
+  roadmapMap,
+  selectedMonthIndex,
+  selectedQuarterIndex
+) {
+  const roadmapValues = getCombinedRoadmap(
+    'roadmapHC',
+    view,
+    months,
+    roadmapMap,
+    selectedMonthIndex,
+    selectedQuarterIndex
+  );
+
+  const actualValues = getCombinedRoadmap(
+    'actualHC',
+    view,
+    months,
+    roadmapMap,
+    selectedMonthIndex,
+    selectedQuarterIndex
+  );
+
+  return roadmapValues.map((roadmapHC, index) => {
+    const roadmap = normalizeNumber(roadmapHC);
+    const actual = normalizeNumber(actualValues[index]);
+
+    if (roadmap <= 0) return '0%';
+
+    return `${Math.round((actual / roadmap) * 100)}%`;
   });
 }
 
@@ -407,15 +664,32 @@ exports.getReport = async (req, res) => {
 
     const reportYear = Number(year);
     const reportType = normalizeText(type || 'White Collar');
+
     const reportSubType =
       reportType === 'Blue Collar'
         ? normalizeText(subType || 'Non-Sewer')
         : null;
+
     const reportView = normalizeText(view || 'month');
-    const selectedMonthIndex = normalizeMonthParam(month);
+
+    const selectedMonthIndex =
+      reportView === 'month'
+        ? normalizeMonthParam(month)
+        : null;
+
+    const selectedQuarterIndex =
+      reportView === 'quarter'
+        ? normalizeQuarterParam(quarter)
+        : null;
 
     const months = [...MONTHS];
-    const columns = buildColumns(reportView, reportYear);
+
+    const columns = buildColumns(
+      reportView,
+      reportYear,
+      selectedMonthIndex,
+      selectedQuarterIndex
+    );
 
     const roadmapMap = await getRoadmapMetricsByMonth({
       company: normalizedCompany,
@@ -436,7 +710,7 @@ exports.getReport = async (req, res) => {
       const app = dayjs(appDate);
       const appYear = app.year();
       const appMonth = app.month();
-      const appQuarter = Math.floor(appMonth / 3) + 1;
+      const appQuarterIndex = Math.floor(appMonth / 3);
 
       if (appYear !== reportYear) return false;
 
@@ -444,12 +718,16 @@ exports.getReport = async (req, res) => {
         return false;
       }
 
-      if (reportView === 'quarter' && quarter) {
-        return appQuarter === Number(quarter);
+      // Quarter YTD.
+      // Q2 means Q1 + Q2.
+      if (reportView === 'quarter' && selectedQuarterIndex !== null) {
+        return appQuarterIndex <= selectedQuarterIndex;
       }
 
+      // Month YTD.
+      // Feb means Jan + Feb.
       if (reportView === 'month' && selectedMonthIndex !== null) {
-        return appMonth === selectedMonthIndex;
+        return appMonth <= selectedMonthIndex;
       }
 
       return true;
@@ -465,7 +743,10 @@ exports.getReport = async (req, res) => {
     ];
 
     const pipeline = Object.fromEntries(
-      pipelineStages.map((stage) => [stage, initialArray(reportView)])
+      pipelineStages.map((stage) => [
+        stage,
+        initialArray(reportView, selectedMonthIndex, selectedQuarterIndex),
+      ])
     );
 
     filtered.forEach((candidate) => {
@@ -479,19 +760,47 @@ exports.getReport = async (req, res) => {
         if (stageDate.year() !== reportYear) return;
 
         const stageMonth = stageDate.month();
-        const idx = getIndex(reportView, stageMonth);
+        const stageQuarterIndex = Math.floor(stageMonth / 3);
 
-        if (pipeline[stage][idx] !== undefined) {
-          pipeline[stage][idx] += 1;
+        if (
+          reportView === 'quarter' &&
+          selectedQuarterIndex !== null &&
+          stageQuarterIndex > selectedQuarterIndex
+        ) {
+          return;
         }
+
+        if (
+          reportView === 'month' &&
+          selectedMonthIndex !== null &&
+          stageMonth > selectedMonthIndex
+        ) {
+          return;
+        }
+
+        addCountToSeries(
+          pipeline[stage],
+          reportView,
+          stageMonth,
+          selectedMonthIndex,
+          selectedQuarterIndex,
+          1
+        );
       });
     });
 
     const sourceCounts = Object.fromEntries(
-      sources.map((source) => [source, initialArray(reportView)])
+      sources.map((source) => [
+        source,
+        initialArray(reportView, selectedMonthIndex, selectedQuarterIndex),
+      ])
     );
 
-    const sourceApplications = initialArray(reportView);
+    const sourceApplications = initialArray(
+      reportView,
+      selectedMonthIndex,
+      selectedQuarterIndex
+    );
 
     filtered.forEach((candidate) => {
       const appDate = candidate.progressDates?.get?.('Application');
@@ -500,17 +809,46 @@ exports.getReport = async (req, res) => {
 
       const app = dayjs(appDate);
       const appMonth = app.month();
-      const idx = getIndex(reportView, appMonth);
+      const appQuarterIndex = Math.floor(appMonth / 3);
       const rawSource = normalizeText(candidate.applicationSource);
 
       if (!rawSource) return;
 
+      if (
+        reportView === 'quarter' &&
+        selectedQuarterIndex !== null &&
+        appQuarterIndex > selectedQuarterIndex
+      ) {
+        return;
+      }
+
+      if (
+        reportView === 'month' &&
+        selectedMonthIndex !== null &&
+        appMonth > selectedMonthIndex
+      ) {
+        return;
+      }
+
       for (const definedSource of sources) {
         if (rawSource.toLowerCase().includes(definedSource.toLowerCase())) {
-          if (sourceCounts[definedSource][idx] !== undefined) {
-            sourceCounts[definedSource][idx] += 1;
-            sourceApplications[idx] += 1;
-          }
+          addCountToSeries(
+            sourceCounts[definedSource],
+            reportView,
+            appMonth,
+            selectedMonthIndex,
+            selectedQuarterIndex,
+            1
+          );
+
+          addCountToSeries(
+            sourceApplications,
+            reportView,
+            appMonth,
+            selectedMonthIndex,
+            selectedQuarterIndex,
+            1
+          );
 
           break;
         }
@@ -526,13 +864,11 @@ exports.getReport = async (req, res) => {
       });
     }
 
-    const stats = {
-      averageDaysToHire: initialArray(reportView),
-      activeVacant: initialArray(reportView),
-      fillRate: initialArray(reportView),
-    };
-
-    const hireDates = {};
+    const hireDateBuckets = initialArray(
+      reportView,
+      selectedMonthIndex,
+      selectedQuarterIndex
+    ).map(() => []);
 
     filtered.forEach((candidate) => {
       const applied = candidate.progressDates?.get?.('Application');
@@ -545,76 +881,68 @@ exports.getReport = async (req, res) => {
       if (onboardDate.year() !== reportYear) return;
 
       const onboardMonth = onboardDate.month();
-      const idx = getIndex(reportView, onboardMonth);
+      const onboardQuarterIndex = Math.floor(onboardMonth / 3);
+      const days = Math.max(0, onboardDate.diff(dayjs(applied), 'day'));
 
-      hireDates[idx] = hireDates[idx] || [];
-      hireDates[idx].push(onboardDate.diff(dayjs(applied), 'day'));
-    });
+      if (
+        reportView === 'quarter' &&
+        selectedQuarterIndex !== null &&
+        onboardQuarterIndex > selectedQuarterIndex
+      ) {
+        return;
+      }
 
-    stats.averageDaysToHire.forEach((_, i) => {
-      const daysArr = hireDates[i] || [];
-
-      if (daysArr.length) {
-        stats.averageDaysToHire[i] = (
-          daysArr.reduce((a, b) => a + b, 0) / daysArr.length
-        ).toFixed(2);
+      if (
+        reportView === 'month' &&
+        selectedMonthIndex !== null &&
+        onboardMonth > selectedMonthIndex
+      ) {
+        return;
       }
 
       if (reportView === 'year') {
-        const totalTarget = months.reduce((sum, m) => {
-          return sum + normalizeNumber(roadmapMap[m]?.hiringTargetHC);
-        }, 0);
-
-        const totalRoadmap = months.reduce((sum, m) => {
-          return sum + normalizeNumber(roadmapMap[m]?.roadmapHC);
-        }, 0);
-
-        const totalActual = months.reduce((sum, m) => {
-          return sum + normalizeNumber(roadmapMap[m]?.actualHC);
-        }, 0);
-
-        stats.activeVacant[i] = Math.max(0, totalRoadmap - totalActual);
-        stats.fillRate[i] =
-          totalTarget > 0
-            ? `${Math.round((pipeline.Onboard[i] / totalTarget) * 100)}%`
-            : '0%';
+        hireDateBuckets[0].push(days);
       } else if (reportView === 'quarter') {
-        const qMonths = getQuarterMonths(i);
-
-        const roadmapSum = qMonths.reduce((sum, monthIndex) => {
-          const monthName = getMonthName(monthIndex);
-          return sum + normalizeNumber(roadmapMap[monthName]?.roadmapHC);
-        }, 0);
-
-        const actualSum = qMonths.reduce((sum, monthIndex) => {
-          const monthName = getMonthName(monthIndex);
-          return sum + normalizeNumber(roadmapMap[monthName]?.actualHC);
-        }, 0);
-
-        const targetSum = qMonths.reduce((sum, monthIndex) => {
-          const monthName = getMonthName(monthIndex);
-          return sum + normalizeNumber(roadmapMap[monthName]?.hiringTargetHC);
-        }, 0);
-
-        stats.activeVacant[i] = Math.max(0, roadmapSum - actualSum);
-        stats.fillRate[i] =
-          targetSum > 0
-            ? `${Math.round((pipeline.Onboard[i] / targetSum) * 100)}%`
-            : '0%';
-      } else {
-        const monthName = months[i];
-
-        const roadmapHC = normalizeNumber(roadmapMap[monthName]?.roadmapHC);
-        const actualHC = normalizeNumber(roadmapMap[monthName]?.actualHC);
-        const targetHC = normalizeNumber(roadmapMap[monthName]?.hiringTargetHC);
-
-        stats.activeVacant[i] = Math.max(0, roadmapHC - actualHC);
-        stats.fillRate[i] =
-          targetHC > 0
-            ? `${Math.round((pipeline.Onboard[i] / targetHC) * 100)}%`
-            : '0%';
+        if (selectedQuarterIndex !== null) {
+          hireDateBuckets[onboardQuarterIndex].push(days);
+          hireDateBuckets[selectedQuarterIndex + 1].push(days);
+        } else if (hireDateBuckets[onboardQuarterIndex]) {
+          hireDateBuckets[onboardQuarterIndex].push(days);
+        }
+      } else if (selectedMonthIndex !== null) {
+        hireDateBuckets[onboardMonth].push(days);
+        hireDateBuckets[selectedMonthIndex + 1].push(days);
+      } else if (hireDateBuckets[onboardMonth]) {
+        hireDateBuckets[onboardMonth].push(days);
       }
     });
+
+    const stats = {
+      averageDaysToHire: hireDateBuckets.map((daysArr) => {
+        if (!daysArr.length) return 0;
+
+        return (
+          daysArr.reduce((a, b) => a + b, 0) / daysArr.length
+        ).toFixed(2);
+      }),
+
+      activeVacant: buildActiveVacantValues(
+        reportView,
+        months,
+        roadmapMap,
+        selectedMonthIndex,
+        selectedQuarterIndex
+      ),
+
+      fillRate: buildFillRateValues(
+        reportView,
+        months,
+        roadmapMap,
+        selectedMonthIndex,
+        selectedQuarterIndex,
+        pipeline.Onboard
+      ),
+    };
 
     const rows = [
       {
@@ -624,27 +952,68 @@ exports.getReport = async (req, res) => {
       },
       {
         label: 'Requested HC',
-        values: getCombinedRoadmap('requestedHC', reportView, months, roadmapMap),
+        values: getCombinedRoadmap(
+          'requestedHC',
+          reportView,
+          months,
+          roadmapMap,
+          selectedMonthIndex,
+          selectedQuarterIndex
+        ),
       },
       {
         label: 'Roadmap HC from planning',
-        values: getCombinedRoadmap('roadmapHC', reportView, months, roadmapMap),
+        values: getCombinedRoadmap(
+          'roadmapHC',
+          reportView,
+          months,
+          roadmapMap,
+          selectedMonthIndex,
+          selectedQuarterIndex
+        ),
       },
       {
         label: 'Actual HC',
-        values: getCombinedRoadmap('actualHC', reportView, months, roadmapMap),
+        values: getCombinedRoadmap(
+          'actualHC',
+          reportView,
+          months,
+          roadmapMap,
+          selectedMonthIndex,
+          selectedQuarterIndex
+        ),
       },
       {
         label: 'Cancelled',
-        values: getCombinedRoadmap('cancelledHC', reportView, months, roadmapMap),
+        values: getCombinedRoadmap(
+          'cancelledHC',
+          reportView,
+          months,
+          roadmapMap,
+          selectedMonthIndex,
+          selectedQuarterIndex
+        ),
       },
       {
         label: 'Hiring Target HC',
-        values: getCombinedRoadmap('hiringTargetHC', reportView, months, roadmapMap),
+        values: getCombinedRoadmap(
+          'hiringTargetHC',
+          reportView,
+          months,
+          roadmapMap,
+          selectedMonthIndex,
+          selectedQuarterIndex
+        ),
       },
       {
         label: 'FullFill (%)',
-        values: getFulfillPercent(reportView, months, roadmapMap),
+        values: getFulfillPercent(
+          reportView,
+          months,
+          roadmapMap,
+          selectedMonthIndex,
+          selectedQuarterIndex
+        ),
       },
 
       {

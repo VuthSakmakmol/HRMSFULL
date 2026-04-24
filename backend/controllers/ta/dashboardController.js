@@ -667,11 +667,12 @@ async function getKpiData({
 
   const allJobs = await JobRequisition.find(jobMatch);
 
+  const activeJobs = allJobs.filter((job) => job.status !== 'Cancel');
+
   const totalRequisitions = allJobs.length;
   const filledPositions = allJobs.filter((job) => job.status === 'Filled').length;
-  const activeVacancies = allJobs.filter((job) => job.status === 'Vacant').length;
 
-  const jobIds = allJobs.map((job) => job._id);
+  const jobIds = activeJobs.map((job) => job._id);
 
   const onboardedCandidates = jobIds.length
     ? await Candidate.find({
@@ -702,7 +703,7 @@ async function getKpiData({
   let validCount = 0;
 
   for (const candidate of onboardedCandidates) {
-    const job = allJobs.find((item) => {
+    const job = activeJobs.find((item) => {
       return item._id.toString() === candidate.jobRequisitionId?.toString();
     });
 
@@ -739,18 +740,21 @@ async function getKpiData({
   }
 
   const onboarded = onboardedCandidates.length;
+
+  const totalTarget = activeJobs.reduce((sum, job) => {
+    return sum + normalizeNumber(job.targetCandidates);
+  }, 0);
+
+  // ✅ Active Vacancies now means remaining HC, not number of requisition rows.
+  // Example: targetCandidates = 5, onboarded = 1 => activeVacancies = 4
+  const activeVacancies = Math.max(0, totalTarget - onboarded);
+
   const costPerHire = onboarded > 0 ? totalHiringCost / onboarded : 0;
 
   const avgDaysToHire =
     validCount > 0
       ? Math.round(totalDaysToHire / validCount)
       : 0;
-
-  const totalTarget = allJobs
-    .filter((job) => job.status !== 'Cancel')
-    .reduce((sum, job) => {
-      return sum + normalizeNumber(job.targetCandidates);
-    }, 0);
 
   const fillRate =
     totalTarget > 0

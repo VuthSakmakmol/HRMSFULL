@@ -5,7 +5,7 @@
         <!-- 🔹 Chart Title -->
         <div class="chart-title mb-2">Recruitment Pipeline</div>
 
-        <!-- 📊 Horizontal Bar Chart -->
+        <!--  Horizontal Bar Chart -->
         <apexchart
           type="bar"
           height="350"
@@ -13,7 +13,7 @@
           :series="series"
         />
 
-        <!-- ℹ️ Message if no data -->
+        <!--  Message if no data -->
         <div v-if="!series[0].data.some(d => d > 0)" class="text-caption text-grey mt-2">
           No pipeline data.
         </div>

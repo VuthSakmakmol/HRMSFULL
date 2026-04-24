@@ -1,3 +1,5 @@
+<!-- src/components/AppSidebar.vue -->
+
 <template>
   <v-navigation-drawer
     v-model="drawerInternal"
@@ -24,6 +26,15 @@
             <div class="sidebar-link">
               <font-awesome-icon :icon="['fas', 'database']" class="sidebar-icon" />
               Dashboard
+            </div>
+          </template>
+        </v-list-item>
+
+        <v-list-item :to="{ path: '/ta/performance' }">
+          <template #title>
+            <div class="sidebar-link">
+              <font-awesome-icon :icon="['fas', 'chart-line']" class="sidebar-icon" />
+              Performance
             </div>
           </template>
         </v-list-item>
@@ -66,7 +77,7 @@
       </v-list-group>
 
       <!-- HRSS Section -->
-      <v-list-group>
+      <!-- <v-list-group>
         <template #activator="{ props }">
           <v-list-item v-bind="props">
             <template #prepend>
@@ -138,10 +149,7 @@
             </div>
           </template>
         </v-list-item>
-      </v-list-group>
-     
-
-
+      </v-list-group> -->
 
       <!-- GM Section -->
       <template v-if="role === 'GeneralManager'">
@@ -188,6 +196,7 @@ const props = defineProps({
   role: String,
   company: String,
 })
+
 const emit = defineEmits(['update:drawer'])
 
 const drawerInternal = computed({
@@ -199,6 +208,7 @@ const { mobile } = useDisplay()
 const isMobile = computed(() => mobile.value)
 
 const route = useRoute()
+
 watch(route, () => {
   if (isMobile.value) drawerInternal.value = false
 })
