@@ -502,7 +502,7 @@ import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
 import socket from '@/utils/socket'
 
-const PAGE_SIZE = 2
+const PAGE_SIZE = 20
 
 const dateMenu = ref(false)
 const jobTitles = ref([])
@@ -988,9 +988,9 @@ const exportToExcel = async () => {
       Department: job.departmentName,
       'Job Title': job.jobTitle,
       Recruiter: job.recruiter,
-      'Opening Date': job.openingDate ? dayjs(job.openingDate).format('DD-MMM-YYYY') : '',
+      'Opening Date': job.openingDate ? dayjs(job.openingDate).format('DD/MM/YYYY') : '',
       'Onboard Start Date': (job.latestOnboardDate || job.startDate)
-        ? dayjs(job.latestOnboardDate || job.startDate).format('DD-MMM-YYYY')
+        ? dayjs(job.latestOnboardDate || job.startDate).format('DD/MM/YYYY')
         : '',
       'Hiring Cost': job.hiringCost || '',
       Status: job.status,
@@ -1152,9 +1152,15 @@ onBeforeUnmount(() => {
 .scroll-wrapper-x {
   overflow-x: auto;
   overflow-y: auto;
-  max-height: 550px;
   width: 100%;
   display: block;
+
+  /* Responsive height: not too long, not too short */
+  height: clamp(360px, calc(100vh - 310px), 540px);
+  max-height: clamp(360px, calc(100vh - 310px), 540px);
+
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
 }
 
 .v-table tbody tr:hover {
@@ -1238,7 +1244,7 @@ onBeforeUnmount(() => {
 }
 
 .vacancy-pill__progress {
-  stroke: #4caf50;
+  stroke: #32bd37;
   stroke-linecap: round;
   transition: stroke-dasharray 0.25s ease;
 }
@@ -1254,7 +1260,7 @@ onBeforeUnmount(() => {
 }
 
 .vacancy-pill__text.is-green {
-  color: #2e7d32;
+  color: #47bb4d;
 }
 
 .action-col {

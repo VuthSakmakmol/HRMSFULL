@@ -1,23 +1,103 @@
-//backend/controllers/ta/candidateController.js
+// backend/controllers/ta/candidateController.js
+
 const fs = require('fs');
 const Candidate = require('../../models/ta/Candidate');
 const JobRequisition = require('../../models/ta/JobRequisition');
 const Counter = require('../../models/ta/Counter');
 const { logActivity } = require('../../utils/logActivity');
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function toBoolean(value) {
+  return ['1', 'true', 'yes'].includes(String(value || '').trim().toLowerCase());
+}
+
+function buildCandidateFilter(query = {}, company) {
+  const {
+    candidateId,
+    jobId,
+    jobTitle,
+    department,
+    recruiter,
+    fullName,
+    applicationSource,
+    hireDecision,
+    type,
+    subType,
+    jobRequisitionId,
+  } = query;
+
+  const filter = { company };
+
+  if (candidateId) {
+    filter.candidateId = { $regex: candidateId, $options: 'i' };
+  }
+
+  if (jobId) {
+    filter.jobRequisitionCode = { $regex: jobId, $options: 'i' };
+  }
+
+  if (jobTitle) {
+    filter.jobTitle = { $regex: jobTitle, $options: 'i' };
+  }
+
+  if (department) {
+    filter.department = { $regex: department, $options: 'i' };
+  }
+
+  if (recruiter) {
+    filter.recruiter = { $regex: recruiter, $options: 'i' };
+  }
+
+  if (fullName) {
+    filter.fullName = { $regex: fullName, $options: 'i' };
+  }
+
+  if (applicationSource) {
+    filter.applicationSource = applicationSource;
+  }
+
+  if (hireDecision) {
+    filter.hireDecision = hireDecision;
+  }
+
+  if (type) {
+    filter.type = type;
+  }
+
+  if (subType) {
+    filter.subType = subType;
+  }
+
+  if (jobRequisitionId) {
+    filter.jobRequisitionId = jobRequisitionId;
+  }
+
+  return filter;
+}
+
 // 🎯 Generate candidateId with type/subtype-based prefix
 async function generateCandidateId(type, subType) {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const year = String(now.getFullYear()).slice(-2);
+
   let prefixType = 'WC';
-  if (type === 'Blue Collar') prefixType = subType === 'Sewer' ? 'BS' : 'BN';
+  if (type === 'Blue Collar') {
+    prefixType = subType === 'Sewer' ? 'BS' : 'BN';
+  }
+
   const prefix = `${prefixType}${month}${year}`;
+
   const counter = await Counter.findOneAndUpdate(
     { name: `candidate-${prefix}` },
     { $inc: { value: 1 } },
     { new: true, upsert: true }
   );
+
   return `${prefix}-${counter.value}`;
 }
 
@@ -37,7 +117,7 @@ async function computeDaysToFill(job) {
     jobRequisitionId: job._id,
     progress: 'Onboard',
     _onboardCounted: true,
-    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] },
   }).select('progressDates');
 
   let latestOnboard = null;
@@ -68,79 +148,109 @@ async function computeDaysToFill(job) {
 // CREATE candidate
 exports.create = async (req, res) => {
   try {
-    const company = req.company; // 🔒 from authorizeCompanyAccess
+    const company = req.company;
+
     const {
-      fullName, recruiter, applicationSource, jobRequisitionId,
-      jobRequisitionCode, department, jobTitle, type, subType
+      fullName,
+      recruiter,
+      applicationSource,
+      jobRequisitionId,
+      jobRequisitionCode,
+      department,
+      jobTitle,
+      type,
+      subType,
     } = req.body;
 
     const candidateId = await generateCandidateId(type, subType);
+
     const progressDates = req.body.progressDates || {};
-    if (!progressDates.Application) progressDates.Application = new Date();
+    if (!progressDates.Application) {
+      progressDates.Application = new Date();
+    }
 
     const newCandidate = new Candidate({
-      candidateId, fullName, recruiter, applicationSource,
-      jobRequisitionId, jobRequisitionCode, department, jobTitle, company,
-      type, subType: type === 'Blue Collar' ? subType : null,
-      progressDates
+      candidateId,
+      fullName,
+      recruiter,
+      applicationSource,
+      jobRequisitionId,
+      jobRequisitionCode,
+      department,
+      jobTitle,
+      company,
+      type,
+      subType: type === 'Blue Collar' ? subType : null,
+      progressDates,
+      hireDecision: req.body.hireDecision || 'Candidate in Process',
     });
 
     await newCandidate.save();
+
     req.app.get('io').emit('candidateAdded', newCandidate);
 
     await logActivity({
-      actionType: 'CREATE', collectionName: 'Candidate',
+      actionType: 'CREATE',
+      collectionName: 'Candidate',
       documentId: newCandidate._id,
       performedBy: req.user?.email || 'Excel Import',
-      company, previousData: null,
-      newData: newCandidate.toObject()
+      company,
+      previousData: null,
+      newData: newCandidate.toObject(),
     });
 
-    res.status(201).json({ message: 'Candidate created successfully', candidate: newCandidate });
+    res.status(201).json({
+      message: 'Candidate created successfully',
+      candidate: newCandidate,
+    });
   } catch (err) {
     console.error('❌ Error creating candidate:', err);
-    res.status(500).json({ message: 'Failed to create candidate', error: err.message });
+    res.status(500).json({
+      message: 'Failed to create candidate',
+      error: err.message,
+    });
   }
 };
 
 // ─────────────────────────────────────────────
-// GET all candidates (with pagination & filters)
+// GET all candidates with backend pagination + exportAll
 exports.getAll = async (req, res) => {
   try {
-    const company = req.company; // 🔒 forced by authorizeCompanyAccess
+    const company = req.company;
+    const exportAll = toBoolean(req.query.exportAll);
 
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 25;
-    const skip = (page - 1) * limit;
+    const page = exportAll ? 1 : parsePositiveInt(req.query.page, 1);
+    const limit = exportAll ? null : Math.min(parsePositiveInt(req.query.limit, 7), 50);
+    const skip = exportAll ? 0 : (page - 1) * limit;
 
-    const {
-      candidateId, jobId, jobTitle, department,
-      recruiter, fullName, applicationSource,
-      hireDecision, type, subType, jobRequisitionId
-    } = req.query;
+    const filter = buildCandidateFilter(req.query, company);
+    const total = await Candidate.countDocuments(filter);
 
-    const filter = { company };
-    if (candidateId) filter.candidateId = { $regex: candidateId, $options: 'i' };
-    if (jobId) filter.jobRequisitionCode = { $regex: jobId, $options: 'i' };
-    if (jobTitle) filter.jobTitle = { $regex: jobTitle, $options: 'i' };
-    if (department) filter.department = { $regex: department, $options: 'i' };
-    if (recruiter) filter.recruiter = { $regex: recruiter, $options: 'i' };
-    if (fullName) filter.fullName = { $regex: fullName, $options: 'i' };
-    if (applicationSource) filter.applicationSource = applicationSource;
-    if (hireDecision) filter.hireDecision = hireDecision;
-    if (type) filter.type = type;
-    if (subType) filter.subType = subType;
-    if (jobRequisitionId) filter.jobRequisitionId = jobRequisitionId;
+    let query = Candidate.find(filter).sort({ createdAt: -1, _id: -1 });
 
-    const [candidates, total] = await Promise.all([
-      Candidate.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Candidate.countDocuments(filter)
-    ]);
+    if (!exportAll) {
+      query = query.skip(skip).limit(limit);
+    }
 
-    res.json({ candidates, total });
+    const candidates = await query.lean();
+
+    const loadedCount = exportAll ? candidates.length : skip + candidates.length;
+    const hasMore = exportAll ? false : loadedCount < total;
+
+    res.json({
+      candidates,
+      total,
+      page,
+      limit: exportAll ? candidates.length : limit,
+      hasMore,
+      loadedCount,
+    });
   } catch (err) {
     console.error('❌ Error fetching candidates:', err);
-    res.status(500).json({ message: 'Fetch error', error: err.message });
+    res.status(500).json({
+      message: 'Fetch error',
+      error: err.message,
+    });
   }
 };
 
@@ -149,12 +259,23 @@ exports.getAll = async (req, res) => {
 exports.getOne = async (req, res) => {
   try {
     const company = req.company;
-    const candidate = await Candidate.findOne({ _id: req.params.id, company });
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
+
+    const candidate = await Candidate.findOne({
+      _id: req.params.id,
+      company,
+    });
+
+    if (!candidate) {
+      return res.status(404).json({ message: 'Candidate not found' });
+    }
+
     res.json(candidate);
   } catch (err) {
     console.error('❌ Error fetching candidate:', err);
-    res.status(500).json({ message: 'Fetch error', error: err.message });
+    res.status(500).json({
+      message: 'Fetch error',
+      error: err.message,
+    });
   }
 };
 
@@ -163,19 +284,34 @@ exports.getOne = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const company = req.company;
-    const candidate = await Candidate.findOne({ _id: req.params.id, company });
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
+
+    const candidate = await Candidate.findOne({
+      _id: req.params.id,
+      company,
+    });
+
+    if (!candidate) {
+      return res.status(404).json({ message: 'Candidate not found' });
+    }
 
     const previousData = candidate.toObject();
     const editableFields = ['fullName', 'recruiter', 'applicationSource', 'hireDecision', 'noted'];
 
     if (req.body.jobRequisitionId) {
       const newJob = await JobRequisition.findById(req.body.jobRequisitionId);
-      if (!newJob) return res.status(404).json({ message: 'Job requisition not found' });
-      const jobChanged = String(candidate.jobRequisitionId) !== String(newJob._id);
-      if (candidate.progress === 'Onboard' && jobChanged) {
-        return res.status(400).json({ message: 'Cannot change job after Onboard stage' });
+
+      if (!newJob) {
+        return res.status(404).json({ message: 'Job requisition not found' });
       }
+
+      const jobChanged = String(candidate.jobRequisitionId) !== String(newJob._id);
+
+      if (candidate.progress === 'Onboard' && jobChanged) {
+        return res.status(400).json({
+          message: 'Cannot change job after Onboard stage',
+        });
+      }
+
       if (jobChanged) {
         candidate.jobRequisitionId = newJob._id;
         candidate.jobRequisitionCode = newJob.jobRequisitionId;
@@ -186,20 +322,24 @@ exports.update = async (req, res) => {
       }
     }
 
-    editableFields.forEach(key => {
-      if (req.body[key] !== undefined) candidate[key] = req.body[key];
+    editableFields.forEach((key) => {
+      if (req.body[key] !== undefined) {
+        candidate[key] = req.body[key];
+      }
     });
 
     await candidate.save();
+
     req.app.get('io').emit('candidateUpdated', candidate);
 
     await logActivity({
-      actionType: 'UPDATE', collectionName: 'Candidate',
+      actionType: 'UPDATE',
+      collectionName: 'Candidate',
       documentId: candidate._id,
       performedBy: req.user?.email || 'Excel Import',
       company,
       previousData,
-      newData: candidate.toObject()
+      newData: candidate.toObject(),
     });
 
     if (
@@ -207,13 +347,21 @@ exports.update = async (req, res) => {
       ['Candidate Refusal', 'Not Hired', 'Candidate in Process'].includes(req.body.hireDecision)
     ) {
       const job = await JobRequisition.findById(candidate.jobRequisitionId);
-      if (job) await reevaluateJobStatus(job, req);
+      if (job) {
+        await reevaluateJobStatus(job, req);
+      }
     }
 
-    res.json({ message: 'Candidate updated successfully', candidate });
+    res.json({
+      message: 'Candidate updated successfully',
+      candidate,
+    });
   } catch (err) {
     console.error('❌ Error updating candidate:', err);
-    res.status(500).json({ message: 'Update error', error: err.message });
+    res.status(500).json({
+      message: 'Update error',
+      error: err.message,
+    });
   }
 };
 
@@ -222,56 +370,101 @@ exports.update = async (req, res) => {
 exports.remove = async (req, res) => {
   try {
     const company = req.company;
-    const candidate = await Candidate.findOne({ _id: req.params.id, company });
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
+
+    const candidate = await Candidate.findOne({
+      _id: req.params.id,
+      company,
+    });
+
+    if (!candidate) {
+      return res.status(404).json({ message: 'Candidate not found' });
+    }
+
     const previousData = candidate.toObject();
+
     await candidate.deleteOne();
+
     req.app.get('io').emit('candidateDeleted', candidate._id);
 
     await logActivity({
-      actionType: 'DELETE', collectionName: 'Candidate',
+      actionType: 'DELETE',
+      collectionName: 'Candidate',
       documentId: candidate._id,
       performedBy: req.user?.email || 'Excel Import',
       company,
       previousData,
-      newData: null
+      newData: null,
     });
 
     const job = await JobRequisition.findById(candidate.jobRequisitionId);
-    if (job) await reevaluateJobStatus(job, req);
+    if (job) {
+      await reevaluateJobStatus(job, req);
+    }
 
-    res.json({ message: `Candidate ${candidate.candidateId} deleted successfully.` });
+    res.json({
+      message: `Candidate ${candidate.candidateId} deleted successfully.`,
+    });
   } catch (err) {
     console.error('❌ Error deleting candidate:', err);
-    res.status(500).json({ message: 'Delete error', error: err.message });
+    res.status(500).json({
+      message: 'Delete error',
+      error: err.message,
+    });
   }
 };
 
 // ─────────────────────────────────────────────
-// UPDATE candidate stage (progress + date)
+// UPDATE candidate stage
 exports.updateStage = async (req, res) => {
   try {
     const { stage, date } = req.body;
     const company = req.company;
-    const candidate = await Candidate.findOne({ _id: req.params.id, company });
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
+
+    const candidate = await Candidate.findOne({
+      _id: req.params.id,
+      company,
+    });
+
+    if (!candidate) {
+      return res.status(404).json({ message: 'Candidate not found' });
+    }
 
     if (['Candidate Refusal', 'Not Hired'].includes(candidate.hireDecision)) {
-      return res.status(403).json({ message: 'Candidate is marked as refused or not hired' });
+      return res.status(403).json({
+        message: 'Candidate is marked as refused or not hired',
+      });
     }
 
     const job = await JobRequisition.findById(candidate.jobRequisitionId);
-    if (!job) return res.status(404).json({ message: 'Job requisition not found' });
-    if (job.status === 'Cancel') return res.status(403).json({ message: 'Job requisition is cancelled' });
+
+    if (!job) {
+      return res.status(404).json({ message: 'Job requisition not found' });
+    }
+
+    if (job.status === 'Cancel') {
+      return res.status(403).json({
+        message: 'Job requisition is cancelled',
+      });
+    }
 
     const previousData = candidate.toObject();
+
     const stageOrder = ['Application', 'ManagerReview', 'Interview', 'JobOffer', 'Hired', 'Onboard'];
     const currentIndex = stageOrder.indexOf(candidate.progress);
     const targetIndex = stageOrder.indexOf(stage);
-    if (targetIndex > currentIndex) candidate.progress = stage;
+
+    if (targetIndex > currentIndex) {
+      candidate.progress = stage;
+    }
 
     const safeDate = new Date(date);
-    if (isNaN(safeDate)) return res.status(400).json({ message: 'Invalid date format provided' });
+
+    if (Number.isNaN(safeDate.getTime())) {
+      return res.status(400).json({
+        message: 'Invalid date format provided',
+      });
+    }
+
     candidate.progressDates.set(stage, safeDate);
 
     if (stage === 'JobOffer' && !candidate._offerCounted) {
@@ -279,39 +472,59 @@ exports.updateStage = async (req, res) => {
         jobRequisitionId: job._id,
         progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
         _offerCounted: true,
-        hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+        hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] },
       });
-      if (activeOffers >= job.targetCandidates) return res.status(400).json({ message: 'Job offer is full' });
+
+      if (activeOffers >= job.targetCandidates) {
+        return res.status(400).json({
+          message: 'Job offer is full',
+        });
+      }
+
       candidate._offerCounted = true;
     }
 
     if (stage === 'Onboard' && !candidate._onboardCounted) {
-      if (!candidate._offerCounted) return res.status(400).json({ message: 'Must reach JobOffer before Onboard' });
+      if (!candidate._offerCounted) {
+        return res.status(400).json({
+          message: 'Must reach JobOffer before Onboard',
+        });
+      }
+
       candidate._onboardCounted = true;
       candidate.hireDecision = 'Hired';
     }
 
     await candidate.save();
+
     await reevaluateJobStatus(job, req);
+
     req.app.get('io').emit('candidateUpdated', candidate);
 
     await logActivity({
-      actionType: 'UPDATE', collectionName: 'Candidate',
+      actionType: 'UPDATE',
+      collectionName: 'Candidate',
       documentId: candidate._id,
       performedBy: req.user?.email || 'Excel Import',
       company,
       previousData,
-      newData: candidate.toObject()
+      newData: candidate.toObject(),
     });
 
-    res.json({ message: `${stage} date updated`, candidate });
+    res.json({
+      message: `${stage} date updated`,
+      candidate,
+    });
   } catch (err) {
     console.error('❌ Error updating stage:', err);
-    res.status(500).json({ message: 'Internal server error', error: err.message });
+    res.status(500).json({
+      message: 'Internal server error',
+      error: err.message,
+    });
   }
 };
 
-
+// ─────────────────────────────────────────────
 // HELPER: Reevaluate job status when candidate progress changes
 async function reevaluateJobStatus(job, req = null) {
   const jobId = job._id;
@@ -320,31 +533,31 @@ async function reevaluateJobStatus(job, req = null) {
     jobRequisitionId: jobId,
     progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
     _offerCounted: true,
-    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] },
   });
 
   const onboardCount = await Candidate.countDocuments({
     jobRequisitionId: jobId,
     progress: 'Onboard',
     _onboardCounted: true,
-    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] },
   });
 
-  job.offerCount   = offerCount;
+  job.offerCount = offerCount;
   job.onboardCount = onboardCount;
 
-  // Status
   job.status =
-    onboardCount >= job.targetCandidates ? 'Filled'
-    : offerCount >= job.targetCandidates ? 'Suspended'
-    : 'Vacant';
+    onboardCount >= job.targetCandidates
+      ? 'Filled'
+      : offerCount >= job.targetCandidates
+        ? 'Suspended'
+        : 'Vacant';
 
-  // ✅ compute latest onboard + daysToFill
   const { daysToFill, latestOnboard } = await computeDaysToFill(job);
-  job.daysToFill        = daysToFill;
+
+  job.daysToFill = daysToFill;
   job.latestOnboardDate = latestOnboard || null;
 
-  // (optional) also keep startDate in sync, only move forward
   if (latestOnboard && (!job.startDate || latestOnboard > job.startDate)) {
     job.startDate = latestOnboard;
   }
@@ -352,28 +565,56 @@ async function reevaluateJobStatus(job, req = null) {
   await job.save();
 
   const refreshed = await JobRequisition.findById(jobId).lean();
+
   if (req) {
     const io = req.app.get('io');
-    io.emit('jobUpdated', { ...refreshed, offerCount, onboardCount });
+    io.emit('jobUpdated', {
+      ...refreshed,
+      offerCount,
+      onboardCount,
+    });
+
+    io.emit('jobAvailabilityChanged', {
+      jobId,
+      offerFull: offerCount >= job.targetCandidates,
+      onboardFull: onboardCount >= job.targetCandidates,
+      offerCount,
+      onboardCount,
+    });
   }
 }
-
-
 
 // ─────────────────────────────────────────────
 // UPLOAD candidate documents
 exports.uploadDocument = async (req, res) => {
   try {
     const company = req.company;
-    const candidate = await Candidate.findOne({ _id: req.params.id, company });
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
-    const uploaded = req.files.map(file => file.filename);
+
+    const candidate = await Candidate.findOne({
+      _id: req.params.id,
+      company,
+    });
+
+    if (!candidate) {
+      return res.status(404).json({ message: 'Candidate not found' });
+    }
+
+    const uploaded = req.files.map((file) => file.filename);
+
     candidate.documents.push(...uploaded);
+
     await candidate.save();
-    res.json({ message: 'Uploaded', documents: candidate.documents });
+
+    res.json({
+      message: 'Uploaded',
+      documents: candidate.documents,
+    });
   } catch (err) {
     console.error('❌ Error uploading documents:', err);
-    res.status(500).json({ message: 'Upload error', error: err.message });
+    res.status(500).json({
+      message: 'Upload error',
+      error: err.message,
+    });
   }
 };
 
@@ -382,58 +623,85 @@ exports.uploadDocument = async (req, res) => {
 exports.deleteDocument = async (req, res) => {
   try {
     const company = req.company;
-    const candidate = await Candidate.findOne({ _id: req.params.id, company });
-    if (!candidate) return res.status(404).json({ message: 'Candidate not found' });
+
+    const candidate = await Candidate.findOne({
+      _id: req.params.id,
+      company,
+    });
+
+    if (!candidate) {
+      return res.status(404).json({ message: 'Candidate not found' });
+    }
+
     const { filename } = req.body;
-    const path = `uploads/candidate_docs/${filename}`;
-    candidate.documents = candidate.documents.filter(doc => doc !== filename);
+    const filePath = `uploads/candidate_docs/${filename}`;
+
+    candidate.documents = candidate.documents.filter((doc) => doc !== filename);
+
     await candidate.save();
-    if (fs.existsSync(path)) fs.unlinkSync(path);
-    res.json({ message: 'Deleted', documents: candidate.documents });
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    res.json({
+      message: 'Deleted',
+      documents: candidate.documents,
+    });
   } catch (err) {
     console.error('❌ Error deleting document:', err);
-    res.status(500).json({ message: 'Delete error', error: err.message });
+    res.status(500).json({
+      message: 'Delete error',
+      error: err.message,
+    });
   }
 };
 
-
 // ─────────────────────────────────────────────
-// GET job availability (offer/onboard counts vs target)
+// GET job availability
 exports.getAvailability = async (req, res) => {
   try {
     const status = await getAvailabilityStatus(req.params.id);
-    if (!status) return res.status(404).json({ message: 'Job not found' });
+
+    if (!status) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+
     res.json(status);
   } catch (err) {
     console.error('❌ Error checking availability:', err);
-    res.status(500).json({ message: 'Availability error', error: err.message });
+    res.status(500).json({
+      message: 'Availability error',
+      error: err.message,
+    });
   }
 };
-
 
 // ─────────────────────────────────────────────
 // HELPER: Get current job offer/onboard availability
 async function getAvailabilityStatus(jobId) {
   const job = await JobRequisition.findById(jobId);
+
   if (!job) return null;
+
   const offerCount = await Candidate.countDocuments({
     jobRequisitionId: job._id,
     progress: { $in: ['JobOffer', 'Hired', 'Onboard'] },
     _offerCounted: true,
-    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] }
+    hireDecision: { $nin: ['Candidate Refusal', 'Not Hired'] },
   });
+
   const onboardCount = await Candidate.countDocuments({
     jobRequisitionId: job._id,
     progress: 'Onboard',
-    _onboardCounted: true
+    _onboardCounted: true,
   });
+
   return {
     jobId: job._id,
     offerFull: offerCount >= job.targetCandidates,
     onboardFull: onboardCount >= job.targetCandidates,
     offerCount,
-    onboardCount
+    onboardCount,
   };
 }
-
-
