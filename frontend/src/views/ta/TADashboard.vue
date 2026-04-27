@@ -3,110 +3,100 @@
 <template>
   <v-container fluid class="pa-2 pt-0">
     <!-- 🔹 Filters -->
-    <v-sheet elevation="2" class="sticky-filter pa-3" color="white">
-      <div class="page-title-row mb-3">
-        <div>
-          <h2 class="page-title">TA Dashboard</h2>
-          <p class="page-subtitle">
-            Recruitment overview, charts, and KPI summary.
-          </p>
-        </div>
-      </div>
+    <v-sheet elevation="2" class="sticky-filter compact-dashboard-filter" color="white">
+  <div class="filter-bar">
+    <div class="filter-title-box">
+      <h2 class="page-title">TA Dashboard</h2>
+      <p class="page-subtitle">Recruitment overview</p>
+    </div>
 
-      <v-row dense>
-        <v-col cols="6" sm="4" md="2.4">
-          <v-select
-            v-model="filterType"
-            :items="filterOptions"
-            label="Candidate Type"
+    <div class="dashboard-filter-grid">
+      <v-select
+        v-model="filterType"
+        :items="filterOptions"
+        label="Type"
+        variant="outlined"
+        density="compact"
+        hide-details
+        class="filter-input"
+      />
+
+      <v-select
+        v-model="filterRecruiter"
+        :items="recruiterOptions"
+        label="Recruiter"
+        variant="outlined"
+        density="compact"
+        hide-details
+        clearable
+        class="filter-input"
+      />
+
+      <v-autocomplete
+        v-model="filterDepartment"
+        :items="departmentOptions"
+        item-title="name"
+        item-value="_id"
+        label="Department"
+        variant="outlined"
+        density="compact"
+        hide-details
+        clearable
+        class="filter-input"
+      />
+
+      <v-menu v-model="fromMenu" :close-on-content-click="false">
+        <template #activator="{ props }">
+          <v-text-field
+            v-model="fromDisplay"
+            label="From"
+            readonly
+            v-bind="props"
             variant="outlined"
             density="compact"
             hide-details
+            class="filter-input"
           />
-        </v-col>
+        </template>
 
-        <v-col cols="6" sm="4" md="2.4">
-          <v-select
-            v-model="filterRecruiter"
-            :items="recruiterOptions"
-            label="Recruiter"
+        <v-date-picker
+          v-model="from"
+          @update:model-value="updateFromDisplay"
+        />
+      </v-menu>
+
+      <v-menu v-model="toMenu" :close-on-content-click="false">
+        <template #activator="{ props }">
+          <v-text-field
+            v-model="toDisplay"
+            label="To"
+            readonly
+            v-bind="props"
             variant="outlined"
             density="compact"
             hide-details
-            clearable
+            class="filter-input"
           />
-        </v-col>
+        </template>
 
-        <v-col cols="6" sm="4" md="2.4">
-          <v-autocomplete
-            v-model="filterDepartment"
-            :items="departmentOptions"
-            item-title="name"
-            item-value="_id"
-            label="Department"
-            variant="outlined"
-            density="compact"
-            hide-details
-            clearable
-          />
-        </v-col>
+        <v-date-picker
+          v-model="to"
+          @update:model-value="updateToDisplay"
+        />
+      </v-menu>
 
-        <v-col cols="6" sm="3" md="2.4">
-          <v-menu v-model="fromMenu" :close-on-content-click="false">
-            <template #activator="{ props }">
-              <v-text-field
-                v-model="fromDisplay"
-                label="From"
-                readonly
-                v-bind="props"
-                variant="outlined"
-                density="compact"
-                hide-details
-              />
-            </template>
-
-            <v-date-picker
-              v-model="from"
-              @update:model-value="updateFromDisplay"
-            />
-          </v-menu>
-        </v-col>
-
-        <v-col cols="6" sm="3" md="2.4">
-          <v-menu v-model="toMenu" :close-on-content-click="false">
-            <template #activator="{ props }">
-              <v-text-field
-                v-model="toDisplay"
-                label="To"
-                readonly
-                v-bind="props"
-                variant="outlined"
-                density="compact"
-                hide-details
-              />
-            </template>
-
-            <v-date-picker
-              v-model="to"
-              @update:model-value="updateToDisplay"
-            />
-          </v-menu>
-        </v-col>
-      </v-row>
-
-      <v-row dense class="mt-2">
-        <v-col cols="6" md="2">
-          <v-select
-            v-model="selectedYear"
-            :items="yearOptions"
-            label="Select Year"
-            variant="outlined"
-            density="compact"
-            hide-details
-          />
-        </v-col>
-      </v-row>
-    </v-sheet>
+      <v-select
+        v-model="selectedYear"
+        :items="yearOptions"
+        label="Year"
+        variant="outlined"
+        density="compact"
+        hide-details
+        class="filter-input year-filter"
+      />
+    </div>
+  </div>
+</v-sheet>
 
     <!-- 🔹 Charts and KPI only -->
     <v-row class="mt-3">
@@ -378,32 +368,122 @@ watch(
   fetchDashboardStats
 )
 </script>
-
 <style scoped>
 .sticky-filter {
   position: sticky;
-  top: 5px;
+  top: 0;
   z-index: 10;
   background-color: white;
-  border-radius: 10px;
+  border-radius: 0 0 10px 10px;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
-.page-title-row {
-  display: flex;
+.compact-dashboard-filter {
+  padding: 8px 10px;
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
-  justify-content: space-between;
+}
+
+.filter-title-box {
+  min-width: 0;
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 700;
   color: #263238;
   margin: 0;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
 .page-subtitle {
-  font-size: 13px;
+  font-size: 11px;
   color: #607d8b;
-  margin: 2px 0 0;
+  margin: 1px 0 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-filter-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(145px, 1.15fr)
+    minmax(125px, 1fr)
+    minmax(145px, 1.1fr)
+    minmax(105px, 0.75fr)
+    minmax(105px, 0.75fr)
+    minmax(90px, 0.65fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-input {
+  min-width: 0;
+}
+
+.year-filter {
+  max-width: 110px;
+}
+
+:deep(.v-field) {
+  font-size: 12px;
+}
+
+:deep(.v-field__input) {
+  min-height: 36px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+:deep(.v-label) {
+  font-size: 12px;
+}
+
+/* Medium screen: title on top, filters still compact */
+@media (max-width: 1280px) {
+  .filter-bar {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .filter-title-box {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .dashboard-filter-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .year-filter {
+    max-width: none;
+  }
+}
+
+/* Mobile/tablet */
+@media (max-width: 700px) {
+  .dashboard-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-title-box {
+    display: block;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-filter-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

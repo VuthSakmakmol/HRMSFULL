@@ -427,6 +427,7 @@
 
 <script setup>
 import { ref, nextTick, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import axios from '@/utils/axios'
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs'
@@ -436,7 +437,8 @@ import socket from '@/utils/socket'
 import readXlsxFile from 'read-excel-file'
 
 const PAGE_SIZE = 20
-
+const route = useRoute()
+const routeJobRequisitionId = ref('')
 const activeTab = ref('White Collar')
 const showForm = ref(false)
 const showFilterForm = ref(false)
@@ -509,6 +511,30 @@ const filters = ref({
   hireDecision: '',
 })
 
+const getTabFromRouteJob = () => {
+  const type = String(route.query.type || '')
+  const subType = String(route.query.subType || '')
+
+  if (type === 'White Collar') return 'White Collar'
+  if (type === 'Blue Collar' && subType === 'Sewer') return 'Blue Collar Sewer'
+  if (type === 'Blue Collar') return 'Blue Collar Non-Sewer'
+
+  return activeTab.value
+}
+
+const applyRouteJobFilter = () => {
+  routeJobRequisitionId.value = String(route.query.jobRequisitionId || '')
+
+  if (routeJobRequisitionId.value) {
+    activeTab.value = getTabFromRouteJob()
+
+    filters.value.jobId = String(route.query.jobId || '')
+    filters.value.jobTitle = String(route.query.jobTitle || '')
+
+    showFilterForm.value = true
+  }
+}
+
 const getCurrentCompany = () => {
   const user = JSON.parse(localStorage.getItem('user') || '{}')
   const selectedCompany = localStorage.getItem('company')
@@ -537,6 +563,10 @@ const buildCandidateParams = (extra = {}) => {
     limit: PAGE_SIZE,
     company,
     ...filters.value,
+
+    // Exact job requisition filter from JobRequisition status click
+    jobRequisitionId: routeJobRequisitionId.value || undefined,
+
     type: getTypeFromTab(activeTab.value),
     subType: getSubTypeFromTab(activeTab.value),
     ...extra,
@@ -986,6 +1016,13 @@ const fetchJobRequisitions = async (includeAll = false) => {
 // === UI & Filters ===
 const setActive = async (tab) => {
   activeTab.value = tab
+
+  // When user manually changes tab, remove specific job scope
+  routeJobRequisitionId.value = ''
+  filters.value.jobId = ''
+  filters.value.jobTitle = ''
+
+  await resetAndFetchCandidates()
 }
 
 const filteredJobTitleOptions = computed(() => {
@@ -1258,6 +1295,7 @@ watch(activeTab, async () => {
 })
 
 onMounted(async () => {
+  applyRouteJobFilter()
   await fetchJobRequisitions(true)
   await resetAndFetchCandidates()
 

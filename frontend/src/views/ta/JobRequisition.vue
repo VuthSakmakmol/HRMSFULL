@@ -564,7 +564,10 @@ const goToCandidates = (job) => {
     path: '/ta/candidates',
     query: {
       jobRequisitionId: job._id,
+      jobId: job.jobRequisitionId,
       jobTitle: job.jobTitle,
+      type: job.type,
+      subType: job.subType || '',
     },
   })
 }

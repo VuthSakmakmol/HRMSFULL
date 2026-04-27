@@ -6,9 +6,6 @@
       <div class="page-title-row mb-3">
         <div>
           <h2 class="page-title">TA Performance</h2>
-          <p class="page-subtitle">
-            Recruitment performance report separated from dashboard charts.
-          </p>
         </div>
       </div>
 
