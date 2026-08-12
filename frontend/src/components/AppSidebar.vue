@@ -77,7 +77,7 @@
       </v-list-group>
 
       <!-- HRSS Section -->
-      <!-- <v-list-group>
+      <v-list-group>
         <template #activator="{ props }">
           <v-list-item v-bind="props">
             <template #prepend>
@@ -149,7 +149,7 @@
             </div>
           </template>
         </v-list-item>
-      </v-list-group> -->
+      </v-list-group>
 
       <!-- GM Section -->
       <template v-if="role === 'GeneralManager'">
